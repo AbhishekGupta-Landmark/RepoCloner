@@ -38,7 +38,15 @@ export default function AuthModal({ open, onOpenChange }: AuthModalProps) {
     setConfigError(null);
     
     try {
-      const configResponse = await fetch('/api/admin/oauth-config');
+      const configResponse = await fetch('/api/admin/oauth-config', {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      
+      if (!configResponse.ok) {
+        throw new Error(`Config request failed: ${configResponse.status}`);
+      }
+      
       const configData = await configResponse.json();
       
       if (configData.status) {
@@ -377,7 +385,7 @@ export default function AuthModal({ open, onOpenChange }: AuthModalProps) {
               </Button>
             </div>
           )}
-        </div>
+          </div>
         </motion.div>
       </DialogContent>
     </Dialog>

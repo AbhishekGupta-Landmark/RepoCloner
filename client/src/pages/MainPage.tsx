@@ -15,8 +15,8 @@ import TechnologyShowcase from "@/components/TechnologyShowcase";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppContext } from "@/context/AppContext";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useQuery } from "@tanstack/react-query";
-import { Code, Settings, PanelLeftClose, PanelLeftOpen, Monitor, Shield, FileText, Sparkles, Zap, User, LogOut, ChevronDown } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Code, Settings, PanelLeftClose, PanelLeftOpen, Monitor, Shield, FileText, Sparkles, Zap, User, LogOut, ChevronDown, Plus, Github, GitlabIcon as Gitlab, Users, GitBranch, Server, Globe, Check, Loader2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,11 +26,36 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+// Helper function to get provider icons
+const getProviderIcon = (provider: string) => {
+  const iconMap = {
+    github: Github,
+    gitlab: Gitlab,
+    azure: Users,
+    bitbucket: GitBranch,
+    gitea: Server,
+    codeberg: Globe,
+    sourcehut: Server
+  };
+  return iconMap[provider as keyof typeof iconMap] || Github;
+};
+
 export default function MainPage() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("analysis");
-  const { user, isAuthenticated, signOut } = useAuth();
+  const [settingsHaveChanged, setSettingsHaveChanged] = useState(false);
+  const { 
+    user, 
+    isAuthenticated, 
+    signOut, 
+    switchAccount, 
+    accounts, 
+    activeAccount, 
+    activeAccountId, 
+    hasMultipleAccounts,
+    isSwitchingAccount 
+  } = useAuth();
   const { 
     currentRepository, 
     showRepoPanel, 
@@ -40,6 +65,7 @@ export default function MainPage() {
     handleToggleRepoPanel 
   } = useAppContext();
   const isMobile = useIsMobile();
+  const queryClient = useQueryClient();
   
   // Ref for accessing the ResizablePanel API
   const repoPanelRef = useRef<any>(null);
@@ -67,7 +93,7 @@ export default function MainPage() {
     enabled: Record<string, boolean>
   }>({
     queryKey: ['/api/admin/oauth-config'],
-    enabled: isAuthenticated // Only fetch when authenticated
+    // Always fetch OAuth config so we can show available providers for PAT auth
   });
 
   // Switch to Technology Stack tab when repository is cloned (only once per repository change)
@@ -92,6 +118,41 @@ export default function MainPage() {
       return () => clearTimeout(timeoutId);
     }
   }, [showRepoPanel, lastExpandedWidth]);
+
+  // Handle settings modal close with auto-refresh functionality
+  const handleSettingsModalClose = (open: boolean) => {
+    setSettingsModalOpen(open);
+    
+    // If modal is being closed (open = false) and settings have potentially changed
+    if (!open && settingsHaveChanged) {
+      console.log('[Frontend] Settings modal closed, refreshing configuration...');
+      
+      // Refresh all relevant data that might be affected by settings changes
+      setTimeout(() => {
+        // Refresh OAuth configuration data
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/oauth-config'] });
+        
+        // Refresh authentication status in case OAuth settings changed
+        queryClient.invalidateQueries({ queryKey: ['/api/auth/status'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/auth/accounts'] });
+        
+        // Refresh repositories list in case provider settings changed
+        queryClient.invalidateQueries({ queryKey: ['/api/repositories'] });
+        
+        // Reset the settings change flag
+        setSettingsHaveChanged(false);
+        
+        console.log('[Frontend] Configuration refreshed after settings update');
+      }, 100); // Small delay to ensure modal has fully closed
+    }
+  };
+
+  // Monitor when settings modal opens to track potential changes
+  useEffect(() => {
+    if (settingsModalOpen) {
+      setSettingsHaveChanged(true); // Assume settings might change when modal opens
+    }
+  }, [settingsModalOpen]);
 
   return (
     <motion.div 
@@ -195,49 +256,113 @@ export default function MainPage() {
                       </motion.div>
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56" data-testid="dropdown-user-menu">
-                    <DropdownMenuLabel className="font-normal" data-testid="dropdown-user-info">
-                      <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium leading-none" data-testid="text-dropdown-username">
-                          {user?.username}
-                        </p>
-                        <p className="text-xs leading-none text-muted-foreground" data-testid="text-dropdown-provider">
-                          Authenticated via {user?.provider}
-                        </p>
-                      </div>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-{/* Available providers for multi-account sign-in */}
-                    {oauthData?.enabled && Object.entries(oauthData.enabled as Record<string, boolean>).filter(([provider, isEnabled]) => 
-                      isEnabled && provider !== user?.provider
-                    ).length > 0 && (
+                  <DropdownMenuContent align="end" className="w-80" data-testid="dropdown-user-menu">
+                    {/* Gmail-style Multi-Account Section */}
+                    {hasMultipleAccounts ? (
                       <>
-                        <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
-                          Sign in to other accounts
+                        <DropdownMenuLabel className="text-xs text-muted-foreground font-normal px-2 py-1">
+                          {accounts.length} account{accounts.length > 1 ? 's' : ''}
                         </DropdownMenuLabel>
-                        {Object.entries(oauthData.enabled as Record<string, boolean>).filter(([provider, isEnabled]) => 
-                          isEnabled && provider !== user?.provider
-                        ).map(([provider]) => (
-                          <DropdownMenuItem 
-                            key={provider}
-                            onClick={() => window.location.href = `/api/auth/oauth/${provider}`}
-                            className="flex items-center gap-2 cursor-pointer" 
-                            data-testid={`dropdown-item-signin-${provider}`}
-                          >
-                            <Zap className="h-4 w-4" />
-                            <span>Sign in to {provider.charAt(0).toUpperCase() + provider.slice(1)}</span>
-                          </DropdownMenuItem>
-                        ))}
+                        {accounts.map((account) => {
+                          const isActive = account.id === activeAccountId;
+                          const ProviderIcon = getProviderIcon(account.provider);
+                          
+                          return (
+                            <DropdownMenuItem 
+                              key={account.id}
+                              onClick={() => !isActive && switchAccount(account.id)}
+                              className={`flex items-center gap-3 p-3 cursor-pointer ${
+                                isActive ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-muted/50'
+                              }`}
+                              data-testid={`dropdown-account-${account.id}`}
+                            >
+                              {isSwitchingAccount ? (
+                                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                              ) : (
+                                <img 
+                                  src={account.avatarUrl || `https://github.com/${account.username}.png`} 
+                                  alt={`${account.username} avatar`} 
+                                  className="w-5 h-5 rounded-full ring-1 ring-border"
+                                />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium truncate">{account.displayName || account.username}</span>
+                                  {isActive && <Check className="h-4 w-4 text-primary flex-shrink-0" />}
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <ProviderIcon className="h-3 w-3" />
+                                  <span>{account.provider}</span>
+                                  <span>•</span>
+                                  <span className="truncate">{account.email || account.username}</span>
+                                </div>
+                              </div>
+                            </DropdownMenuItem>
+                          );
+                        })}
+                        <DropdownMenuSeparator />
+                      </>
+                    ) : (
+                      /* Single Account Display */
+                      <>
+                        <DropdownMenuLabel className="font-normal px-3 py-2" data-testid="dropdown-user-info">
+                          <div className="flex items-center gap-3">
+                            <img 
+                              src={activeAccount?.avatarUrl || `https://github.com/${user?.username}.png`} 
+                              alt="User avatar" 
+                              className="w-8 h-8 rounded-full ring-2 ring-primary/20"
+                            />
+                            <div className="flex flex-col">
+                              <p className="text-sm font-medium leading-none" data-testid="text-dropdown-username">
+                                {activeAccount?.displayName || user?.username}
+                              </p>
+                              <p className="text-xs leading-none text-muted-foreground mt-1" data-testid="text-dropdown-provider">
+                                {activeAccount?.email || `via ${user?.provider}`}
+                              </p>
+                            </div>
+                          </div>
+                        </DropdownMenuLabel>
                         <DropdownMenuSeparator />
                       </>
                     )}
+
+                    {/* Add Another Account Section - Always available for PAT authentication */}
                     <DropdownMenuItem 
-                      onClick={signOut}
-                      className="flex items-center gap-2 cursor-pointer text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 hover:text-red-700 dark:hover:text-red-300"
-                      data-testid="dropdown-item-logout"
+                      onClick={() => setAuthModalOpen(true)}
+                      className="flex items-center gap-3 p-3 cursor-pointer hover:bg-muted/50" 
+                      data-testid="dropdown-item-add-account"
+                    >
+                      <div className="w-5 h-5 rounded-full border-2 border-dashed border-muted-foreground/50 flex items-center justify-center">
+                        <Plus className="h-3 w-3 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium">Add another account</span>
+                        <p className="text-xs text-muted-foreground">Sign in to more providers (PAT always available)</p>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+
+                    {/* Account Management */}
+                    {hasMultipleAccounts && (
+                      <>
+                        <DropdownMenuItem 
+                          onClick={() => signOut(activeAccountId)}
+                          className="flex items-center gap-2 cursor-pointer text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/50 px-3 py-2"
+                          data-testid="dropdown-item-remove-account"
+                        >
+                          <LogOut className="h-4 w-4" />
+                          <span>Remove current account</span>
+                        </DropdownMenuItem>
+                      </>
+                    )}
+
+                    <DropdownMenuItem 
+                      onClick={() => signOut()}
+                      className="flex items-center gap-2 cursor-pointer text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 px-3 py-2"
+                      data-testid="dropdown-item-logout-all"
                     >
                       <LogOut className="h-4 w-4" />
-                      <span>Sign Out</span>
+                      <span>{hasMultipleAccounts ? 'Sign out of all accounts' : 'Sign Out'}</span>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -504,18 +629,14 @@ export default function MainPage() {
       </div>
 
       {/* Modals with Enhanced Animations */}
-      <AnimatePresence>
-        {authModalOpen && (
-          <AuthModal 
-            open={authModalOpen} 
-            onOpenChange={setAuthModalOpen} 
-          />
-        )}
-      </AnimatePresence>
+      <AuthModal 
+        open={authModalOpen} 
+        onOpenChange={setAuthModalOpen} 
+      />
       
       <AnimatePresence>
         {settingsModalOpen && (
-          <Dialog open={settingsModalOpen} onOpenChange={setSettingsModalOpen}>
+          <Dialog open={settingsModalOpen} onOpenChange={handleSettingsModalClose}>
             <DialogContent className="max-w-7xl h-[95vh] flex flex-col shadow-strong border-border/50 p-0">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}

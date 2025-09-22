@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { AuthCredentials } from "@shared/schema";
+import { AuthCredentials, OAuthAccountPublic, AccountsResponse } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
 interface User {
@@ -15,14 +15,28 @@ interface AuthStatus {
   provider?: string;
 }
 
+interface MultiAuthState {
+  accounts: OAuthAccountPublic[];
+  activeAccountId?: string;
+  activeAccount?: OAuthAccountPublic;
+}
+
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
+  const [multiAuthState, setMultiAuthState] = useState<MultiAuthState>({ accounts: [] });
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   // Check authentication status
   const { data: authStatus, isLoading } = useQuery<AuthStatus>({
     queryKey: ['/api/auth/status'],
+    staleTime: 0
+  });
+
+  // Fetch all accounts for multi-account support
+  const { data: accountsData, isLoading: accountsLoading } = useQuery<AccountsResponse>({
+    queryKey: ['/api/auth/accounts'],
+    enabled: authStatus?.authenticated || false,
     staleTime: 0
   });
 
@@ -36,6 +50,20 @@ export function useAuth() {
       setUser(null);
     }
   }, [authStatus]);
+
+  // Update multi-auth state when accounts data changes
+  useEffect(() => {
+    if (accountsData) {
+      const activeAccount = accountsData.accounts.find(acc => acc.id === accountsData.activeAccountId);
+      setMultiAuthState({
+        accounts: accountsData.accounts,
+        activeAccountId: accountsData.activeAccountId,
+        activeAccount
+      });
+    } else {
+      setMultiAuthState({ accounts: [] });
+    }
+  }, [accountsData]);
 
   // Handle OAuth callback parameters
   useEffect(() => {
@@ -65,6 +93,30 @@ export function useAuth() {
     }
   }, [toast, queryClient]);
 
+  // Account switching mutation
+  const switchAccountMutation = useMutation({
+    mutationFn: async (accountId: string) => {
+      const response = await apiRequest('POST', '/api/auth/switch', { accountId });
+      return await response.json();
+    },
+    onSuccess: () => {
+      // Refresh both auth status and accounts data
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/accounts'] });
+      toast({
+        title: "Account Switched",
+        description: "Successfully switched to the selected account"
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Switch Failed",
+        description: error.message || "Failed to switch accounts",
+        variant: "destructive"
+      });
+    }
+  });
+
   // Authentication mutation
   const authenticateMutation = useMutation({
     mutationFn: async ({ provider, credentials }: { provider: string; credentials: AuthCredentials }) => {
@@ -79,7 +131,9 @@ export function useAuth() {
         username: data.username,
         provider: data.provider
       });
+      // Refresh both auth status and accounts data
       queryClient.invalidateQueries({ queryKey: ['/api/auth/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/accounts'] });
       toast({
         title: "Authentication Successful",
         description: `Signed in as ${data.username} via ${data.provider}`
@@ -94,19 +148,30 @@ export function useAuth() {
     }
   });
 
-  // Sign out mutation
+  // Sign out mutation (supports both single account and full logout)
   const signOutMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest('POST', '/api/auth/logout', {});
+    mutationFn: async (accountId?: string) => {
+      const response = await apiRequest('POST', '/api/auth/logout', accountId ? { accountId } : {});
       return await response.json();
     },
-    onSuccess: () => {
-      setUser(null);
+    onSuccess: (data) => {
+      // Refresh both auth status and accounts data
       queryClient.invalidateQueries({ queryKey: ['/api/auth/status'] });
-      toast({
-        title: "Signed Out",
-        description: "You have been successfully signed out"
-      });
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/accounts'] });
+      
+      if (data.accountsRemaining === 0) {
+        setUser(null);
+        setMultiAuthState({ accounts: [] });
+        toast({
+          title: "Signed Out",
+          description: "You have been signed out of all accounts"
+        });
+      } else {
+        toast({
+          title: "Account Removed",
+          description: "Account removed successfully"
+        });
+      }
     },
     onError: (error: any) => {
       toast({
@@ -126,15 +191,28 @@ export function useAuth() {
     }
   };
 
-  const signOut = async (): Promise<void> => {
-    await signOutMutation.mutateAsync();
+  const signOut = async (accountId?: string): Promise<void> => {
+    await signOutMutation.mutateAsync(accountId);
+  };
+
+  const switchAccount = async (accountId: string): Promise<void> => {
+    await switchAccountMutation.mutateAsync(accountId);
   };
 
   return {
     user,
-    isAuthenticated: !!user,
-    isLoading: isLoading || authenticateMutation.isPending || signOutMutation.isPending,
+    isAuthenticated: authStatus?.authenticated || false,
+    isLoading: isLoading || accountsLoading,
     authenticate,
-    signOut
+    signOut,
+    switchAccount,
+    isAuthenticating: authenticateMutation.isPending,
+    isSigningOut: signOutMutation.isPending,
+    isSwitchingAccount: switchAccountMutation.isPending,
+    // Multi-account data
+    accounts: multiAuthState.accounts,
+    activeAccount: multiAuthState.activeAccount,
+    activeAccountId: multiAuthState.activeAccountId,
+    hasMultipleAccounts: multiAuthState.accounts.length > 1
   };
 }
