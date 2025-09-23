@@ -218,33 +218,3 @@ export interface AnalysisIssue {
   line?: number;
   suggestion?: string;
 }
-
-
-export interface GeneratedFile {
-  name: string;
-  path: string;
-  size: number;
-  relativePath: string;
-  content?: string;
-  type?: string;
-  mimeType?: string;
-  createdAt: Date | string;
-}
-
-export interface PythonScriptResult {
-  success: boolean;
-  output: string;
-  error?: string;
-  exitCode: number;
-  executionTime: number;
-  executedAt: string;           // Add this
-  scriptPath: string;           // Add this
-  repositoryUrl: string;        // Add this
-  repositoryPath: string;
-  generatedFiles: GeneratedFile[];
-  pythonScriptOutput?: {
-    stdout: string;
-    stderr: string;
-    generatedFiles: GeneratedFile[];
-  };
-}
