@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { TechnologyDetection, TechnologyCategory } from "@shared/schema";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAppContext } from "@/context/AppContext";
+import { useToast } from "@/hooks/use-toast";
 import { 
   Monitor, 
   Server, 
@@ -28,7 +30,8 @@ import {
   GitBranch,
   Percent,
   ArrowRight,
-  FolderOpen
+  FolderOpen,
+  Download
 } from "lucide-react";
 import {
   SiReact, SiVuedotjs, SiAngular, SiSvelte, SiNextdotjs, SiNuxtdotjs,
@@ -263,7 +266,8 @@ function EvidenceSection({
   items, 
   showPaths = true, 
   emptyMessage = "No data available",
-  testIdPrefix
+  testIdPrefix,
+  repositoryId
 }: { 
   title: string; 
   icon: React.ReactNode; 
@@ -271,11 +275,62 @@ function EvidenceSection({
   showPaths?: boolean; 
   emptyMessage?: string;
   testIdPrefix: string;
+  repositoryId?: string;
 }) {
   const [showAll, setShowAll] = useState(false);
+  const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null);
+  const { toast } = useToast();
   const hasItems = items && items.length > 0;
   const displayItems = showAll ? items : items?.slice(0, 10);
   const hasMore = items && items.length > 10;
+
+  // Handle file download
+  const handleDownload = async (filePath: string, index: number) => {
+    if (!repositoryId || downloadingIndex === index) return;
+
+    setDownloadingIndex(index);
+    
+    try {
+      const endpoint = `/api/repositories/${repositoryId}/download/file?filePath=${encodeURIComponent(filePath)}`;
+
+      // Show loading toast
+      toast({
+        title: "Preparing download...",
+        description: `File: ${filePath.split('/').pop() || filePath}`,
+      });
+
+      // Fetch to check if the download is available
+      const response = await fetch(endpoint, { method: 'HEAD' });
+      
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+      }
+
+      // Create a temporary anchor element to trigger download
+      const link = document.createElement('a');
+      link.href = endpoint;
+      link.target = '_blank';
+      link.download = filePath.split('/').pop() || 'file'; // Suggest filename
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Success toast
+      toast({
+        title: "Download started",
+        description: `File: ${filePath.split('/').pop() || filePath}`,
+      });
+
+    } catch (error) {
+      toast({
+        title: "Download failed",
+        description: error instanceof Error ? error.message : 'An unknown error occurred',
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingIndex(null);
+    }
+  };
 
   // Return null instead of showing "No evidence" messages
   if (!hasItems) {
@@ -302,10 +357,33 @@ function EvidenceSection({
               {item}
             </span>
             {showPaths && (
-              <CopyButton 
-                text={item} 
-                testId={`${testIdPrefix}-copy-${index}`}
-              />
+              <div className="flex items-center gap-1">
+                <CopyButton 
+                  text={item} 
+                  testId={`${testIdPrefix}-copy-${index}`}
+                />
+                {repositoryId && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDownload(item, index)}
+                    disabled={downloadingIndex === index}
+                    title="Download file"
+                    data-testid={`button-download-evidence-${index}`}
+                    className="h-6 px-1.5 text-xs hover:bg-blue-500/10 hover:text-blue-500 disabled:opacity-50"
+                  >
+                    {downloadingIndex === index ? (
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                        className="h-3 w-3 border border-current border-t-transparent rounded-full"
+                      />
+                    ) : (
+                      <Download className="h-3 w-3" />
+                    )}
+                  </Button>
+                )}
+              </div>
             )}
           </div>
         ))}
@@ -327,7 +405,7 @@ function EvidenceSection({
 }
 
 // Technology detail component
-function TechnologyDetail({ tech, testId }: { tech: TechnologyDetection; testId: string }) {
+function TechnologyDetail({ tech, testId, repositoryId }: { tech: TechnologyDetection; testId: string; repositoryId?: string }) {
   return (
     <div className="space-y-4 pt-3 border-t border-border/50" data-testid={`${testId}-details`}>
       {/* Version Information */}
@@ -363,6 +441,7 @@ function TechnologyDetail({ tech, testId }: { tech: TechnologyDetection; testId:
         items={[...(tech.evidenceFiles || []), ...(tech.configFiles || []), ...(tech.ciFiles || [])]}
         testIdPrefix={`${testId}-evidence`}
         emptyMessage="No evidence files found"
+        repositoryId={repositoryId}
       />
 
       {/* Package Manager */}
@@ -440,13 +519,13 @@ function SimpleTechnologyCard({ tech, testId }: { tech: TechnologyDetection; tes
 }
 
 // Detailed technology card component
-function TechnologyCard({ tech, testId }: { tech: TechnologyDetection; testId: string }) {
+function TechnologyCard({ tech, testId, repositoryId, onToggle }: { tech: TechnologyDetection; testId: string; repositoryId?: string; onToggle?: () => void }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
     <Collapsible 
       open={isExpanded} 
-      onOpenChange={setIsExpanded}
+      onOpenChange={(v) => { setIsExpanded(v); onToggle?.(); }}
       data-testid={`${testId}-collapsible`}
     >
       <div className="bg-muted/30 rounded-lg border border-border/30 overflow-hidden">
@@ -483,7 +562,7 @@ function TechnologyCard({ tech, testId }: { tech: TechnologyDetection; testId: s
         
         <CollapsibleContent>
           <div className="px-3 pb-3">
-            <TechnologyDetail tech={tech} testId={testId} />
+            <TechnologyDetail tech={tech} testId={testId} repositoryId={repositoryId} />
           </div>
         </CollapsibleContent>
       </div>
@@ -508,9 +587,19 @@ export default function TechnologyShowcase({ technologies, repositoryName }: Tec
   const [viewMode, setViewMode] = useState<'simple' | 'details'>('simple');
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [rowHeights, setRowHeights] = useState<number[]>([]);
+  const { currentRepository } = useAppContext();
+  
+  // Extract repository information
+  const repositoryId = currentRepository?.id;
   
   // Measure heights of cards and calculate max height per row
   const measureHeights = useCallback(() => {
+    // Only measure heights in details mode to avoid unnecessary work
+    if (viewMode !== 'details') {
+      setRowHeights([]);
+      return;
+    }
+    
     const newRowHeights: number[] = [];
     
     GRID_LAYOUT.forEach((row, rowIndex) => {
@@ -664,6 +753,7 @@ export default function TechnologyShowcase({ technologies, repositoryName }: Tec
           {GRID_LAYOUT.map((row, rowIndex) => (
             <motion.div
               key={rowIndex}
+              layout
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.2 + rowIndex * 0.1 }}
@@ -679,26 +769,33 @@ export default function TechnologyShowcase({ technologies, repositoryName }: Tec
                 const categoryTechs = groupedTechnologies[category] || [];
                 
                 return (
-                  <motion.div
+                  <div
                     key={category}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ 
-                      duration: 0.3, 
-                      delay: categoryIndex * 0.05,
-                      type: "spring",
-                      stiffness: 200,
-                      damping: 20
-                    }}
-                    className="group"
-                    data-testid={`category-${category}`}
+                    className={`transition-[height] duration-300 ease-in-out will-change-[height] ${
+                      viewMode === 'details' ? '' : ''
+                    }`}
+                    style={{ height: viewMode === 'details' && rowHeights[rowIndex] ? `${rowHeights[rowIndex]}px` : undefined }}
+                    data-testid={`category-wrapper-${category}`}
                   >
-                    <Card 
-                      ref={(el) => (cardRefs.current[category] = el)}
-                      className="border border-border/50 bg-card shadow-sm hover:shadow-md transition-all duration-300 flex flex-col"
-                      style={{ minHeight: rowHeights[rowIndex] || undefined }}
-                      data-testid={`card-${category}`}
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      layout
+                      transition={{ 
+                        duration: 0.3, 
+                        delay: categoryIndex * 0.05,
+                        type: "spring",
+                        stiffness: 200,
+                        damping: 20
+                      }}
+                      className="group h-full"
+                      data-testid={`category-${category}`}
                     >
+                      <Card 
+                        ref={(el) => (cardRefs.current[category] = el)}
+                        className="border border-border/50 bg-card shadow-sm hover:shadow-md transition-all duration-300 flex flex-col h-full"
+                        data-testid={`card-${category}`}
+                      >
                       {/* Category Header */}
                       <CardHeader className="pb-3">
                         <CardTitle className="flex items-center gap-3">
@@ -743,6 +840,12 @@ export default function TechnologyShowcase({ technologies, repositoryName }: Tec
                                     <TechnologyCard 
                                       tech={tech} 
                                       testId={`${category}-tech-${techIndex}`}
+                                      repositoryId={repositoryId}
+                                      onToggle={() => {
+                                        // Clear enforced heights first, then re-measure natural content
+                                        setRowHeights([]);
+                                        requestAnimationFrame(measureHeights);
+                                      }}
                                     />
                                   )}
                                 </motion.div>
@@ -751,8 +854,9 @@ export default function TechnologyShowcase({ technologies, repositoryName }: Tec
                           </div>
                         )}
                       </CardContent>
-                    </Card>
-                  </motion.div>
+                      </Card>
+                    </motion.div>
+                  </div>
                 );
               })}
             </motion.div>
