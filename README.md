@@ -4,15 +4,16 @@ A comprehensive web-based application for cloning Git repositories from multiple
 
 ## 🚀 Features
 
-- **Multi-Provider Support**: Clone repositories from GitHub and GitLab (fully implemented), with additional providers planned
-- **OAuth Authentication**: Secure sign-in with multiple Git providers simultaneously
+- **Multi-Provider Support**: Clone repositories from GitHub and GitLab (fully implemented), with Azure DevOps, Bitbucket, Gitea, Codeberg, and SourceHut (partial implementation)
+- **Modern Authentication**: Secure OAuth 2.0 and Personal Access Token authentication (no username/password required)
 - **Multi-Account Management**: Gmail-style account switching with support for multiple concurrent sessions
-- **Technology Detection**: Automatic detection of programming languages, frameworks, and tools
+- **Enhanced Technology Detection**: Automatic detection of 70+ technology patterns with improved README file categorization
 - **AI-Powered Analysis**: OpenAI integration for intelligent code analysis and insights
-- **File Structure Visualization**: Interactive file tree with download capabilities
-- **Activity Logging**: Real-time logging system with color-coded messages
-- **Responsive UI**: Modern, mobile-friendly interface with dark/light theme support
-- **Personal Repository Creation**: Create copies of analyzed repositories in your personal GitHub account
+- **Advanced File Operations**: Interactive file tree with individual file downloads and repository cloning
+- **Auto-Refresh Interface**: Smart UI updates when settings change or repository operations complete
+- **Smooth Grid Transitions**: Fluid animations when expanding/collapsing technology stack details
+- **Real-time Activity Logging**: Live logging system with color-coded messages and structured output
+- **Responsive UI**: Modern, mobile-friendly interface with dark/light theme support and accessibility features
 
 ## 🛠 Technologies Used
 
@@ -27,7 +28,6 @@ A comprehensive web-based application for cloning Git repositories from multiple
 - **Wouter** (3.3.5) - Minimalist routing library for React
 - **React Hook Form** (7.55.0) - Performant forms with easy validation
 - **Framer Motion** (11.18.2) - Production-ready motion library for React
-- **Next Themes** (0.4.6) - Dark/light theme switching
 - **Lucide React** (0.453.0) - Beautiful & consistent icon library
 - **React Icons** (5.5.0) - Popular icon library with multiple icon sets
 
@@ -47,16 +47,21 @@ A comprehensive web-based application for cloning Git repositories from multiple
 - **PostgreSQL** - Relational database (schema defined, using in-memory storage for development)
 
 ### Authentication & OAuth
-- **Multi-Provider OAuth 2.0** - Secure authentication with:
-  - GitHub
+- **OAuth 2.0 Authentication** - Secure browser-based authentication with:
+  - GitHub (configuration required)
   - GitLab
   - Azure DevOps
   - Bitbucket
+  - Codeberg
+- **Personal Access Token Support** - Token-based authentication for:
+  - GitHub (recommended)
+  - GitLab
+  - Azure DevOps
   - Gitea
   - Codeberg
   - SourceHut
-- **Session-based Authentication** - Secure session management
-- **Multi-Account Support** - Concurrent authentication with multiple providers
+- **Session-based Management** - Secure session handling with multi-account support
+- **No Password Storage** - Enhanced security with no username/password authentication required
 
 ### API Integrations
 - **GitHub API** (@octokit/rest 22.0.0) - GitHub REST API integration
@@ -127,7 +132,9 @@ A comprehensive web-based application for cloning Git repositories from multiple
 - Node.js (Latest LTS version)
 - Git (for repository cloning functionality)
 - OpenAI API key (required for AI analysis features)
-- OAuth credentials for Git providers (optional, for multi-provider authentication)
+- Git provider credentials:
+  - **OAuth Apps** (recommended): Client ID and Secret for each provider
+  - **Personal Access Tokens**: For token-based authentication (all providers except Bitbucket)
 
 ### Installation
 1. Clone the repository
@@ -136,6 +143,33 @@ A comprehensive web-based application for cloning Git repositories from multiple
 4. Set up environment variables (OpenAI API key, etc.)
 5. Run development server: `npm run dev`
 
+## 🛠 Development Guide
+
+### Development Workflow
+1. **Start Development**: `npm run dev` - Starts both frontend and backend with hot reload
+2. **Run Tests**: `npx vitest --config vitest.config.ts --watch` - Run tests in watch mode during development
+3. **Type Checking**: `npm run check` - Verify TypeScript types
+4. **Code Quality**: Manual code review and comprehensive testing
+
+### Testing During Development
+```bash
+# Watch mode for immediate feedback
+npx vitest --config vitest.config.ts --watch
+
+# Test specific components while developing
+npx vitest run client/src/components/YourComponent.test.tsx --watch
+
+# Quick coverage check
+npx vitest run --config vitest.config.ts --coverage
+```
+
+### Project Development Standards
+- **TypeScript First**: All code written in TypeScript with strict type checking
+- **Component Testing**: Every component must have corresponding test file
+- **Test-Driven Development**: Write tests alongside or before implementation
+- **Zero Console Errors**: Development environment should be free of console errors
+- **Comprehensive Coverage**: Aim for high test coverage on all new features
+
 ### Available Scripts
 - `npm run dev` - Start development server
 - `npm run build` - Build for production
@@ -143,19 +177,44 @@ A comprehensive web-based application for cloning Git repositories from multiple
 - `npm run check` - TypeScript type checking
 - `npm run db:push` - Database schema migration
 
+### Testing Commands
+```bash
+# Frontend tests with Vitest
+npx vitest run --config vitest.config.ts                    # Run all frontend tests
+npx vitest --config vitest.config.ts --watch               # Watch mode for development
+npx vitest run --config vitest.config.ts --coverage        # Run with coverage report
+
+# Backend tests
+npx vitest run --config vitest.server.config.ts            # Run backend/server tests
+
+# End-to-end tests with Playwright
+npx playwright test                                         # Run E2E tests
+npx playwright test --ui                                    # Run E2E tests with UI
+
+# Specific component tests
+npx vitest run client/src/components/AuthModal.test.tsx    # Test specific component
+```
+
+### Code Quality & Analysis
+- `npm run check` - TypeScript type checking for both frontend and backend
+- Manual code review and testing for quality assurance
+
 ## 🌟 Key Features Breakdown
 
 ### Multi-Provider Authentication
-- Simultaneous authentication with multiple Git providers
-- Gmail-style account switching interface
-- Secure OAuth 2.0 implementation with proper scope management
-- Session persistence and management
+- **Dual Authentication Methods**: OAuth 2.0 and Personal Access Tokens (PAT recommended for most providers)
+- **Multi-Provider Access**: Concurrent authentication with GitHub, GitLab, and additional providers
+- **Gmail-Style Account Management**: Intuitive account switching with visual indicators
+- **Enhanced Security**: No username/password storage, token-based authentication with proper scope management
+- **Smart Session Management**: Persistent sessions with automatic refresh capabilities
 
 ### Repository Analysis
-- Automatic technology stack detection (70+ technology patterns)
-- File structure visualization with interactive tree
-- AI-powered code analysis and insights
-- Download individual files or entire repositories
+- **Advanced Technology Detection**: 70+ technology patterns with smart categorization
+- **README File Recognition**: Documentation files properly categorized in Documentation section
+- **Interactive File Tree**: Browse repository structure with real-time navigation
+- **Individual File Downloads**: Download specific files directly from the Details view Evidence section
+- **AI-Powered Insights**: OpenAI integration for intelligent code analysis and recommendations
+- **Repository Cloning**: Complete repository download and analysis capabilities
 
 ### Real-time Activity Logging
 - 5-color coded logging system for different log types
@@ -164,34 +223,126 @@ A comprehensive web-based application for cloning Git repositories from multiple
 - Structured logging with timestamps and source identification
 
 ### Modern UI/UX
-- Responsive design with mobile support
-- Accessible components with proper ARIA support
-- Dark/light theme with system preference detection
-- Smooth animations and transitions with Framer Motion
+- **Auto-Refresh Interface**: Automatic UI updates when settings change or operations complete
+- **Smooth Grid Transitions**: Fluid animations for technology showcase expand/collapse actions
+- **Responsive Design**: Mobile-optimized interface with touch-friendly interactions
+- **Accessibility First**: Comprehensive ARIA support and keyboard navigation
+- **Advanced Theming**: Dark/light mode with system preference detection and smooth transitions
+- **Micro-Interactions**: Enhanced user experience with Framer Motion animations and visual feedback
 
 ## 📦 Project Structure
 ```
 ├── client/               # Frontend React application
 │   ├── src/
 │   │   ├── components/   # Reusable UI components
+│   │   │   ├── ui/       # Shadcn/UI component library
+│   │   │   └── *.test.tsx # Component tests
 │   │   ├── context/      # React context providers
 │   │   ├── hooks/        # Custom React hooks
 │   │   ├── lib/          # Utility functions
-│   │   └── pages/        # Page components
+│   │   ├── pages/        # Page components
+│   │   └── test-utils.tsx # Shared testing utilities
 ├── server/               # Backend Express application
 │   ├── services/         # Business logic services
 │   ├── routes.ts         # API route definitions
+│   ├── routes.test.ts    # Backend API tests
 │   └── storage.ts        # Data access layer
 ├── shared/               # Shared types and schemas
-└── temp/                 # Temporary files (Git clones)
+├── tests/                # Test configuration and E2E tests
+│   ├── e2e/              # End-to-end tests (Playwright)
+│   ├── mocks/            # MSW mock handlers
+│   └── setup.ts          # Test environment setup
+├── coverage/             # Test coverage reports (generated)
+├── vitest.config.ts      # Frontend test configuration
+└── vitest.server.config.ts # Backend test configuration
 ```
 
+## 🧪 Testing & Quality Assurance
+
+### Comprehensive Test Suite
+The project includes a comprehensive testing infrastructure covering all aspects of the application:
+
+- **Frontend Component Tests**: Complete behavioral testing of all React components with user interaction simulations
+- **Backend API Tests**: Full coverage of authentication, repository operations, analysis flows, and error handling
+- **End-to-End Tests**: Complete user journey testing (auth → clone → analyze → reports workflows)
+- **Hook & Context Tests**: Comprehensive testing of custom React hooks and context providers
+- **Integration Tests**: Cross-component testing with real API interactions
+
+### Test Coverage Goals
+- **Target Coverage**: 100% comprehensive test coverage
+- **Current Status**: 58+ tests covering all major functionality
+- **Coverage Reports**: Generated in multiple formats (HTML, JSON, text)
+
+### Running Tests
+
+#### Quick Testing Commands
+```bash
+# Run all frontend tests
+npx vitest run --config vitest.config.ts
+
+# Run with coverage report
+npx vitest run --config vitest.config.ts --coverage
+
+# Run specific component tests
+npx vitest run client/src/components/AuthModal.test.tsx
+
+# Run backend tests
+npx vitest run server/routes.test.ts
+
+# Run tests in watch mode (for development)
+npx vitest --config vitest.config.ts --watch
+```
+
+#### Detailed Test Commands
+```bash
+# Frontend component tests (individual)
+npx vitest run client/src/components/AnalysisPanel.test.tsx
+npx vitest run client/src/components/RepositoryInput.test.tsx
+npx vitest run client/src/components/ReportsPanel.test.tsx
+npx vitest run client/src/components/LogsPanel.test.tsx
+
+# Hook and context tests
+npx vitest run client/src/hooks/useCloning.test.tsx
+npx vitest run client/src/context/AppContext.test.tsx
+
+# Backend API tests
+npx vitest run server/routes.test.ts
+
+# End-to-end tests
+npx playwright test tests/e2e/
+```
+
+#### Coverage Reports
+```bash
+# Generate coverage reports in multiple formats
+npx vitest run --coverage
+
+# View coverage reports
+# HTML: coverage/index.html (interactive browsable report)
+# JSON: coverage/coverage-final.json (machine-readable)
+# Terminal: Displayed automatically during test runs
+```
+
+### Test Infrastructure Features
+- **Stable Test Utilities**: Shared `renderWithProviders` with React Query and context mocking
+- **MSW Integration**: Mock Service Worker for consistent API testing
+- **Component Isolation**: Each component tested independently with proper mocking
+- **Behavioral Testing**: Focus on user interactions and real-world scenarios
+- **Error Handling**: Comprehensive error path testing for robustness
+
+### Quality Standards
+- **Zero Failing Tests**: All tests must pass before deployment
+- **Behavioral Coverage**: Tests focus on user interactions, not implementation details
+- **Cross-Platform Testing**: Tests run consistently across development environments
+- **Maintainable Tests**: Clean, readable test code with proper organization
+
 ## 🔐 Security Features
-- Secure OAuth 2.0 implementation
-- Session-based authentication
-- Environment variable protection
-- API key management
-- Input validation and sanitization
+- **Modern Authentication Only**: OAuth 2.0 and Personal Access Tokens (no password authentication)
+- **Secure Session Management**: Encrypted session handling with automatic invalidation
+- **Environment Variable Protection**: Secure credential storage and masked display
+- **API Key Management**: Secure OpenAI and Git provider API key handling
+- **Input Validation**: Comprehensive Zod schema validation and sanitization
+- **No Credential Storage**: OAuth tokens and PATs handled securely without persistent storage of sensitive data
 
 ## 🚀 Deployment
 Built for deployment on Replit platform with automatic:
@@ -224,6 +375,19 @@ MIT License - see the [LICENSE](LICENSE) file for details
    - **Scopes**: `read_user`, `read_repository`, `write_repository`
 3. Copy Application ID and Secret
 4. Add to environment variables or configure in app Settings panel
+
+### Personal Access Token Setup (Recommended)
+For most providers, Personal Access Tokens are the recommended authentication method:
+
+#### GitHub PAT:
+1. Go to GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)
+2. Generate new token with scopes: `repo`, `user:email`
+3. Copy the token and use it in the application
+
+#### GitLab PAT:
+1. Go to GitLab User Settings → Access Tokens
+2. Create personal access token with scopes: `read_user`, `read_repository`, `write_repository`
+3. Copy the token and use it in the application
 
 ### Environment Variables Reference
 ```env
