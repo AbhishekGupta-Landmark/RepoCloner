@@ -1,10 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import session from "express-session";
-import path from "path";
 import { Provider, OAuthAccountPublic, AccountsResponse } from "@shared/schema";
-import { pythonScriptService } from "./services/pythonScriptService";
-import { broadcastLog, setLogCallback, LogMessage } from "./utils/logger";
 
 // Multi-account session types
 interface OAuthAccount {
@@ -217,11 +214,28 @@ const getOauthConfig = () => {
 // OAuth Configuration (now dynamically generated)
 const OAUTH_CONFIG = getOauthConfig();
 
-// Logging service - now imported from utils/logger
+// Logging service
+export interface LogMessage {
+  timestamp: string;
+  level: 'INFO' | 'DEBUG' | 'WARN' | 'ERROR';
+  message: string;
+}
+
+export function broadcastLog(level: LogMessage['level'], message: string) {
+  // Production logging would go here - console.log removed for production
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
+  // Trust proxy for proper cookie handling
+  app.set('trust proxy', 1);
+  
   // Configure express-session middleware
+  // WARNING: Using MemoryStore for development only - not suitable for production
+  if (process.env.NODE_ENV === 'production') {
+    console.warn('[WARNING] Using MemoryStore in production is not recommended. Consider using Redis or another persistent session store.');
+  }
+  
   app.use(session({
     secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
     resave: false,
@@ -229,6 +243,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     cookie: {
       secure: process.env.NODE_ENV === 'production',
       httpOnly: true,
+      sameSite: 'lax',
+      path: '/',
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
   }));
@@ -575,31 +591,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // OAuth callback endpoints
   app.get("/api/auth/callback/:provider", async (req, res) => {
-    console.log(`[OAuth Callback] Started for provider: ${req.params.provider}`);
-    console.log(`[OAuth Callback] Query params:`, req.query);
-    console.log(`[OAuth Callback] Session state:`, req.session?.oauthState);
     
     const { provider } = req.params;
     const { code, state } = req.query;
     const config = getOauthConfig()[provider as keyof ReturnType<typeof getOauthConfig>];
 
     if (!config) {
-      console.log(`[OAuth Callback] ERROR: Unsupported provider ${provider}`);
+      console.error(`[OAuth Error] Unsupported provider: ${provider}`);
       return res.status(400).json({ error: "Unsupported OAuth provider" });
     }
 
     // Verify state parameter
     if (state !== req.session?.oauthState) {
-      console.log(`[OAuth Callback] ERROR: State mismatch. Expected: ${req.session?.oauthState}, Got: ${state}`);
+      console.error(`[OAuth Error] State mismatch for ${provider}. Expected: ${req.session?.oauthState}, Got: ${state}`);
       return res.status(400).json({ error: "Invalid state parameter" });
     }
 
     if (!code) {
-      console.log(`[OAuth Callback] ERROR: No authorization code received`);
+      console.error(`[OAuth Error] No authorization code received for ${provider}`);
       return res.status(400).json({ error: "No authorization code received" });
     }
 
-    console.log(`[OAuth Callback] Starting token exchange for ${provider}`);
     try {
       // Exchange code for access token
       const replitDomain = process.env.REPLIT_DEV_DOMAIN || process.env.REPLIT_DOMAINS;
@@ -670,13 +682,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Add account to session
       addAccount(req, newAccount);
 
-      // Debug logging
-      console.log(`[OAuth Callback] Account added for ${provider}:`, {
-        accountId: newAccount.id,
-        username: newAccount.username,
-        sessionAccountsCount: Object.keys(req.session?.accounts || {}).length,
-        activeAccountId: req.session?.activeAccountId
-      });
 
       // Clean up OAuth session data
       if (req.session) {
@@ -688,7 +693,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.redirect(`/?auth=success&provider=${provider}&username=${encodeURIComponent(newAccount.username)}&accountId=${accountId}`);
 
     } catch (error) {
-      console.log(`[OAuth Callback] ERROR: ${error instanceof Error ? error.message : 'Unknown error'}`, error);
+      console.error(`[OAuth Error] Token exchange failed for ${provider}: ${error instanceof Error ? error.message : 'Unknown error'}`, error);
       res.redirect(`/?auth=error&message=${encodeURIComponent(error instanceof Error ? error.message : 'Authentication failed')}`);
     }
   });
@@ -774,14 +779,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/auth/status", (req, res) => {
-    // Debug logging
-    console.log(`[Auth Status] Session state:`, {
-      hasSession: !!req.session,
-      hasAccounts: !!req.session?.accounts,
-      accountsCount: Object.keys(req.session?.accounts || {}).length,
-      activeAccountId: req.session?.activeAccountId,
-      sessionId: req.sessionID
-    });
 
     const activeAccount = getActiveAccount(req);
     if (activeAccount) {
@@ -924,19 +921,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const detectedTechnologies = await enhancedTechnologyDetectionService.detectTechnologies(analysisCloneResult.localPath!);
         broadcastLog('INFO', `Technology detection completed. Found ${detectedTechnologies.length} technologies`);
 
-        // Execute Python script after successful cloning (GitHub)
-        broadcastLog('INFO', 'Executing post-clone Python script...');
-        const pythonResult = await pythonScriptService.executePostCloneScript(analysisCloneResult.localPath!, url);
-        if (pythonResult.success) {
-          broadcastLog('INFO', 'Python script executed successfully');
-          if (pythonResult.output) {
-            broadcastLog('INFO', `Python script output: ${pythonResult.output}`);
-          }
-        } else {
-          broadcastLog('WARN', `Python script execution failed: ${pythonResult.error}`);
-          // Continue with the process even if Python script fails
-        }
-
         // STEP 2: Clone source repository for pushing (mirror clone)
         broadcastLog('INFO', 'Creating mirror clone for pushing to personal repository...');
         const mirrorCloneResult = await gitProviders[provider].cloneRepository(url, { mirror: true });
@@ -973,18 +957,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fileStructure,
           detectedTechnologies
         });
-
-        // Create Python script report if files were generated
-        if (pythonResult.success && pythonResult.generatedFiles && pythonResult.generatedFiles.length > 0) {
-          const defaultScriptPath = path.join(process.cwd(), 'scripts', 'default.py');
-          await pythonScriptService.createPythonScriptReport(
-            repository.id,
-            url,
-            analysisCloneResult.localPath!,
-            pythonResult,
-            defaultScriptPath
-          );
-        }
 
         broadcastLog('INFO', `🎉 SUCCESS! Repository created and pushed to: ${createResult.repoUrl}`);
 
@@ -1041,19 +1013,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const detectedTechnologies = await enhancedTechnologyDetectionService.detectTechnologies(analysisCloneResult.localPath!);
         broadcastLog('INFO', `Technology detection completed. Found ${detectedTechnologies.length} technologies`);
 
-        // Execute Python script after successful cloning (GitLab)
-        broadcastLog('INFO', 'Executing post-clone Python script...');
-        const pythonResult = await pythonScriptService.executePostCloneScript(analysisCloneResult.localPath!, url);
-        if (pythonResult.success) {
-          broadcastLog('INFO', 'Python script executed successfully');
-          if (pythonResult.output) {
-            broadcastLog('INFO', `Python script output: ${pythonResult.output}`);
-          }
-        } else {
-          broadcastLog('WARN', `Python script execution failed: ${pythonResult.error}`);
-          // Continue with the process even if Python script fails
-        }
-
         // STEP 2: Clone source repository for pushing (mirror clone)
         broadcastLog('INFO', 'Creating mirror clone for pushing to personal repository...');
         const mirrorCloneResult = await gitProviders[provider].cloneRepository(url, { mirror: true });
@@ -1091,18 +1050,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           detectedTechnologies
         });
 
-        // Create Python script report if files were generated
-        if (pythonResult.success && pythonResult.generatedFiles && pythonResult.generatedFiles.length > 0) {
-          const defaultScriptPath = path.join(process.cwd(), 'scripts', 'default.py');
-          await pythonScriptService.createPythonScriptReport(
-            repository.id,
-            url,
-            analysisCloneResult.localPath!,
-            pythonResult,
-            defaultScriptPath
-          );
-        }
-
         broadcastLog('INFO', `🎉 SUCCESS! GitLab repository created and pushed to: ${createResult.repoUrl}`);
 
         return res.json({
@@ -1130,19 +1077,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const detectedTechnologies = await enhancedTechnologyDetectionService.detectTechnologies(cloneResult.localPath!);
       broadcastLog('INFO', `Technology detection completed. Found ${detectedTechnologies.length} technologies`);
 
-      // Execute Python script after successful cloning (Standard)
-      broadcastLog('INFO', 'Executing post-clone Python script...');
-      const pythonResult = await pythonScriptService.executePostCloneScript(cloneResult.localPath!, url);
-      if (pythonResult.success) {
-        broadcastLog('INFO', 'Python script executed successfully');
-        if (pythonResult.output) {
-          broadcastLog('INFO', `Python script output: ${pythonResult.output}`);
-        }
-      } else {
-        broadcastLog('WARN', `Python script execution failed: ${pythonResult.error}`);
-        // Continue with the process even if Python script fails
-      }
-
       // Create repository record
       const repository = await storage.createRepository({
         name: url.split('/').pop()?.replace('.git', '') || 'Unknown',
@@ -1153,18 +1087,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fileStructure,
         detectedTechnologies
       });
-
-      // Create Python script report if files were generated
-      if (pythonResult.success && pythonResult.generatedFiles && pythonResult.generatedFiles.length > 0) {
-        const defaultScriptPath = path.join(process.cwd(), 'scripts', 'default.py');
-        await pythonScriptService.createPythonScriptReport(
-          repository.id,
-          url,
-          cloneResult.localPath!,
-          pythonResult,
-          defaultScriptPath
-        );
-      }
 
       res.json({
         success: true,
@@ -1364,63 +1286,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       res.status(500).json({ 
         error: error instanceof Error ? error.message : "Report export failed" 
-      });
-    }
-  });
-
-  // Download generated files from Python scripts
-  app.get("/api/reports/:id/files/:fileName", async (req, res) => {
-    try {
-      const { id, fileName } = req.params;
-      
-      // Get analysis report
-      const analysisReport = await storage.getAnalysisReport(id);
-      if (!analysisReport) {
-        return res.status(404).json({ error: "Analysis report not found" });
-      }
-
-      // Check if this is a Python script report
-      if (analysisReport.analysisType !== 'python-script') {
-        return res.status(400).json({ error: "Not a Python script report" });
-      }
-
-      // Get the Python script results
-      const results = analysisReport.results as any;
-      if (!results.pythonScriptOutput?.generatedFiles) {
-        return res.status(404).json({ error: "No generated files found in this report" });
-      }
-
-      // Find the requested file
-      const generatedFile = results.pythonScriptOutput.generatedFiles.find(
-        (file: any) => file.name === fileName
-      );
-
-      if (!generatedFile) {
-        return res.status(404).json({ error: "File not found in generated files" });
-      }
-
-      // Check if file still exists on disk
-      if (!await storage.getFilePath(analysisReport.repositoryId!, generatedFile.relativePath)) {
-        return res.status(404).json({ error: "File no longer exists on disk" });
-      }
-
-      // Get file content
-      const fileContent = await storage.getFileContent(analysisReport.repositoryId!, generatedFile.relativePath);
-      if (!fileContent) {
-        return res.status(404).json({ error: "Unable to read file content" });
-      }
-
-      // Set response headers
-      res.setHeader('Content-Type', generatedFile.mimeType || 'application/octet-stream');
-      res.setHeader('Content-Disposition', `attachment; filename="${generatedFile.name}"`);
-      res.setHeader('Content-Length', fileContent.length);
-      
-      // Send the file
-      res.send(fileContent);
-      
-    } catch (error) {
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : "File download failed" 
       });
     }
   });
