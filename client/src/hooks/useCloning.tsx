@@ -24,7 +24,18 @@ export function useCloning() {
       
       // Update app state
       setCurrentRepository(data.repository);
+      
+      // Comprehensive query invalidation for auto-refresh functionality
       queryClient.invalidateQueries({ queryKey: ['/api/repositories'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/file-tree'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/technologies'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/logs'] });
+      
+      // Also invalidate repository-specific queries if repository ID is available
+      if (data.repository?.id) {
+        queryClient.invalidateQueries({ queryKey: ['/api/repositories', data.repository.id, 'files'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/analysis', 'reports', data.repository.id] });
+      }
       
       // Show success notification
       toast({
