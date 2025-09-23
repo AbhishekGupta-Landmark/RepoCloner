@@ -77,6 +77,21 @@ class PythonScriptService {
       broadcastLog('INFO', `Files before execution: ${filesBeforeExecution.size} files in ${workingDir}`);
       const executionStartTime = Date.now();
 
+      // Try different Python commands - PUT 'py' FIRST for Windows
+      const pythonCommands = ['py', 'python', 'python3'];
+      let pythonCommand = 'py'; // Default to 'py' for Windows
+
+      for (const cmd of pythonCommands) {
+        try {
+          const { execSync } = require('child_process');
+          execSync(`${cmd} --version`, { stdio: 'ignore' });
+          pythonCommand = cmd;
+          break;
+        } catch (error) {
+          continue;
+        }
+      }
+
       // Execute the Python script
       const result = await this.runPythonCommand(pythonArgs, workingDir, timeout);
       
@@ -156,7 +171,7 @@ class PythonScriptService {
    * Check if Python is available on the system
    */
   async checkPythonAvailability(): Promise<{ available: boolean; version?: string; error?: string }> {
-    const commands = ['py --version', 'python --version', 'python3 --version'];
+    const commands = ['py --version', 'python', 'python3'];
     
     for (const cmd of commands) {
       try {
@@ -368,6 +383,7 @@ if __name__ == "__main__":
       const { storage } = await import('../storage');
       
       const pythonScriptResult: PythonScriptResult = {
+        success: executionResult.success || (executionResult.exitCode === 0), // Add this property
         executedAt: new Date().toISOString(),
         scriptPath,
         repositoryUrl,
