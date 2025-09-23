@@ -159,7 +159,7 @@ export interface FileNode {
 
 export interface AnalysisRequest {
   repositoryId: string;
-  analysisType: 'quality' | 'security' | 'performance' | 'documentation' | 'architecture';
+  analysisType: 'quality' | 'security' | 'performance' | 'documentation' | 'architecture' | 'python-script';
   depth: 'surface' | 'detailed' | 'deep';
 }
 
@@ -210,6 +210,28 @@ export interface AnalysisResult {
   recommendations: string[];
   metrics: Record<string, any>;
   technologies: TechnologyDetection[];
+  pythonScriptOutput?: PythonScriptResult; // Add optional Python script results
+}
+
+export interface PythonScriptResult {
+  executedAt: string;
+  scriptPath: string;
+  repositoryUrl: string;
+  repositoryPath: string;
+  output: string;
+  generatedFiles: GeneratedFile[];
+  exitCode: number;
+  executionTime: number; // in milliseconds
+}
+
+export interface GeneratedFile {
+  name: string;
+  path: string; // Absolute path
+  relativePath: string; // Path relative to repository root
+  size: number;
+  type: 'text' | 'binary';
+  mimeType?: string;
+  createdAt: string;
 }
 
 export interface AnalysisIssue {

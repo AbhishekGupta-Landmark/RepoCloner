@@ -1,4 +1,4 @@
-import { broadcastLog } from '../routes';
+import { broadcastLog } from '../utils/logger';
 
 export interface GitHubRepoCreationResult {
   success: boolean;
