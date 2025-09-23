@@ -396,11 +396,11 @@ export default function MainPage() {
       </motion.header>
 
       {/* Main Content - Enhanced Resizable Layout */}
-      <div className="flex-1 overflow-hidden relative">
+      <div className="flex-1 min-h-0 overflow-hidden relative">
 
         <ResizablePanelGroup 
           direction="horizontal" 
-          className="h-full"
+          className="h-full min-h-0"
         >
           {/* Left Panel - Repository & File Tree - Always present, collapses when hidden */}
           <ResizablePanel 
@@ -455,8 +455,10 @@ export default function MainPage() {
                     </Button>
                   </motion.div>
                   
-                  <RepositoryInput />
-                  <FileTreePanel />
+                  <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-4">
+                    <RepositoryInput />
+                    <FileTreePanel />
+                  </div>
                 </>
               ) : (
                 /* Collapsed Panel - Show only expand button */
@@ -500,7 +502,7 @@ export default function MainPage() {
             minSize={45}
             className="w-full"
           >
-            <ResizablePanelGroup direction="vertical">
+            <ResizablePanelGroup direction="vertical" className="h-full min-h-0">
               {/* Main Analysis Panel */}
               <ResizablePanel defaultSize={100} minSize={30}>
                 <div className="h-full flex flex-col">
@@ -604,10 +606,10 @@ export default function MainPage() {
                           transition={{ duration: 0.3, ease: "easeInOut" }}
                           className="h-full"
                         >
-                          <TabsContent value="technology" className="h-full m-0">
+                          <TabsContent value="technology" className="h-full m-0 overflow-y-auto">
                             <TechnologyShowcase 
-                              technologies={Array.isArray(currentRepository?.detectedTechnologies) ? currentRepository.detectedTechnologies : []} 
                               repositoryName={currentRepository?.name}
+                              key={currentRepository?.id || 'no-repo'}
                             />
                           </TabsContent>
                           

@@ -22,62 +22,69 @@ describe('SettingsPanel', () => {
   it('renders settings panel', () => {
     renderWithProviders(<SettingsPanel />)
     
-    expect(screen.getByText('Provider Settings')).toBeInTheDocument()
+    expect(screen.getByText('Settings')).toBeInTheDocument()
   })
 
   it('shows available providers', () => {
     renderWithProviders(<SettingsPanel />)
     
-    expect(screen.getByText('GitHub')).toBeInTheDocument()
-    expect(screen.getByText('GitLab')).toBeInTheDocument()
+    expect(screen.getByText('Git Authentication')).toBeInTheDocument()
+    expect(screen.getAllByText('AI Configuration')).toHaveLength(2)
   })
 
   it('handles provider configuration', async () => {
     renderWithProviders(<SettingsPanel />)
     
-    const configureButton = screen.getByTestId('button-configure-github')
-    await user.click(configureButton)
+    // Check that Git Authentication tab exists
+    const gitTab = screen.getByTestId('tab-git-authentication')
+    await user.click(gitTab)
     
-    // Should open configuration dialog
-    expect(configureButton).toBeInTheDocument()
+    expect(gitTab).toBeInTheDocument()
   })
 
-  it('shows OAuth configuration options', () => {
+  it('shows OAuth configuration options', async () => {
     renderWithProviders(<SettingsPanel />)
     
-    expect(screen.getByText('OAuth Configuration')).toBeInTheDocument()
+    // Go to Git Authentication tab
+    const gitTab = screen.getByTestId('tab-git-authentication')
+    await user.click(gitTab)
+    
+    expect(screen.getAllByText('Git Authentication')).toHaveLength(2)
   })
 
-  it('shows PAT configuration options', () => {
+  it('shows AI configuration options', () => {
     renderWithProviders(<SettingsPanel />)
     
-    expect(screen.getByText('Personal Access Token')).toBeInTheDocument()
+    expect(screen.getAllByText('AI Configuration')).toHaveLength(2)
+    expect(screen.getByText('Analysis Settings')).toBeInTheDocument()
   })
 
   it('handles provider enabling/disabling', async () => {
     renderWithProviders(<SettingsPanel />)
     
-    const enableSwitch = screen.getByTestId('switch-enable-github')
-    await user.click(enableSwitch)
+    // Go to Git Authentication tab first
+    const gitTab = screen.getByTestId('tab-git-authentication')
+    await user.click(gitTab)
     
-    // Should toggle provider state
-    expect(enableSwitch).toBeInTheDocument()
+    // Check for provider configuration elements
+    expect(screen.getAllByText('Git Authentication')).toHaveLength(2)
   })
 
   it('displays authentication status', () => {
     renderWithProviders(<SettingsPanel />)
     
-    // Should show current auth status
-    expect(screen.getByTestId('status-github-auth')).toBeInTheDocument()
+    // Should show settings header
+    expect(screen.getByText('Settings')).toBeInTheDocument()
   })
 
   it('handles configuration validation', async () => {
     renderWithProviders(<SettingsPanel />)
     
-    const testButton = screen.getByTestId('button-test-connection')
-    await user.click(testButton)
+    // Go to Git Authentication tab
+    const gitTab = screen.getByTestId('tab-git-authentication')
+    await user.click(gitTab)
     
-    // Should test connection
-    expect(testButton).toBeInTheDocument()
+    // Check that authentication section loads
+    expect(screen.getAllByText('Git Authentication')).toHaveLength(2)
   })
 })

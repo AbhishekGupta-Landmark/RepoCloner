@@ -7,6 +7,7 @@ import { TechnologyDetection, TechnologyCategory } from "@shared/schema";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAppContext } from "@/context/AppContext";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 import { 
   Monitor, 
   Server, 
@@ -45,7 +46,6 @@ import {
 } from "react-icons/si";
 
 interface TechnologyShowcaseProps {
-  technologies: TechnologyDetection[];
   repositoryName?: string;
 }
 
@@ -193,11 +193,10 @@ const getCategoryInfo = (category: TechnologyCategory) => {
   }
 };
 
-// Fixed 4-4-2 layout: Row 1 (4 categories), Row 2 (4 categories), Row 3 (2 categories)
+// Compact 5-5 layout: Row 1 (5 categories), Row 2 (5 categories) - fits all 10 sections in 2 rows
 const GRID_LAYOUT: TechnologyCategory[][] = [
-  ['frontend', 'backend', 'database', 'cloud'],           // Row 1: 4 categories
-  ['testing', 'devops', 'security', 'monitoring'],        // Row 2: 4 categories  
-  ['utilities', 'documentation']                          // Row 3: 2 categories
+  ['frontend', 'backend', 'database', 'cloud', 'testing'],           // Row 1: 5 categories
+  ['devops', 'security', 'monitoring', 'utilities', 'documentation'] // Row 2: 5 categories  
 ];
 
 // Category-specific empty messages
@@ -283,6 +282,7 @@ function EvidenceSection({
   const hasItems = items && items.length > 0;
   const displayItems = showAll ? items : items?.slice(0, 10);
   const hasMore = items && items.length > 10;
+  
 
   // Handle file download
   const handleDownload = async (filePath: string, index: number) => {
@@ -346,18 +346,18 @@ function EvidenceSection({
           {items.length}
         </Badge>
       </div>
-      <div className="ml-6 space-y-1">
+      <div className="ml-4 space-y-1">
         {displayItems?.map((item, index) => (
           <div 
             key={index} 
-            className="flex items-center justify-between bg-muted/30 rounded px-2 py-1 group"
+            className="flex items-center gap-2 bg-muted/30 rounded px-3 py-2 group min-h-[32px] w-full overflow-hidden"
             data-testid={`${testIdPrefix}-item-${index}`}
           >
-            <span className="text-xs font-mono text-foreground truncate flex-1">
+            <span className="text-xs font-mono text-foreground whitespace-normal break-words flex-1 min-w-[100px] leading-relaxed overflow-wrap-anywhere max-w-full">
               {item}
             </span>
             {showPaths && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 flex-shrink-0">
                 <CopyButton 
                   text={item} 
                   testId={`${testIdPrefix}-copy-${index}`}
@@ -373,10 +373,8 @@ function EvidenceSection({
                     className="h-6 px-1.5 text-xs hover:bg-blue-500/10 hover:text-blue-500 disabled:opacity-50"
                   >
                     {downloadingIndex === index ? (
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                        className="h-3 w-3 border border-current border-t-transparent rounded-full"
+                      <div
+                        className="h-3 w-3 border-2 border-current border-t-transparent rounded-full animate-spin"
                       />
                     ) : (
                       <Download className="h-3 w-3" />
@@ -395,7 +393,7 @@ function EvidenceSection({
             className="h-6 text-xs text-muted-foreground hover:text-foreground"
             data-testid={`${testIdPrefix}-show-more`}
           >
-            {showAll ? 'Show less' : `Show ${items.length - 10} more`}
+            {showAll ? 'Show less' : `Show ${(items?.length || 0) - 10} more`}
             {showAll ? <ChevronUp className="ml-1 h-3 w-3" /> : <ChevronDown className="ml-1 h-3 w-3" />}
           </Button>
         )}
@@ -415,7 +413,7 @@ function TechnologyDetail({ tech, testId, repositoryId }: { tech: TechnologyDete
             <GitBranch className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium text-foreground">Version</span>
           </div>
-          <div className="ml-6 bg-muted/30 rounded px-2 py-1">
+          <div className="ml-4 bg-muted/30 rounded px-3 py-2 overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="text-xs font-mono text-foreground" data-testid={`${testId}-version`}>
                 {tech.manifest.versionSpec}
@@ -451,7 +449,7 @@ function TechnologyDetail({ tech, testId, repositoryId }: { tech: TechnologyDete
             <Package className="h-4 w-4 text-orange-500" />
             <span className="text-sm font-medium text-foreground">Package manager</span>
           </div>
-          <div className="ml-6">
+          <div className="ml-4">
             <Badge variant="outline" className="text-xs" data-testid={`${testId}-lockfile`}>
               {tech.lockfile}
             </Badge>
@@ -469,7 +467,7 @@ function TechnologyDetail({ tech, testId, repositoryId }: { tech: TechnologyDete
               {tech.scripts.reduce((acc, script) => acc + script.names.length, 0)}
             </Badge>
           </div>
-          <div className="ml-6 space-y-2">
+          <div className="ml-4 space-y-2 overflow-hidden">
             {tech.scripts.map((script, index) => (
               <div key={index} className="space-y-1" data-testid={`${testId}-script-${index}`}>
                 <p className="text-xs text-muted-foreground">{script.file}</p>
@@ -504,11 +502,11 @@ function SimpleTechnologyCard({ tech, testId }: { tech: TechnologyDetection; tes
           {getTechnologyIcon(tech.icon || 'default', 18)}
         </div>
         <div className="text-left min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground truncate">
+          <p className="text-sm font-medium text-foreground whitespace-normal break-normal leading-tight">
             {tech.name}
           </p>
           {tech.version && (
-            <p className="text-xs text-muted-foreground truncate">
+            <p className="text-xs text-muted-foreground whitespace-normal break-normal leading-tight">
               v{tech.version}
             </p>
           )}
@@ -532,19 +530,19 @@ function TechnologyCard({ tech, testId, repositoryId, onToggle }: { tech: Techno
         <CollapsibleTrigger asChild>
           <Button
             variant="ghost"
-            className="w-full p-3 justify-between hover:bg-muted/50 h-auto"
+            className="w-full p-3 justify-between hover:bg-muted/50 h-auto min-w-0"
             data-testid={`${testId}-trigger`}
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
               <div className="flex-shrink-0">
                 {getTechnologyIcon(tech.icon || 'default', 18)}
               </div>
-              <div className="text-left">
-                <p className="text-sm font-medium text-foreground">
+              <div className="text-left min-w-0 flex-1">
+                <p className="text-sm font-medium text-foreground whitespace-normal break-normal leading-tight">
                   {tech.name}
                 </p>
                 {tech.version && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground whitespace-normal break-normal leading-tight">
                     v{tech.version}
                   </p>
                 )}
@@ -583,7 +581,7 @@ const debounce = (func: Function, wait: number) => {
   };
 };
 
-export default function TechnologyShowcase({ technologies, repositoryName }: TechnologyShowcaseProps) {
+export default function TechnologyShowcase({ repositoryName }: TechnologyShowcaseProps) {
   const [viewMode, setViewMode] = useState<'simple' | 'details'>('simple');
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [rowHeights, setRowHeights] = useState<number[]>([]);
@@ -592,13 +590,27 @@ export default function TechnologyShowcase({ technologies, repositoryName }: Tec
   // Extract repository information
   const repositoryId = currentRepository?.id;
   
+  // Fetch live technology data using dedicated query
+  const { data: technologies = [], isLoading, isFetching } = useQuery<TechnologyDetection[]>({
+    queryKey: ['/api/technologies', repositoryId],
+    enabled: !!repositoryId,
+    refetchInterval: (query) => {
+      // Refetch every 1.5 seconds if we have no data yet or are still loading
+      const hasData = query.state.data && query.state.data.length > 0;
+      return hasData ? false : 1500;
+    },
+    refetchOnWindowFocus: true,
+  });
+  
+  // Reset view mode when technologies data changes to ensure fresh render
+  useEffect(() => {
+    if (technologies && technologies.length > 0) {
+      setViewMode('simple'); // Reset to simple view for consistency
+    }
+  }, [technologies, repositoryId]);
+  
   // Measure heights of cards and calculate max height per row
   const measureHeights = useCallback(() => {
-    // Only measure heights in details mode to avoid unnecessary work
-    if (viewMode !== 'details') {
-      setRowHeights([]);
-      return;
-    }
     
     const newRowHeights: number[] = [];
     
@@ -641,6 +653,51 @@ export default function TechnologyShowcase({ technologies, repositoryName }: Tec
     };
   }, [measureHeights, debouncedMeasure]);
   
+  // Show loading/detecting state
+  if (!repositoryId) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="w-full h-full flex items-center justify-center p-6"
+        data-testid="no-repository-message"
+      >
+        <div className="text-center space-y-4 max-w-md">
+          <div>
+            <Code className="w-16 h-16 text-muted-foreground/50 mx-auto" />
+          </div>
+          <h3 className="text-xl font-semibold text-muted-foreground">No Repository Selected</h3>
+          <p className="text-sm text-muted-foreground/80">
+            Clone a repository to explore its technology stack and architectural patterns.
+          </p>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (isLoading || (isFetching && technologies.length === 0)) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="w-full h-full flex items-center justify-center p-6"
+        data-testid="loading-technologies"
+      >
+        <div className="text-center space-y-4 max-w-md">
+          <div>
+            <Zap className="w-16 h-16 text-primary mx-auto" />
+          </div>
+          <h3 className="text-xl font-semibold text-foreground">Detecting Technologies...</h3>
+          <p className="text-sm text-muted-foreground/80">
+            Analyzing repository structure and identifying technology stack.
+          </p>
+        </div>
+      </motion.div>
+    );
+  }
+
   // Show empty state if no repository or no technologies
   if (!repositoryName || !technologies || technologies.length === 0) {
     return (
@@ -652,12 +709,9 @@ export default function TechnologyShowcase({ technologies, repositoryName }: Tec
         data-testid="technology-showcase-empty"
       >
         <div className="text-center space-y-4 max-w-md">
-          <motion.div
-            animate={{ scale: [1, 1.1, 1] }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-          >
+          <div>
             <Zap className="w-16 h-16 text-muted-foreground/50 mx-auto" />
-          </motion.div>
+          </div>
           <h3 className="text-xl font-semibold text-muted-foreground">No Technology Stack Data</h3>
           <p className="text-sm text-muted-foreground/80">
             Clone a repository to analyze its technology stack and see detailed breakdowns by category.
@@ -686,26 +740,23 @@ export default function TechnologyShowcase({ technologies, repositoryName }: Tec
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
-      className="w-full h-full p-6 overflow-auto bg-gradient-to-br from-background via-background to-muted/20"
+      className="w-full p-3 bg-gradient-to-br from-background via-background to-muted/20"
       data-testid="technology-showcase"
     >
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto space-y-3">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="text-center space-y-3"
+          className="text-center space-y-2"
           data-testid="technology-showcase-header"
         >
           <div className="flex items-center justify-center gap-3">
-            <motion.div
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            >
+            <div>
               <Zap className="w-6 h-6 text-primary" />
-            </motion.div>
-            <h2 className="text-2xl font-bold text-foreground">
+            </div>
+            <h2 className="text-xl font-bold text-foreground">
               Technology Stack Analysis
             </h2>
           </div>
@@ -747,7 +798,7 @@ export default function TechnologyShowcase({ technologies, repositoryName }: Tec
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.7, delay: 0.3 }}
-          className="space-y-6"
+          className="space-y-3"
           data-testid="technology-grid"
         >
           {GRID_LAYOUT.map((row, rowIndex) => (
@@ -757,11 +808,7 @@ export default function TechnologyShowcase({ technologies, repositoryName }: Tec
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.2 + rowIndex * 0.1 }}
-              className={`grid gap-6 ${
-                row.length === 4 
-                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' 
-                  : 'grid-cols-1 sm:grid-cols-2 max-w-4xl mx-auto'
-              }`}
+              className="grid gap-4 items-start grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5"
               data-testid={`technology-row-${rowIndex}`}
             >
               {row.map((category, categoryIndex) => {
@@ -771,10 +818,10 @@ export default function TechnologyShowcase({ technologies, repositoryName }: Tec
                 return (
                   <div
                     key={category}
-                    className={`transition-[height] duration-300 ease-in-out will-change-[height] ${
-                      viewMode === 'details' ? '' : ''
-                    }`}
-                    style={{ height: viewMode === 'details' && rowHeights[rowIndex] ? `${rowHeights[rowIndex]}px` : undefined }}
+                    className={`transition-[height] duration-300 ease-in-out will-change-[height]`}
+                    style={{ 
+                      height: rowHeights[rowIndex] ? `${rowHeights[rowIndex]}px` : undefined 
+                    }}
                     data-testid={`category-wrapper-${category}`}
                   >
                     <motion.div
@@ -793,27 +840,29 @@ export default function TechnologyShowcase({ technologies, repositoryName }: Tec
                     >
                       <Card 
                         ref={(el) => (cardRefs.current[category] = el)}
-                        className="border border-border/50 bg-card shadow-sm hover:shadow-md transition-all duration-300 flex flex-col h-full"
+                        className="border border-border/50 bg-card shadow-sm hover:shadow-md transition-all duration-300 flex flex-col h-full overflow-hidden"
                         data-testid={`card-${category}`}
                       >
                       {/* Category Header */}
-                      <CardHeader className="pb-3">
-                        <CardTitle className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg ${categoryInfo.color} ${categoryInfo.textColor} shadow-sm`}>
+                      <CardHeader className="pb-3 relative">
+                        <div className="flex items-start gap-3 pr-8">
+                          <div className={`p-2 rounded-lg ${categoryInfo.color} ${categoryInfo.textColor} shadow-sm flex-shrink-0`}>
                             {categoryInfo.icon}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="text-lg font-semibold truncate">{categoryInfo.name}</h3>
-                            <p className="text-xs text-muted-foreground truncate">{categoryInfo.description}</p>
+                            <CardTitle>
+                              <h3 className="text-base font-semibold whitespace-normal break-normal leading-tight">{categoryInfo.name}</h3>
+                              <p className="text-[11px] text-muted-foreground whitespace-normal break-normal leading-tight">{categoryInfo.description}</p>
+                            </CardTitle>
                           </div>
-                          <Badge variant="secondary" className="text-sm px-2 py-1">
-                            {categoryTechs.length}
-                          </Badge>
-                        </CardTitle>
+                        </div>
+                        <Badge variant="secondary" className="absolute top-3 right-3 text-sm px-2 py-1 h-6">
+                          {categoryTechs.length}
+                        </Badge>
                       </CardHeader>
                       
                       {/* Technology List */}
-                      <CardContent className="pt-0 flex-1 flex flex-col">
+                      <CardContent className="pt-0 flex-1 flex flex-col overflow-y-auto">
                         {categoryTechs.length === 0 ? (
                           <div className="flex items-center justify-center flex-1 text-center">
                             <div className="text-muted-foreground">

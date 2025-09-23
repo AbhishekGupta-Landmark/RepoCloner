@@ -180,7 +180,7 @@ export default function TechnologyDisplay({ technologies, isCompact = true }: Te
             return (
               <motion.div 
                 key={category} 
-                className="flex items-center gap-2 flex-wrap"
+                className="flex items-start gap-2 flex-wrap"
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: categoryIndex * 0.1, duration: 0.3 }}
@@ -192,9 +192,9 @@ export default function TechnologyDisplay({ technologies, isCompact = true }: Te
                   >
                     <Icon className={`h-4 w-4 ${colorClass} flex-shrink-0`} />
                   </motion.div>
-                  <span className="text-sm font-medium text-muted-foreground">{label}:</span>
+                  <span className="text-sm font-medium text-muted-foreground whitespace-normal break-words">{label}:</span>
                 </div>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1 min-w-0">
                   {techs.slice(0, 4).map((tech, index) => (
                     <motion.div
                       key={`${tech.name}-${index}`}
@@ -202,16 +202,16 @@ export default function TechnologyDisplay({ technologies, isCompact = true }: Te
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: (categoryIndex * 4 + index) * 0.05, duration: 0.2 }}
                       whileHover={{ scale: 1.05 }}
-                      className="transition-fast"
+                      className="transition-fast min-w-0"
                     >
                       <Badge 
                         variant="secondary" 
-                        className={`text-xs hover-lift transition-smooth ${getConfidenceClass(tech.confidence)}`}
+                        className={`text-xs hover-lift transition-smooth min-w-0 ${getConfidenceClass(tech.confidence)}`}
                         data-testid={`technology-badge-${tech.name.toLowerCase().replace(/\s+/g, '-')}`}
                       >
-                        {tech.name}
+                        <span className="block whitespace-normal break-words leading-tight">{tech.name}</span>
                         {tech.version && (
-                          <span className="ml-1 opacity-70">v{tech.version}</span>
+                          <span className="ml-1 opacity-70 shrink-0">v{tech.version}</span>
                         )}
                       </Badge>
                     </motion.div>

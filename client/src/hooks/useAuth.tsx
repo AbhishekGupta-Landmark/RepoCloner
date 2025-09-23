@@ -53,7 +53,7 @@ export function useAuth() {
 
   // Update multi-auth state when accounts data changes
   useEffect(() => {
-    if (accountsData) {
+    if (accountsData?.accounts) {
       const activeAccount = accountsData.accounts.find(acc => acc.id === accountsData.activeAccountId);
       setMultiAuthState({
         accounts: accountsData.accounts,

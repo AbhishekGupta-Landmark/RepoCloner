@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import MainPage from './MainPage'
-import { AppContextProvider } from '@/context/AppContext'
+import { AppProvider } from '@/context/AppContext'
 
 const createQueryClient = () => new QueryClient({
   defaultOptions: {
@@ -15,9 +15,9 @@ const renderWithProviders = (component: React.ReactElement) => {
   const queryClient = createQueryClient()
   return render(
     <QueryClientProvider client={queryClient}>
-      <AppContextProvider>
+      <AppProvider>
         {component}
-      </AppContextProvider>
+      </AppProvider>
     </QueryClientProvider>
   )
 }
