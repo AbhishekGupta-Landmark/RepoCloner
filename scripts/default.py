@@ -1,0 +1,271 @@
+import os
+import re
+import json
+import requests
+import subprocess
+from typing import TypedDict, List, Dict, Any
+from langgraph.graph import StateGraph, END
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.outputs import ChatResult, ChatGeneration
+
+MODEL = "claude-3-5-haiku@20241022"
+API_VERSION = "3.5 Haiku"
+BASE_URL = f"https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version={API_VERSION}"
+API_KEY = "dial-qux0bkmzf5twpslx680o4gk0fqf"
+
+class RepoAnalysisState(TypedDict):
+    repo_url: str
+    repo_path: str
+    code_chunks: List[str]
+    messages: List[BaseMessage]
+    analysis: str
+    kafka_inventory: List[dict]
+    code_diffs: List[dict]
+
+class ApiKeyOnlyChatModel(BaseChatModel):
+    model_name: str
+    base_url: str
+    api_key: str
+
+    def _generate(self, messages: List[BaseMessage], stop=None, run_manager=None, **kwargs):
+        role_map = {"human": "user", "ai": "assistant", "system": "system"}
+        payload = {
+            "messages": [
+                {"role": role_map.get(m.type, m.type), "content": m.content}
+                for m in messages
+            ],
+            "temperature": 0,
+        }
+        headers = {"Content-Type": "application/json", "Api-Key": self.api_key}
+        resp = requests.post(self.base_url, headers=headers, json=payload, timeout=120)
+        resp.raise_for_status()
+        data = resp.json()
+        content = data["choices"][0]["message"]["content"]
+        ai_msg = AIMessage(content=content)
+        return ChatResult(generations=[ChatGeneration(message=ai_msg)])
+
+    @property
+    def _llm_type(self) -> str:
+        return "api-key-only-chat"
+
+def clone_repo(state: RepoAnalysisState):
+    repo_url = state["repo_url"]
+    local_path = state["repo_path"]
+
+    if os.path.exists(os.path.join(local_path, ".git")):
+        print(f"Repository already exists at {local_path}, checking for updates...")
+
+        remote_commit = subprocess.check_output(
+            ["git", "ls-remote", repo_url, "HEAD"]
+        ).decode().split()[0]
+
+        local_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=local_path
+        ).decode().strip()
+
+        if local_commit == remote_commit:
+            print("Local repository is already up-to-date with origin.")
+        else:
+            print("Local repo is outdated, pulling latest changes...")
+            subprocess.run(["git", "pull"], cwd=local_path, check=True)
+    else:
+        print(f"Cloning repository into {local_path}...")
+        os.makedirs(local_path, exist_ok=True)
+        subprocess.run(["git", "clone", "--depth", "1", repo_url, local_path], check=True)
+
+    return state
+
+def get_updated_state_with_code_chunks(state: RepoAnalysisState) -> RepoAnalysisState:
+    repo_path = state["repo_path"]
+    chunks = []
+    EXCLUDED_EXTENSIONS = (".png", ".jpg", ".exe", ".dll", ".bin")
+
+    max_chunk_size = 4000
+    for root, dirs, files in os.walk(repo_path):
+        if ".git" in dirs:
+            dirs.remove(".git")
+        for f in files:
+            path = os.path.join(root, f)
+            if f.lower().endswith(EXCLUDED_EXTENSIONS):
+                continue
+            try:
+                with open(path, "rb") as test_fp:
+                    start = test_fp.read(1024)
+                    if b'\0' in start:
+                        continue
+                with open(path, "r", encoding="utf-8", errors="ignore") as fp:
+                    content = fp.read()
+                    for i in range(0, len(content), max_chunk_size):
+                        chunk = content[i:i+max_chunk_size]
+                        chunks.append(f"File: {os.path.relpath(path, repo_path)}\n{chunk}")
+            except (IOError, OSError):
+                continue
+
+    print(f"Total chunks loaded: {len(chunks)}")
+    return {**state, "code_chunks": chunks}
+
+def analyze_code(state: RepoAnalysisState):
+    llm = ApiKeyOnlyChatModel(model_name=MODEL, base_url=BASE_URL, api_key=API_KEY)
+    summaries = []
+    for chunk in state["code_chunks"]:
+        prompt = f"Summarize the purpose and functionality of this code:\n\n{chunk}"
+        resp = llm.invoke([HumanMessage(content=prompt)])
+        summaries.append(resp.content)
+
+    analysis = "\n\n".join(summaries)
+    return {**state, "analysis": analysis}
+
+def scan_for_kafka_usage_ai(state: RepoAnalysisState) -> RepoAnalysisState:
+    llm = ApiKeyOnlyChatModel(model_name=MODEL, base_url=BASE_URL, api_key=API_KEY)
+    inventory: List[Dict[str, Any]] = []
+    code_chunks = state["code_chunks"]
+
+    print(f"Scanning {len(code_chunks)} chunks for Kafka usage via AI...")
+
+    for idx, chunk in enumerate(code_chunks):
+        prompt = (
+            "You are analyzing a .NET Core repository. "
+            "Does this code use Kafka (e.g., Confluent.Kafka, Kafka APIs, producers, consumers, topics, partitions)? "
+            "If yes, return a JSON object with fields: "
+            "{'file': 'relative/path', 'kafka_apis': [...], 'summary': '...'}.\n"
+            "If not, return {}.\n\n"
+            f"Code chunk:\n{chunk}"
+        )
+        resp = llm.invoke([HumanMessage(content=prompt)])
+        text = getattr(resp, "content", None) or str(resp)
+
+        match = re.search(r"\{.*\}", text, flags=re.S)
+        if match:
+            try:
+                data = json.loads(match.group(0))
+                if data and "file" in data:
+                    inventory.append(data)
+            except Exception:
+                pass
+
+        if idx % 20 == 0:
+            print(f"Processed {idx}/{len(code_chunks)} chunks")
+
+    print(f"AI-identified Kafka usage in {len(inventory)} files.")
+    return {**state, "kafka_inventory": inventory}
+
+def generate_code_diffs(state: RepoAnalysisState) -> RepoAnalysisState:
+    llm = ApiKeyOnlyChatModel(model_name=MODEL, base_url=BASE_URL, api_key=API_KEY)
+    inventory = state.get("kafka_inventory", [])
+    repo_path = state["repo_path"]
+
+    diffs = []
+    for item in inventory:
+        file_rel = item.get("file")
+        file_abs = os.path.join(repo_path, file_rel)
+
+        if not os.path.exists(file_abs):
+            continue
+
+        try:
+            with open(file_abs, "r", encoding="utf-8", errors="ignore") as fp:
+                file_content = fp.read()
+        except Exception:
+            continue
+
+        prompt = f"""
+        You are a .NET Core expert.
+        File: {file_rel}
+
+        Original code:
+        {file_content}
+
+
+        Task:
+        - Show a unified diff patch (`diff` style) that replaces Kafka usage with Azure.Messaging.ServiceBus.
+        - Cover producers, consumers, config, and error handling.
+        - Keep namespaces, classes, and non-Kafka code intact.
+        - If no Kafka usage is present, return an empty diff.
+        """
+        resp = llm.invoke([HumanMessage(content=prompt)])
+        diffs.append({"file": file_rel, "diff": resp.content})
+    
+        print(f"Generated diffs for {len(diffs)} files.")
+
+    return {**state, "code_diffs": diffs}
+
+def generate_report_streaming(state: RepoAnalysisState, report_path="migration-report.md"):
+    """
+    Streaming-style report generator to avoid token limit issues.
+    Writes each section to disk incrementally instead of building one huge prompt.
+    """
+
+    llm = ApiKeyOnlyChatModel(model_name=MODEL, base_url=BASE_URL, api_key=API_KEY)
+
+    with open(report_path, "w", encoding="utf-8") as f:
+        # Header
+        f.write("# Kafka → Azure Service Bus Migration Report\n\n")
+
+        # 1. Kafka Usage Inventory
+        inventory = state.get("kafka_inventory", [])
+        f.write("## 1. Kafka Usage Inventory\n\n")
+        f.write("| File | APIs Used | Summary |\n")
+        f.write("|------|-----------|---------|\n")
+        for item in inventory:
+            f.write(f"| {item.get('file')} | {', '.join(item.get('kafka_apis', []))} | {item.get('summary', '')} |\n")
+        f.write("\n")
+
+        # 3. Code Migration Diffs (all files, no token explosion)
+        f.write("## 3. Code Migration Diffs\n")
+        diffs = state.get("code_diffs", [])
+        f.write("## 3. Code Migration Diffs\n\n")
+        for diff in diffs:
+            file_name = diff.get("file", "").lower()
+            file_diff = diff.get("diff", "")
+
+            # Ignore README.md or other excluded files
+            if file_name == "readme.md":
+                continue
+
+            f.write(f"### {file_name}\n")
+            f.write("```diff\n")
+            f.write(file_diff.strip() + "\n")
+            f.write("```\n\n")
+
+
+    print(f"✅ Streaming migration report written to {report_path}")
+
+    # Update state with a final message
+    return {**state, "messages": state["messages"] + [AIMessage(content=f"Migration report generated at {report_path}.")]}
+
+# Build workflow
+graph = StateGraph(RepoAnalysisState)
+graph.add_node("clone_repo", clone_repo)
+graph.add_node("load_source_code", get_updated_state_with_code_chunks)
+graph.add_node("analyze_code", analyze_code)
+graph.add_node("scan_for_kafka_usage_ai", scan_for_kafka_usage_ai)
+graph.add_node("generate_code_diffs", generate_code_diffs)
+graph.add_node("generate_report", generate_report_streaming)
+
+graph.set_entry_point("clone_repo")
+graph.add_edge("clone_repo", "load_source_code")
+graph.add_edge("load_source_code", "analyze_code")
+graph.add_edge("analyze_code", "scan_for_kafka_usage_ai")
+graph.add_edge("scan_for_kafka_usage_ai", "generate_code_diffs")
+graph.add_edge("generate_code_diffs", "generate_report")
+graph.add_edge("generate_report", END)
+
+app = graph.compile()
+
+# Run
+def run_analysis(question: str = "Provide a summary of the repository and its Kafka usage."):
+    result = app.invoke({
+        "repo_url": "https://github.com/srigumm/dotnetcore-kafka-integration",
+        "repo_path": "./cloned_repo",
+        "code_chunks": [],
+        "analysis": "",
+        "kafka_inventory": [],
+        "code_diffs": [],
+        "messages": [HumanMessage(content=question)],
+    })
+    print("\nAI Proxy Response:\n", result["messages"][-1].content)
+
+# Example usage:
+run_analysis()
