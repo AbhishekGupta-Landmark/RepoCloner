@@ -152,6 +152,12 @@ class EnhancedTechnologyDetector implements EnhancedTechnologyDetectionService {
     { pattern: 'package.json', check: 'winston', name: 'Winston', category: 'monitoring', confidence: 0.90, icon: 'winston', versionExtractor: 'winston' },
     { pattern: 'package.json', check: 'morgan', name: 'Morgan', category: 'monitoring', confidence: 0.85, icon: 'morgan', versionExtractor: 'morgan' },
     
+    // ========== DOCUMENTATION ==========
+    { pattern: 'README.md', check: null, name: 'Documentation (README)', category: 'documentation', confidence: 0.60, icon: 'readme' },
+    { pattern: 'readme.md', check: null, name: 'Documentation (README)', category: 'documentation', confidence: 0.60, icon: 'readme' },
+    { pattern: 'README.txt', check: null, name: 'Documentation (README)', category: 'documentation', confidence: 0.50, icon: 'readme' },
+    { pattern: 'README.rst', check: null, name: 'Documentation (reStructuredText)', category: 'documentation', confidence: 0.60, icon: 'readme' },
+    
     // File Extensions
     { pattern: '*.tsx', check: null, name: 'TypeScript React', category: 'frontend', confidence: 0.85, icon: 'typescript', configFiles: ['tsconfig.json', 'tsconfig.react.json'] },
     { pattern: '*.ts', check: null, name: 'TypeScript', category: 'utilities', confidence: 0.85, icon: 'typescript', configFiles: ['tsconfig.json', 'tsconfig.build.json'], scriptTokens: ['tsc', 'typescript'] },

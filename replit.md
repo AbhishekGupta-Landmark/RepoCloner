@@ -10,6 +10,11 @@ An interactive web-based application that allows users to clone Git repositories
 - C#-compatible backend architecture with extensible provider pattern
 
 ## Recent Changes
+- 2025-09-22: Successfully pushed latest changes to GitHub repository
+- Fixed multi-signin functionality to always show "Add another account" option
+- PAT authentication now always available regardless of OAuth configuration  
+- Implemented targeted Vite error overlay blocking while preserving UI functionality
+- Enhanced authentication flow with improved user experience
 - 2025-09-12: Initial implementation with working web UI
 - Fixed storage interface to support repositories and analysis reports
 - Added Express session support for authentication
@@ -29,7 +34,8 @@ An interactive web-based application that allows users to clone Git repositories
 
 ## Important Notes
 - GitHub authentication currently uses manual implementation instead of Replit connector
-- User dismissed connector:ccfg_github_01K4B9XD3VRVD2F99YM91YTCAF integration
+- User dismissed connector:ccfg_github_01K4B9XD3VRVD2F99YM91YTCAF integration (dismissed again 2025-09-23)
+- GitHub operations use GITHUB_TOKEN secret for authentication instead of Replit's GitHub integration
 - Need to implement GitHub authentication with user-provided credentials/tokens
 - OpenAI API key configured and ready for code analysis features
 
