@@ -44,7 +44,7 @@ export default function MainPage() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("analysis");
-  const [settingsHaveChanged, setSettingsHaveChanged] = useState(false);
+  const settingsAppliedRef = useRef(false);
   const { 
     user, 
     isAuthenticated, 
@@ -119,13 +119,17 @@ export default function MainPage() {
     }
   }, [showRepoPanel, lastExpandedWidth]);
 
+  // Callback for when settings are successfully applied
+  const onSettingsApplied = () => {
+    settingsAppliedRef.current = true;
+  };
+
   // Handle settings modal close with auto-refresh functionality
   const handleSettingsModalClose = (open: boolean) => {
     setSettingsModalOpen(open);
     
-    // If modal is being closed (open = false) and settings have potentially changed
-    if (!open && settingsHaveChanged) {
-      console.log('[Frontend] Settings modal closed, refreshing configuration...');
+    // If modal is being closed (open = false) and settings were applied
+    if (!open && settingsAppliedRef.current) {
       
       // Refresh all relevant data that might be affected by settings changes
       setTimeout(() => {
@@ -139,18 +143,20 @@ export default function MainPage() {
         // Refresh repositories list in case provider settings changed
         queryClient.invalidateQueries({ queryKey: ['/api/repositories'] });
         
-        // Reset the settings change flag
-        setSettingsHaveChanged(false);
+        // Refresh technologies list in case provider settings changed
+        queryClient.invalidateQueries({ queryKey: ['/api/technologies'] });
         
-        console.log('[Frontend] Configuration refreshed after settings update');
+        // Reset the settings applied flag
+        settingsAppliedRef.current = false;
+        
       }, 100); // Small delay to ensure modal has fully closed
     }
   };
 
-  // Monitor when settings modal opens to track potential changes
+  // Reset settings applied flag when modal opens
   useEffect(() => {
     if (settingsModalOpen) {
-      setSettingsHaveChanged(true); // Assume settings might change when modal opens
+      settingsAppliedRef.current = false;
     }
   }, [settingsModalOpen]);
 
@@ -657,7 +663,7 @@ export default function MainPage() {
                   </DialogTitle>
                 </DialogHeader>
                 <div className="flex-1 overflow-hidden min-h-0">
-                  <SettingsPanel />
+                  <SettingsPanel onApplied={onSettingsApplied} />
                 </div>
               </motion.div>
             </DialogContent>
