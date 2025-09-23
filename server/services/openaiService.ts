@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { AnalysisRequest, AnalysisResult, FileNode } from "@shared/schema";
 import * as fs from "fs";
 import * as path from "path";
-import { broadcastLog } from "../utils/logger";
+import { broadcastLog } from "../routes";
 
 const openai = new OpenAI({ 
   apiKey: process.env.EPAM_AI_API_KEY || "default_key",
