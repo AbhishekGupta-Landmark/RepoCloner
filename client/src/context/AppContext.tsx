@@ -45,14 +45,25 @@ export function AppProvider({ children }: AppProviderProps) {
   
   // Sidebar visibility state with localStorage persistence
   const [showRepoPanel, setShowRepoPanel] = useState<boolean>(() => {
-    const savedState = localStorage.getItem('git-analyzer-show-repo-panel');
-    return savedState ? JSON.parse(savedState) : true; // Default to showing the panel
+    try {
+      const savedState = localStorage.getItem('git-analyzer-show-repo-panel');
+      return savedState ? JSON.parse(savedState) : true; // Default to showing the panel
+    } catch (error) {
+      console.warn('Failed to parse localStorage data for showRepoPanel:', error);
+      return true; // Default fallback
+    }
   });
 
   // Last expanded width state with localStorage persistence
   const [lastExpandedWidth, setLastExpandedWidthState] = useState<number>(() => {
-    const savedWidth = localStorage.getItem('git-analyzer-last-expanded-width');
-    return savedWidth ? parseFloat(savedWidth) : 22; // Default to 22% width
+    try {
+      const savedWidth = localStorage.getItem('git-analyzer-last-expanded-width');
+      const parsed = savedWidth ? parseFloat(savedWidth) : 22;
+      return isNaN(parsed) ? 22 : parsed; // Default to 22% width if NaN
+    } catch (error) {
+      console.warn('Failed to parse localStorage data for lastExpandedWidth:', error);
+      return 22; // Default fallback
+    }
   });
 
   // Toggle repository panel visibility
@@ -69,7 +80,11 @@ export function AppProvider({ children }: AppProviderProps) {
     // Validate width (should be between 12 and 45 as per the component constraints)
     const validWidth = Math.max(12, Math.min(45, width));
     setLastExpandedWidthState(validWidth);
-    localStorage.setItem('git-analyzer-last-expanded-width', validWidth.toString());
+    try {
+      localStorage.setItem('git-analyzer-last-expanded-width', validWidth.toString());
+    } catch (error) {
+      console.warn('Failed to save lastExpandedWidth to localStorage:', error);
+    }
   };
 
   // Custom toggle function that saves current panel size before collapsing
@@ -88,7 +103,11 @@ export function AppProvider({ children }: AppProviderProps) {
 
   // Persist showRepoPanel state to localStorage
   useEffect(() => {
-    localStorage.setItem('git-analyzer-show-repo-panel', JSON.stringify(showRepoPanel));
+    try {
+      localStorage.setItem('git-analyzer-show-repo-panel', JSON.stringify(showRepoPanel));
+    } catch (error) {
+      console.warn('Failed to save showRepoPanel to localStorage:', error);
+    }
   }, [showRepoPanel]);
 
   // Check for existing repositories on load

@@ -68,11 +68,33 @@ function addAccount(req: Express['request'], account: OAuthAccount): void {
   if (!req.session.accounts) {
     req.session.accounts = {};
   }
-  req.session.accounts[account.id] = account;
   
-  // Set as active if it's the first account
-  if (!req.session.activeAccountId) {
-    req.session.activeAccountId = account.id;
+  // Check for existing account with same provider and providerUserId
+  const existingAccountId = Object.keys(req.session.accounts).find(id => {
+    const existingAccount = req.session.accounts![id];
+    return existingAccount.provider === account.provider && 
+           existingAccount.providerUserId === account.providerUserId;
+  });
+  
+  if (existingAccountId) {
+    // Update existing account with fresh tokens and info
+    req.session.accounts[existingAccountId] = {
+      ...req.session.accounts[existingAccountId],
+      ...account,
+      id: existingAccountId, // Keep the original ID
+      connectedAt: new Date() // Update connection time
+    };
+    
+    // Set as active account since user just signed in
+    req.session.activeAccountId = existingAccountId;
+  } else {
+    // Add new account
+    req.session.accounts[account.id] = account;
+    
+    // Set as active if it's the first account
+    if (!req.session.activeAccountId) {
+      req.session.activeAccountId = account.id;
+    }
   }
 }
 
@@ -211,28 +233,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
+  // Dev-only mock authentication for testing
+  if (process.env.NODE_ENV === 'development') {
+    app.post("/api/auth/dev-login", (req, res) => {
+      try {
+        const { provider = 'github', username = 'TestUser' } = req.body;
+        
+        const mockAccount: OAuthAccount = {
+          id: randomUUID(),
+          provider: provider as any,
+          providerUserId: 'mock-123',
+          username,
+          displayName: username,
+          email: `${username}@example.com`,
+          avatarUrl: '',
+          accessToken: 'mock-token',
+          refreshToken: undefined,
+          scopes: ['read'],
+          connectedAt: new Date()
+        };
+        
+        addAccount(req, mockAccount);
+        
+        res.json({
+          success: true,
+          accountId: mockAccount.id,
+          username: mockAccount.username,
+          provider: mockAccount.provider,
+          accounts: getAllAccounts(req).map(accountToPublic),
+          activeAccountId: req.session?.activeAccountId
+        });
+      } catch (error) {
+        console.error('[Dev Login] Error:', error);
+        res.status(500).json({ error: 'Dev login failed' });
+      }
+    });
+  }
+
   // Admin OAuth configuration endpoints
   app.post("/api/admin/oauth-config", (req, res) => {
     try {
+      // Disable caching to prevent 304 responses
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      
       const { github, gitlab, azure, bitbucket, gitea, codeberg, sourcehut } = req.body;
       
       // Store credentials in memory
       if (github?.clientId && github?.clientSecret) {
-        oauthCredentials.set('github', { 
-          clientId: github.clientId, 
-          clientSecret: github.clientSecret,
-          scope: github.scope || 'user:email public_repo',
-          enabled: github.enabled !== undefined ? github.enabled : true
-        });
+        // Don't store masked secrets  
+        if (github.clientSecret !== '••••••••') {
+          oauthCredentials.set('github', { 
+            clientId: github.clientId, 
+            clientSecret: github.clientSecret,
+            scope: github.scope || 'user:email public_repo',
+            enabled: github.enabled !== undefined ? github.enabled : true
+          });
+        } else {
+          // Keep existing secret, only update other fields
+          const existing = oauthCredentials.get('github');
+          if (existing) {
+            oauthCredentials.set('github', { 
+              ...existing,
+              clientId: github.clientId,
+              scope: github.scope || 'user:email public_repo',
+              enabled: github.enabled !== undefined ? github.enabled : true
+            });
+          }
+        }
       }
       
       if (gitlab?.clientId && gitlab?.clientSecret) {
-        oauthCredentials.set('gitlab', { 
-          clientId: gitlab.clientId, 
-          clientSecret: gitlab.clientSecret,
-          scope: gitlab.scope || 'api',
-          enabled: gitlab.enabled !== undefined ? gitlab.enabled : true
-        });
+        // Don't store masked secrets
+        if (gitlab.clientSecret !== '••••••••') {
+          oauthCredentials.set('gitlab', { 
+            clientId: gitlab.clientId, 
+            clientSecret: gitlab.clientSecret,
+            scope: gitlab.scope || 'api',
+            enabled: gitlab.enabled !== undefined ? gitlab.enabled : true
+          });
+        } else {
+          // Keep existing secret, only update other fields
+          const existing = oauthCredentials.get('gitlab');
+          if (existing) {
+            oauthCredentials.set('gitlab', { 
+              ...existing,
+              clientId: gitlab.clientId,
+              scope: gitlab.scope || 'api',
+              enabled: gitlab.enabled !== undefined ? gitlab.enabled : true
+            });
+          }
+        }
       }
       
       if (azure?.clientId && azure?.clientSecret) {
@@ -293,6 +383,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/admin/oauth-config", (req, res) => {
     try {
+      // Disable caching to prevent 304 responses and JSON parsing errors
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('ETag', ''); // Remove etag
+      
       // Return current config without exposing secrets
       const config = {
         github: {
@@ -481,23 +575,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // OAuth callback endpoints
   app.get("/api/auth/callback/:provider", async (req, res) => {
+    console.log(`[OAuth Callback] Started for provider: ${req.params.provider}`);
+    console.log(`[OAuth Callback] Query params:`, req.query);
+    console.log(`[OAuth Callback] Session state:`, req.session?.oauthState);
+    
     const { provider } = req.params;
     const { code, state } = req.query;
     const config = getOauthConfig()[provider as keyof ReturnType<typeof getOauthConfig>];
 
     if (!config) {
+      console.log(`[OAuth Callback] ERROR: Unsupported provider ${provider}`);
       return res.status(400).json({ error: "Unsupported OAuth provider" });
     }
 
     // Verify state parameter
     if (state !== req.session?.oauthState) {
+      console.log(`[OAuth Callback] ERROR: State mismatch. Expected: ${req.session?.oauthState}, Got: ${state}`);
       return res.status(400).json({ error: "Invalid state parameter" });
     }
 
     if (!code) {
+      console.log(`[OAuth Callback] ERROR: No authorization code received`);
       return res.status(400).json({ error: "No authorization code received" });
     }
 
+    console.log(`[OAuth Callback] Starting token exchange for ${provider}`);
     try {
       // Exchange code for access token
       const replitDomain = process.env.REPLIT_DEV_DOMAIN || process.env.REPLIT_DOMAINS;
@@ -568,6 +670,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Add account to session
       addAccount(req, newAccount);
 
+      // Debug logging
+      console.log(`[OAuth Callback] Account added for ${provider}:`, {
+        accountId: newAccount.id,
+        username: newAccount.username,
+        sessionAccountsCount: Object.keys(req.session?.accounts || {}).length,
+        activeAccountId: req.session?.activeAccountId
+      });
+
       // Clean up OAuth session data
       if (req.session) {
         delete req.session.oauthProvider;
@@ -578,6 +688,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.redirect(`/?auth=success&provider=${provider}&username=${encodeURIComponent(newAccount.username)}&accountId=${accountId}`);
 
     } catch (error) {
+      console.log(`[OAuth Callback] ERROR: ${error instanceof Error ? error.message : 'Unknown error'}`, error);
       res.redirect(`/?auth=error&message=${encodeURIComponent(error instanceof Error ? error.message : 'Authentication failed')}`);
     }
   });
@@ -663,6 +774,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/auth/status", (req, res) => {
+    // Debug logging
+    console.log(`[Auth Status] Session state:`, {
+      hasSession: !!req.session,
+      hasAccounts: !!req.session?.accounts,
+      accountsCount: Object.keys(req.session?.accounts || {}).length,
+      activeAccountId: req.session?.activeAccountId,
+      sessionId: req.sessionID
+    });
+
     const activeAccount = getActiveAccount(req);
     if (activeAccount) {
       res.json({
