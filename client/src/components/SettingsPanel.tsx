@@ -87,7 +87,11 @@ const GIT_PROVIDERS = {
   }
 } as const;
 
-export default function SettingsPanel() {
+interface SettingsPanelProps {
+  onApplied?: () => void;
+}
+
+export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
   const [activeTab, setActiveTab] = useState("ai");
   const [settings, setSettings] = useState({
     openai: {
@@ -167,6 +171,9 @@ export default function SettingsPanel() {
       setIsLoading(true);
       await apiRequest('POST', '/api/admin/oauth-config', oauthConfig);
       await loadConfiguration();
+
+      // Notify parent component that settings were successfully applied
+      onApplied?.();
 
       toast({
         title: "Settings Saved",
