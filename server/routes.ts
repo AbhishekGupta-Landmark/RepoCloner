@@ -1,15 +1,7 @@
-import type { Application, Request } from 'express';
+import type { Express } from "express";
 import { createServer, type Server } from "http";
 import session from "express-session";
 import { Provider, OAuthAccountPublic, AccountsResponse } from "@shared/schema";
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const scriptPath = path.join(__dirname, '../scripts/default.py');
 
 // Multi-account session types
 interface OAuthAccount {
@@ -50,22 +42,24 @@ declare module 'express-session' {
 }
 
 // Helper functions for multi-account support
-function getActiveAccount(req: Request): OAuthAccount | null {
+function getActiveAccount(req: Express['request']): OAuthAccount | null {
   if (!req.session?.accounts || !req.session.activeAccountId) {
     return null;
   }
   return req.session.accounts[req.session.activeAccountId] || null;
 }
 
-function getAllAccounts(req: Request): OAuthAccount[] {
+function getAllAccounts(req: Express['request']): OAuthAccount[] {
   if (!req.session?.accounts) {
     return [];
   }
   return Object.values(req.session.accounts);
 }
 
-function addAccount(req: Request, account: OAuthAccount): void {
+function addAccount(req: Express['request'], account: OAuthAccount): void {
   if (!req.session) {
+    // Session should exist at this point due to express-session middleware
+    // If it doesn't exist, something is wrong with the setup
     throw new Error('Session not available - ensure express-session middleware is configured');
   }
   if (!req.session.accounts) {
@@ -101,7 +95,7 @@ function addAccount(req: Request, account: OAuthAccount): void {
   }
 }
 
-function removeAccount(req: Request, accountId: string): boolean {
+function removeAccount(req: Express['request'], accountId: string): boolean {
   if (!req.session?.accounts || !req.session.accounts[accountId]) {
     return false;
   }
@@ -117,7 +111,7 @@ function removeAccount(req: Request, accountId: string): boolean {
   return true;
 }
 
-function switchActiveAccount(req: Request, accountId: string): boolean {
+function switchActiveAccount(req: Express['request'], accountId: string): boolean {
   if (!req.session?.accounts || !req.session.accounts[accountId]) {
     return false;
   }
@@ -139,14 +133,11 @@ function accountToPublic(account: OAuthAccount): OAuthAccountPublic {
     connectedAt: account.connectedAt
   };
 }
-
-// Service imports
 import { storage } from "./storage";
 import { gitProviders, detectProvider } from "./services/gitProviders";
 import { openaiService } from "./services/openaiService";
 import { ReportBuilder, type ExportFormat } from "./services/reportBuilder";
 import { enhancedTechnologyDetectionService } from "./services/enhancedTechnologyDetection";
-import { pythonScriptService } from "./services/pythonScriptService";
 import { insertRepositorySchema, insertAnalysisReportSchema, AuthCredentials, AnalysisRequest } from "@shared/schema";
 import { z } from "zod";
 import { randomUUID } from "crypto";
@@ -234,7 +225,7 @@ export function broadcastLog(level: LogMessage['level'], message: string) {
   // Production logging would go here - console.log removed for production
 }
 
-export async function registerRoutes(app: Application): Promise<Server> {
+export async function registerRoutes(app: Express): Promise<Server> {
   
   // Trust proxy for proper cookie handling
   app.set('trust proxy', 1);
@@ -875,8 +866,6 @@ export async function registerRoutes(app: Application): Promise<Server> {
 
   // Repository routes
   app.post("/api/repositories/clone", async (req, res) => {
-    let repository: any = null; // Declare early
-    
     try {
       const { url, options } = req.body;
       const provider = detectProvider(url);
@@ -959,7 +948,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
 
 
         // Create repository record with new URL
-        repository = await storage.createRepository({
+        const repository = await storage.createRepository({
           name: createResult.repoName!,
           url,
           provider,
@@ -1051,7 +1040,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
 
 
         // Create repository record with new URL
-        repository = await storage.createRepository({
+        const repository = await storage.createRepository({
           name: createResult.repoName!,
           url,
           provider,
@@ -1088,66 +1077,23 @@ export async function registerRoutes(app: Application): Promise<Server> {
       const detectedTechnologies = await enhancedTechnologyDetectionService.detectTechnologies(cloneResult.localPath!);
       broadcastLog('INFO', `Technology detection completed. Found ${detectedTechnologies.length} technologies`);
 
-      // Create repository first
-      repository = await storage.createRepository({
+      // Create repository record
+      const repository = await storage.createRepository({
         name: url.split('/').pop()?.replace('.git', '') || 'Unknown',
         url,
         provider,
         clonedUrl: cloneResult.remoteUrl,
-        localPath: cloneResult.localPath!,
+        localPath: cloneResult.localPath!, // Store the clone path
         fileStructure,
         detectedTechnologies
       });
 
-      // Execute Python script after successful clone and repository creation
-      console.log("🔄 Starting Python script execution...");
-      broadcastLog('INFO', `Executing default Python script for repository: ${url}`);
-
-      try {
-        // Now repository exists and has valid data
-        const pythonResult = await pythonScriptService.executePostCloneScript(
-          repository.localPath || cloneResult.localPath!, // Use repository.localPath now
-          repository.url,                                  // Use repository.url now
-          repository.id                                    // Use repository.id now
-        );
-
-        console.log("🐍 Python script result:", pythonResult);
-
-        // Create Python script report if migration-report.md was generated
-        if (pythonResult.success && pythonResult.generatedFiles && pythonResult.generatedFiles.length > 0) {
-          console.log("💾 Creating Python script report...");
-          
-          await pythonScriptService.createPythonScriptReport(
-            repository.id,
-            repository.url,
-            repository.localPath || '',
-            pythonResult,
-            path.join(__dirname, '../scripts/default.py')
-          );
-          console.log("📊 Python script report created - will appear in Reports tab");
-        }
-
-        // Return response to React frontend
-        res.json({
-          success: true,
-          repository,
-          fileStructure,
-          detectedTechnologies,
-          pythonResult
-        });
-
-      } catch (pythonError) {
-        console.error("❌ Python script execution failed:", pythonError);
-        
-        // Still return success for repository clone even if Python fails
-        res.json({
-          success: true,
-          repository,
-          fileStructure,
-          detectedTechnologies,
-          pythonError: pythonError instanceof Error ? pythonError.message : 'Python execution failed'
-        });
-      }
+      res.json({
+        success: true,
+        repository,
+        fileStructure,
+        detectedTechnologies
+      });
     } catch (error) {
       res.status(500).json({ 
         error: error instanceof Error ? error.message : "Clone operation failed" 
@@ -1165,6 +1111,21 @@ export async function registerRoutes(app: Application): Promise<Server> {
       res.json({ fileStructure: repository.fileStructure });
     } catch (error) {
       res.status(500).json({ error: "Failed to retrieve file structure" });
+    }
+  });
+
+  // Get repository technologies
+  app.get("/api/technologies/:id", async (req, res) => {
+    try {
+      const repository = await storage.getRepository(req.params.id);
+      if (!repository) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+
+      res.json(repository.detectedTechnologies || []);
+    } catch (error) {
+      console.error('Error fetching repository technologies:', error);
+      res.status(500).json({ error: "Failed to fetch repository technologies" });
     }
   });
 
@@ -1417,6 +1378,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
       // Support both 'path' and 'folderPath' query parameters for compatibility
       const { path: pathParam, folderPath } = req.query;
       const folderPathToUse = pathParam || folderPath;
+
 
       if (!folderPathToUse || typeof folderPathToUse !== 'string') {
         broadcastLog('ERROR', `Missing folder path parameter. Query params: ${JSON.stringify(req.query)}`);
