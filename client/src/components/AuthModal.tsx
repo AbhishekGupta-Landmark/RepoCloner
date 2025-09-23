@@ -17,11 +17,9 @@ interface AuthModalProps {
 
 export default function AuthModal({ open, onOpenChange }: AuthModalProps) {
   const [selectedProvider, setSelectedProvider] = useState("github");
-  const [authMethod, setAuthMethod] = useState("oauth");
+  const [authMethod, setAuthMethod] = useState<'oauth' | 'pat'>('oauth');
   const [credentials, setCredentials] = useState({
-    token: "",
-    username: "",
-    password: ""
+    token: ""
   });
   const [oauthConfigStatus, setOauthConfigStatus] = useState<Record<string, boolean>>({});
   const [configCheckLoading, setConfigCheckLoading] = useState(false);
@@ -49,8 +47,15 @@ export default function AuthModal({ open, onOpenChange }: AuthModalProps) {
       
       const configData = await configResponse.json();
       
-      if (configData.status) {
-        setOauthConfigStatus(configData.status);
+      if (configData.config) {
+        // Derive status from config by checking if providers have valid credentials
+        const status: Record<string, boolean> = {};
+        Object.keys(configData.config).forEach(provider => {
+          const providerConfig = configData.config[provider];
+          // Provider is configured if it has both clientId and clientSecret
+          status[provider] = !!(providerConfig?.clientId && providerConfig?.clientSecret);
+        });
+        setOauthConfigStatus(status);
       } else {
         setConfigError("Failed to load OAuth configuration");
       }
@@ -82,18 +87,16 @@ export default function AuthModal({ open, onOpenChange }: AuthModalProps) {
       return;
     }
 
-    // For PAT and credentials, use the existing authentication flow
+    // For PAT, use the existing authentication flow
     const authCredentials: AuthCredentials = {
-      type: authMethod as any,
-      token: credentials.token || undefined,
-      username: credentials.username || undefined,
-      password: credentials.password || undefined
+      type: authMethod,
+      token: credentials.token || undefined
     };
 
     const success = await authenticate(selectedProvider, authCredentials);
     if (success) {
       onOpenChange(false);
-      setCredentials({ token: "", username: "", password: "" });
+      setCredentials({ token: "" });
     }
   };
 
@@ -193,12 +196,11 @@ export default function AuthModal({ open, onOpenChange }: AuthModalProps) {
                 whileHover={{ scale: 1.01 }}
                 transition={{ type: "spring", stiffness: 400, damping: 30 }}
               >
-                <Select value={authMethod} onValueChange={setAuthMethod}>
+                <Select value={authMethod} onValueChange={(value) => setAuthMethod(value as 'oauth' | 'pat')}>
                   <SelectTrigger data-testid="select-auth-method" className="hover:border-primary/50 transition-colors">
                     <div className="flex items-center gap-2">
                       {authMethod === "oauth" && <Zap className="h-4 w-4 text-primary" />}
                       {authMethod === "pat" && <Key className="h-4 w-4 text-primary" />}
-                      {authMethod === "credentials" && <Lock className="h-4 w-4 text-primary" />}
                       <SelectValue placeholder="Select method" />
                     </div>
                   </SelectTrigger>
@@ -218,15 +220,6 @@ export default function AuthModal({ open, onOpenChange }: AuthModalProps) {
                         <div>
                           <div className="font-medium">Personal Access Token</div>
                           <div className="text-xs text-muted-foreground">Use your personal token</div>
-                        </div>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="credentials">
-                      <div className="flex items-center gap-2">
-                        <Lock className="h-4 w-4 text-orange-500" />
-                        <div>
-                          <div className="font-medium">Username & Password</div>
-                          <div className="text-xs text-muted-foreground">Traditional credentials</div>
                         </div>
                       </div>
                     </SelectItem>
@@ -296,95 +289,53 @@ export default function AuthModal({ open, onOpenChange }: AuthModalProps) {
           {/* PAT Method */}
           {authMethod === "pat" && (
             <div className="space-y-3">
-              {/* Show username field for Bitbucket */}
-              {selectedProvider === "bitbucket" && (
-                <div>
-                  <Label htmlFor="username" className="text-sm font-medium mb-2 block">
-                    Username (Required for Bitbucket)
-                  </Label>
-                  <Input
-                    id="username"
-                    type="text"
-                    placeholder="your-username"
-                    value={credentials.username}
-                    onChange={(e) => setCredentials(prev => ({ ...prev, username: e.target.value }))}
-                    data-testid="input-username"
-                  />
+              {selectedProvider === "bitbucket" ? (
+                <div className="p-3 border rounded-md bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800">
+                  <div className="flex items-center gap-2 text-sm text-orange-700 dark:text-orange-300 mb-2">
+                    <AlertCircle className="h-4 w-4" />
+                    PAT Not Available for Bitbucket
+                  </div>
+                  <p className="text-sm text-orange-600 dark:text-orange-400 mb-2">
+                    Bitbucket App Passwords require username + password (Basic auth), but username/password authentication has been removed for security.
+                  </p>
+                  <p className="text-sm text-orange-600 dark:text-orange-400">
+                    Please use OAuth authentication instead by selecting "OAuth (Recommended)" above.
+                  </p>
                 </div>
+              ) : (
+                <>
+                  <div>
+                    <Label htmlFor="pat-token" className="text-sm font-medium mb-2 block">
+                      Personal Access Token
+                    </Label>
+                    <Input
+                      id="pat-token"
+                      type="password"
+                      placeholder="token-here"
+                      value={credentials.token}
+                      onChange={(e) => setCredentials(prev => ({ ...prev, token: e.target.value }))}
+                      data-testid="input-pat-token"
+                    />
+                    {selectedProvider === "gitea" && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Works with self-hosted Gitea instances
+                      </p>
+                    )}
+                  </div>
+                  <Button 
+                    className="w-full" 
+                    onClick={handleAuthenticate}
+                    disabled={isLoading || !credentials.token}
+                    data-testid="button-pat-authenticate"
+                  >
+                    {isLoading ? "Authenticating..." : "Authenticate with Token"}
+                  </Button>
+                </>
               )}
-              <div>
-                <Label htmlFor="pat-token" className="text-sm font-medium mb-2 block">
-                  {selectedProvider === "bitbucket" ? "App Password" : "Personal Access Token"}
-                </Label>
-                <Input
-                  id="pat-token"
-                  type="password"
-                  placeholder={selectedProvider === "bitbucket" ? "app-password-here" : "token-here"}
-                  value={credentials.token}
-                  onChange={(e) => setCredentials(prev => ({ ...prev, token: e.target.value }))}
-                  data-testid="input-pat-token"
-                />
-                {selectedProvider === "bitbucket" && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Use App Password instead of your account password
-                  </p>
-                )}
-                {selectedProvider === "gitea" && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Works with self-hosted Gitea instances
-                  </p>
-                )}
-              </div>
-              <Button 
-                className="w-full" 
-                onClick={handleAuthenticate}
-                disabled={isLoading || !credentials.token || (selectedProvider === "bitbucket" && !credentials.username)}
-                data-testid="button-pat-authenticate"
-              >
-                {isLoading ? "Authenticating..." : "Authenticate with Token"}
-              </Button>
             </div>
           )}
 
           {/* Credentials Method */}
-          {authMethod === "credentials" && (
-            <div className="space-y-3">
-              <div>
-                <Label htmlFor="username" className="text-sm font-medium mb-2 block">
-                  Username
-                </Label>
-                <Input
-                  id="username"
-                  type="text"
-                  placeholder="username"
-                  value={credentials.username}
-                  onChange={(e) => setCredentials(prev => ({ ...prev, username: e.target.value }))}
-                  data-testid="input-username"
-                />
-              </div>
-              <div>
-                <Label htmlFor="password" className="text-sm font-medium mb-2 block">
-                  Password
-                </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="password"
-                  value={credentials.password}
-                  onChange={(e) => setCredentials(prev => ({ ...prev, password: e.target.value }))}
-                  data-testid="input-password"
-                />
-              </div>
-              <Button 
-                className="w-full" 
-                onClick={handleAuthenticate}
-                disabled={isLoading || !credentials.username || !credentials.password}
-                data-testid="button-credentials-authenticate"
-              >
-                {isLoading ? "Authenticating..." : "Sign In"}
-              </Button>
-            </div>
-          )}
           </div>
         </motion.div>
       </DialogContent>
