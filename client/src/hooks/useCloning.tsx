@@ -35,6 +35,7 @@ export function useCloning() {
       if (data.repository?.id) {
         queryClient.invalidateQueries({ queryKey: ['/api/repositories', data.repository.id, 'files'] });
         queryClient.invalidateQueries({ queryKey: ['/api/analysis', 'reports', data.repository.id] });
+        queryClient.invalidateQueries({ queryKey: ['/api/technologies', data.repository.id] });
       }
       
       // Show success notification
