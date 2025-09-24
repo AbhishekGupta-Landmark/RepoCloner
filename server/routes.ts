@@ -1246,8 +1246,8 @@ export async function registerRoutes(app: Application): Promise<Server> {
       broadcastLog('INFO', `Executing post-clone Python script for repository: ${url}`);
 
       try {
-        // Fetch AI settings from storage to pass to Python script
-        const aiSettings = await storage.getAISettings();
+        // Fetch AI settings from storage to pass to Python script (with API key for internal use)
+        const aiSettings = await storage.getAISettingsForScript();
         
         // Now repository exists and has valid data
         const pythonResult = await pythonScriptService.executePostCloneScript(
