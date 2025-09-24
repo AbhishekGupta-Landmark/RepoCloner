@@ -191,6 +191,11 @@ export class MemStorage implements IStorage {
     return this.aiSettings;
   }
 
+  // Internal method to get AI settings with API key for Python script execution
+  async getAISettingsForScript(): Promise<AISettings | undefined> {
+    return this.aiSettings; // Return full settings including API key for internal use
+  }
+
   async deleteAISettings(): Promise<boolean> {
     if (!this.aiSettings) {
       return false;
