@@ -1100,20 +1100,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
         detectedTechnologies
       });
 
-      res.json({
-        success: true,
-        repository,
-        fileStructure,
-        detectedTechnologies
-      });
-    } catch (error) {
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : "Clone operation failed" 
-      });
-    }
-  });
-
-  // Execute Python script after successful clone and repository creation
+      // Execute Python script after successful clone and repository creation
       console.log("🔄 Starting Python script execution...");
       broadcastLog('INFO', `Executing default Python script for repository: ${url}`);
 
@@ -1162,6 +1149,12 @@ export async function registerRoutes(app: Application): Promise<Server> {
           pythonError: pythonError instanceof Error ? pythonError.message : 'Python execution failed'
         });
       }
+    } catch (error) {
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : "Clone operation failed" 
+      });
+    }
+  });
 
   app.get("/api/repositories/:id/files", async (req, res) => {
     try {
