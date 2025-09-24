@@ -5,6 +5,7 @@ import requests
 import subprocess
 import sys
 from typing import TypedDict, List, Dict, Any, Optional
+from urllib.parse import quote, urlparse, parse_qs, urlencode, urlunparse
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -73,7 +74,21 @@ class ApiKeyOnlyChatModel(BaseChatModel):
             headers["User-Agent"] = "RepoCloner-AI-Analysis/1.0"
             
         try:
-            resp = requests.post(self.base_url, headers=headers, json=payload, timeout=120)
+            # Clean up the base URL to handle spaces and special characters properly
+            clean_base_url = self.base_url
+            if '?' in clean_base_url:
+                # Parse URL and re-encode query parameters properly
+                parsed = urlparse(clean_base_url)
+                query_params = parse_qs(parsed.query)
+                # Flatten single-item lists and properly encode
+                clean_params = {k: v[0] if isinstance(v, list) and len(v) == 1 else v for k, v in query_params.items()}
+                clean_query = urlencode(clean_params, quote_via=quote)
+                clean_base_url = urlunparse(parsed._replace(query=clean_query))
+            
+            print(f"🌐 Making API request to: {clean_base_url}")
+            print(f"🔧 Headers: {headers}")
+            
+            resp = requests.post(clean_base_url, headers=headers, json=payload, timeout=120)
             resp.raise_for_status()
             data = resp.json()
             content = data["choices"][0]["message"]["content"]
