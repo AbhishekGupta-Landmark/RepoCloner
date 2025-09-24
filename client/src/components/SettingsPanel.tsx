@@ -262,14 +262,24 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
         apiEndpointUrl: settings.openai.apiEndpointUrl
       };
       
-      // Only include apiKey if user provided a new one
+      // Determine the right method and payload
+      let method = 'PATCH';
+      let endpoint = '/api/admin/ai-settings';
+      
+      // If user provided a new API key, always use POST
       if (hasNewApiKey) {
         payload.apiKey = newApiKey.trim();
+        method = 'POST';
+      } else if (!aiHasKey) {
+        // If no existing key and no new key provided, show error
+        toast({
+          title: "API Key Required",
+          description: "Please enter an OpenAI API key to save settings.",
+          variant: "destructive"
+        });
+        return;
       }
-      
-      // Use POST if providing new API key, PATCH for updates without key
-      const method = hasNewApiKey ? 'POST' : 'PATCH';
-      const endpoint = '/api/admin/ai-settings';
+      // Otherwise use PATCH for updates without changing the key
       
       await apiRequest(method, endpoint, payload);
       
