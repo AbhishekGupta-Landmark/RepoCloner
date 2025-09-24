@@ -141,7 +141,7 @@ class PythonScriptService {
   /**
    * Execute Python script after repository cloning
    */
-  async executePostCloneScript(repositoryPath: string, repositoryUrl: string, repositoryId?: string): Promise<PythonExecutionResult> {
+  async executePostCloneScript(repositoryPath: string, repositoryUrl: string, repositoryId?: string, aiSettings?: any): Promise<PythonExecutionResult> {
     broadcastLog('INFO', `Executing post-clone Python script for repository: ${repositoryUrl}`);
     
     // First try to use the default.py script from scripts folder
@@ -149,21 +149,92 @@ class PythonScriptService {
     
     if (await this.fileExists(defaultScriptPath)) {
       broadcastLog('INFO', `Using Python script from scripts folder: ${defaultScriptPath}`);
-      return await this.executePythonScript({
+      
+      // Build command arguments including AI settings
+      let scriptArgs = [repositoryUrl, repositoryPath];
+      
+      // Add AI settings as command-line arguments if available
+      broadcastLog('DEBUG', `AI settings debug: exists=${!!aiSettings}, hasApiKey=${!!aiSettings?.apiKey}, hasModel=${!!aiSettings?.model}`);
+      broadcastLog('DEBUG', `AI settings full object: ${JSON.stringify(aiSettings)}`);
+      broadcastLog('DEBUG', `AI settings keys: ${aiSettings ? Object.keys(aiSettings).join(', ') : 'null'}`);
+      
+      if (aiSettings && aiSettings.apiKey && aiSettings.model) {
+        broadcastLog('INFO', 'Passing AI settings to Python script');
+        scriptArgs.push(
+          '--api-key', aiSettings.apiKey,
+          '--model', aiSettings.model
+        );
+        
+        if (aiSettings.apiEndpointUrl) {
+          scriptArgs.push('--base-url', aiSettings.apiEndpointUrl);
+        }
+        
+        if (aiSettings.apiVersion) {
+          scriptArgs.push('--api-version', aiSettings.apiVersion);
+        }
+        
+        broadcastLog('INFO', `Final script command: python ${defaultScriptPath} ${scriptArgs.join(' ')}`);
+      } else {
+        broadcastLog('WARN', 'No AI settings provided - Python script may use defaults or fail');
+        broadcastLog('DEBUG', `Condition failed: aiSettings=${!!aiSettings}, apiKey=${aiSettings?.apiKey}, model=${aiSettings?.model}`);
+      }
+      
+      broadcastLog('INFO', `🐍 About to execute Python script with ${scriptArgs.length} arguments`);
+      broadcastLog('INFO', `🐍 Script path: ${defaultScriptPath}`);
+      
+      const result = await this.executePythonScript({
         scriptPath: defaultScriptPath,
         workingDirectory: repositoryPath,
-        args: [repositoryUrl, repositoryPath]
+        args: scriptArgs
       });
+      
+      broadcastLog('INFO', `🐍 Python script execution completed - Success: ${result.success}`);
+      if (result.success) {
+        broadcastLog('INFO', `🐍 Generated ${result.generatedFiles?.length || 0} files`);
+        if (result.generatedFiles && result.generatedFiles.length > 0) {
+          result.generatedFiles.forEach(file => {
+            broadcastLog('INFO', `🐍 Generated file: ${file.relativePath} (${file.size} bytes)`);
+          });
+        }
+      } else {
+        broadcastLog('ERROR', `🐍 Script execution failed: ${result.error}`);
+      }
+      
+      return result;
     } else {
       // Fallback to generated script content if default.py doesn't exist
       broadcastLog('INFO', 'default.py not found, using generated script content');
       const scriptContent = this.generatePostCloneScript(repositoryPath, repositoryUrl);
       
-      return await this.executePythonScript({
+      // Build args with AI settings for fallback case too
+      let scriptArgs = [repositoryUrl, repositoryPath];
+      if (aiSettings && aiSettings.apiKey && aiSettings.model) {
+        scriptArgs.push(
+          '--api-key', aiSettings.apiKey,
+          '--model', aiSettings.model
+        );
+        if (aiSettings.apiEndpointUrl) {
+          scriptArgs.push('--base-url', aiSettings.apiEndpointUrl);
+        }
+        if (aiSettings.apiVersion) {
+          scriptArgs.push('--api-version', aiSettings.apiVersion);
+        }
+      }
+      
+      broadcastLog('INFO', `🐍 About to execute generated Python script with ${scriptArgs.length} arguments`);
+      
+      const result = await this.executePythonScript({
         scriptContent,
         workingDirectory: repositoryPath,
-        args: [repositoryUrl, repositoryPath]
+        args: scriptArgs
       });
+      
+      broadcastLog('INFO', `🐍 Generated Python script execution completed - Success: ${result.success}`);
+      if (!result.success) {
+        broadcastLog('ERROR', `🐍 Generated script execution failed: ${result.error}`);
+      }
+      
+      return result;
     }
   }
 
@@ -197,21 +268,45 @@ class PythonScriptService {
   }
 
   /**
-   * Run Python command with proper error handling
+   * Run Python command with proper error handling and detailed logging
    */
   private async runPythonCommand(args: string[], workingDir: string, timeout: number): Promise<PythonExecutionResult> {
     const commands = ['py', 'python', 'python3'];
     
+    broadcastLog('INFO', `🐍 Starting Python execution with timeout: ${timeout}ms`);
+    console.log(`🐍 Starting Python execution with timeout: ${timeout}ms`);
+    broadcastLog('INFO', `🐍 Working directory: ${workingDir}`);
+    console.log(`🐍 Working directory: ${workingDir}`);
+    broadcastLog('INFO', `🐍 Command arguments: [${args.join(', ')}]`);
+    console.log(`🐍 Command arguments: [${args.join(', ')}]`);
+    
     for (const command of commands) {
       try {
+        broadcastLog('INFO', `🐍 Trying Python command: ${command}`);
+        console.log(`🐍 Trying Python command: ${command}`);
+        
         const { stdout, stderr } = await execFileAsync(command, args, {
           cwd: workingDir,
           timeout,
-          maxBuffer: 1024 * 1024, // 1MB buffer
+          maxBuffer: 10 * 1024 * 1024, // Increased to 10MB buffer for large outputs
           env: { ...process.env, PYTHONIOENCODING: 'utf-8' } // Force UTF-8 encoding
         });
         
-        broadcastLog('INFO', `Python script executed successfully using '${command}' command`);
+        broadcastLog('INFO', `🐍 Python script executed successfully using '${command}' command`);
+        console.log(`🐍 Python script executed successfully using '${command}' command`);
+        broadcastLog('INFO', `🐍 Script stdout length: ${stdout.length} characters`);
+        console.log(`🐍 Script stdout length: ${stdout.length} characters`);
+        
+        if (stdout.length > 0) {
+          // Log first 1000 characters of output for debugging
+          broadcastLog('INFO', `🐍 Script output preview: ${stdout.substring(0, 1000)}${stdout.length > 1000 ? '...' : ''}`);
+          console.log(`🐍 Script output preview: ${stdout.substring(0, 500)}${stdout.length > 500 ? '...' : ''}`);
+        }
+        
+        if (stderr && stderr.length > 0) {
+          broadcastLog('WARN', `🐍 Script stderr: ${stderr.substring(0, 500)}${stderr.length > 500 ? '...' : ''}`);
+        }
+        
         return {
           success: true,
           output: stdout,
@@ -221,18 +316,33 @@ class PythonScriptService {
       } catch (error: any) {
         if (error.code === 'ENOENT') {
           // Command not found, try next one
+          broadcastLog('WARN', `🐍 Python command '${command}' not found, trying next...`);
           continue;
         } else {
           // Other error (timeout, script error, etc.), don't try other commands
           let errorMessage = 'Python execution failed';
           let exitCode = error.code || -1;
           
+          broadcastLog('ERROR', `🐍 Python command '${command}' failed with error code: ${error.code}, signal: ${error.signal}`);
+          console.error(`🐍 Python command '${command}' failed with error code: ${error.code}, signal: ${error.signal}`);
+          
           if (error.signal === 'SIGTERM') {
             errorMessage = `Python script timed out after ${timeout}ms`;
+            broadcastLog('ERROR', `🐍 TIMEOUT: Script execution exceeded ${timeout}ms limit`);
+            console.error(`🐍 TIMEOUT: Script execution exceeded ${timeout}ms limit`);
           } else if (error.stderr) {
             errorMessage = error.stderr;
+            broadcastLog('ERROR', `🐍 Script stderr: ${error.stderr.substring(0, 1000)}${error.stderr.length > 1000 ? '...' : ''}`);
+            console.error(`🐍 Script stderr: ${error.stderr.substring(0, 500)}${error.stderr.length > 500 ? '...' : ''}`);
           } else if (error.message) {
             errorMessage = error.message;
+            broadcastLog('ERROR', `🐍 Error message: ${error.message}`);
+            console.error(`🐍 Error message: ${error.message}`);
+          }
+          
+          if (error.stdout) {
+            broadcastLog('ERROR', `🐍 Script stdout before failure: ${error.stdout.substring(0, 1000)}${error.stdout.length > 1000 ? '...' : ''}`);
+            console.error(`🐍 Script stdout before failure: ${error.stdout.substring(0, 500)}${error.stdout.length > 500 ? '...' : ''}`);
           }
           
           return {
@@ -245,6 +355,7 @@ class PythonScriptService {
     }
     
     // If we get here, none of the Python commands worked
+    broadcastLog('ERROR', '🐍 All Python commands failed - Python not found on system');
     return {
       success: false,
       error: 'Python not found. Please install Python and ensure it is in your PATH.',
