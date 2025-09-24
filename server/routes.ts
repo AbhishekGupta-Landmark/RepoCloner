@@ -1254,6 +1254,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
           repository.localPath, //|| cloneResult.localPath!, // Use repository.localPath now
           repository.url,                                  // Use repository.url now
           repository.id,                                   // Use repository.id now
+          aiSettings                                       // FIXED: Pass AI settings to Python script!
           aiSettings                                       // Pass AI settings for dynamic configuration
         );
 
