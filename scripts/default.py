@@ -62,10 +62,15 @@ class ApiKeyOnlyChatModel(BaseChatModel):
         # Use OpenAI-compatible Authorization header format
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
         
-        # Add API version header for Azure OpenAI if needed
+        # Add API version header for Azure OpenAI or EPAM proxy if needed
         api_version = getattr(self, 'api_version', None)
-        if api_version and 'azure' in self.base_url.lower():
+        if api_version and ('azure' in self.base_url.lower() or 'epam' in self.base_url.lower()):
             headers["api-version"] = api_version
+            
+        # Special handling for EPAM proxy - may need additional headers
+        if 'epam' in self.base_url.lower():
+            # Add any additional headers needed for EPAM proxy
+            headers["User-Agent"] = "RepoCloner-AI-Analysis/1.0"
             
         try:
             resp = requests.post(self.base_url, headers=headers, json=payload, timeout=120)
