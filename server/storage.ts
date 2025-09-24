@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Repository, type InsertRepository, type AnalysisReport, type InsertAnalysisReport, type OAuthConfig, type InsertOAuthConfig } from "@shared/schema";
+import { type User, type InsertUser, type Repository, type InsertRepository, type AnalysisReport, type InsertAnalysisReport, type OAuthConfig, type InsertOAuthConfig, type AISettings, type InsertAISettings } from "@shared/schema";
 import { randomUUID } from "crypto";
 
 // modify the interface with any CRUD methods
@@ -22,6 +22,12 @@ export interface IStorage {
   getAllOAuthConfigs(): Promise<OAuthConfig[]>;
   deleteOAuthConfig(provider: string): Promise<boolean>;
   
+  // AI Settings methods
+  createAISettings(settings: InsertAISettings): Promise<AISettings>;
+  updateAISettings(settings: Partial<InsertAISettings>): Promise<AISettings | undefined>;
+  getAISettings(): Promise<AISettings | undefined>;
+  deleteAISettings(): Promise<boolean>;
+  
   // Download/file access methods
   getRepositoryPath(repositoryId: string): Promise<string | undefined>;
   getFileContent(repositoryId: string, filePath: string): Promise<Buffer | undefined>;
@@ -34,12 +40,14 @@ export class MemStorage implements IStorage {
   private repositories: Map<string, Repository>;
   private analysisReports: Map<string, AnalysisReport>;
   private oauthConfigs: Map<string, OAuthConfig>;
+  private aiSettings: AISettings | undefined;
 
   constructor() {
     this.users = new Map();
     this.repositories = new Map();
     this.analysisReports = new Map();
     this.oauthConfigs = new Map();
+    this.aiSettings = undefined;
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -145,6 +153,50 @@ export class MemStorage implements IStorage {
 
   async deleteOAuthConfig(provider: string): Promise<boolean> {
     return this.oauthConfigs.delete(provider);
+  }
+
+  // AI Settings methods
+  async createAISettings(insertSettings: InsertAISettings): Promise<AISettings> {
+    const id = randomUUID();
+    const settings: AISettings = {
+      apiKey: insertSettings.apiKey,
+      model: insertSettings.model ?? "gpt-4",
+      apiVersion: insertSettings.apiVersion ?? "2024-02-15-preview",
+      apiEndpointUrl: insertSettings.apiEndpointUrl ?? "https://api.openai.com/v1/chat/completions",
+      id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      isEnabled: insertSettings.isEnabled ?? true
+    };
+    this.aiSettings = settings;
+    return settings;
+  }
+
+  async updateAISettings(updates: Partial<InsertAISettings>): Promise<AISettings | undefined> {
+    if (!this.aiSettings) {
+      return undefined;
+    }
+    
+    const updated: AISettings = {
+      ...this.aiSettings,
+      ...updates,
+      updatedAt: new Date()
+    };
+    
+    this.aiSettings = updated;
+    return updated;
+  }
+
+  async getAISettings(): Promise<AISettings | undefined> {
+    return this.aiSettings;
+  }
+
+  async deleteAISettings(): Promise<boolean> {
+    if (!this.aiSettings) {
+      return false;
+    }
+    this.aiSettings = undefined;
+    return true;
   }
 
   // Download/file access methods implementation
