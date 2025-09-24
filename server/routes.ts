@@ -1255,7 +1255,6 @@ export async function registerRoutes(app: Application): Promise<Server> {
           repository.url,                                  // Use repository.url now
           repository.id,                                   // Use repository.id now
           aiSettings                                       // FIXED: Pass AI settings to Python script!
-          aiSettings                                       // Pass AI settings for dynamic configuration
         );
 
         console.log("🐍 Python script result:", pythonResult);
