@@ -51,14 +51,19 @@ class ApiKeyOnlyChatModel(BaseChatModel):
 
     def _generate(self, messages: List[BaseMessage], stop=None, run_manager=None, **kwargs):
         role_map = {"human": "user", "ai": "assistant", "system": "system"}
+        
+        # For deployment-based URLs (Azure OpenAI, EPAM proxy), don't include model in payload
         payload = {
-            "model": self.model_name,
             "messages": [
                 {"role": role_map.get(m.type, m.type), "content": m.content}
                 for m in messages
             ],
             "temperature": 0,
         }
+        
+        # Only add model name for direct OpenAI API calls (not deployment-based URLs)
+        if 'deployments' not in self.base_url.lower():
+            payload["model"] = self.model_name
         
         # Use OpenAI-compatible Authorization header format
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
