@@ -1,7 +1,16 @@
 import type { Express } from "express";
+import type { Application, Request } from 'express';
 import { createServer, type Server } from "http";
 import session from "express-session";
 import { Provider, OAuthAccountPublic, AccountsResponse } from "@shared/schema";
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const scriptPath = path.join(__dirname, '../scripts/default.py');
 
 // Multi-account session types
 interface OAuthAccount {
@@ -137,10 +146,12 @@ import { storage } from "./storage";
 import { gitProviders, detectProvider } from "./services/gitProviders";
 import { openaiService } from "./services/openaiService";
 import { ReportBuilder, type ExportFormat } from "./services/reportBuilder";
+import { pythonScriptService } from "./services/pythonScriptService";
 import { enhancedTechnologyDetectionService } from "./services/enhancedTechnologyDetection";
 import { insertRepositorySchema, insertAnalysisReportSchema, AuthCredentials, AnalysisRequest } from "@shared/schema";
 import { z } from "zod";
 import { randomUUID } from "crypto";
+import { url } from "inspector";
 
 // In-memory OAuth credential storage
 const oauthCredentials = new Map<string, { clientId: string; clientSecret: string; scope?: string; enabled?: boolean }>();
@@ -225,7 +236,7 @@ export function broadcastLog(level: LogMessage['level'], message: string) {
   // Production logging would go here - console.log removed for production
 }
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(app: Application): Promise<Server> {
   
   // Trust proxy for proper cookie handling
   app.set('trust proxy', 1);
@@ -864,6 +875,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  let repository: any = null; // Declare early
   // Repository routes
   app.post("/api/repositories/clone", async (req, res) => {
     try {
@@ -948,7 +960,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
         // Create repository record with new URL
-        const repository = await storage.createRepository({
+        repository = await storage.createRepository({
           name: createResult.repoName!,
           url,
           provider,
@@ -1040,7 +1052,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
         // Create repository record with new URL
-        const repository = await storage.createRepository({
+        repository = await storage.createRepository({
           name: createResult.repoName!,
           url,
           provider,
@@ -1078,7 +1090,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       broadcastLog('INFO', `Technology detection completed. Found ${detectedTechnologies.length} technologies`);
 
       // Create repository record
-      const repository = await storage.createRepository({
+      repository = await storage.createRepository({
         name: url.split('/').pop()?.replace('.git', '') || 'Unknown',
         url,
         provider,
@@ -1101,9 +1113,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Execute Python script after successful clone and repository creation
+      console.log("🔄 Starting Python script execution...");
+      broadcastLog('INFO', `Executing default Python script for repository: ${url}`);
+
+      try {
+        // Now repository exists and has valid data
+        const pythonResult = await pythonScriptService.executePostCloneScript(
+          repository.localPath, //|| cloneResult.localPath!, // Use repository.localPath now
+          repository.url,                                  // Use repository.url now
+          repository.id                                    // Use repository.id now
+        );
+
+        console.log("🐍 Python script result:", pythonResult);
+
+        // Create Python script report if migration-report.md was generated
+        if (pythonResult.success && pythonResult.generatedFiles && pythonResult.generatedFiles.length > 0) {
+          console.log("💾 Creating Python script report...");
+          
+          await pythonScriptService.createPythonScriptReport(
+            repository.id,
+            repository.url,
+            repository.localPath || '',
+            pythonResult,
+            path.join(__dirname, '../scripts/default.py')
+          );
+          console.log("📊 Python script report created - will appear in Reports tab");
+        }
+
+        // Return response to React frontend
+        res.json({
+          success: true,
+          repository,
+          fileStructure,
+          detectedTechnologies,
+          pythonResult
+        });
+
+      } catch (pythonError) {
+        console.error("❌ Python script execution failed:", pythonError);
+        
+        // Still return success for repository clone even if Python fails
+        res.json({
+          success: true,
+          repository,
+          fileStructure,
+          detectedTechnologies,
+          pythonError: pythonError instanceof Error ? pythonError.message : 'Python execution failed'
+        });
+      }
+
   app.get("/api/repositories/:id/files", async (req, res) => {
     try {
-      const repository = await storage.getRepository(req.params.id);
+      repository = await storage.getRepository(req.params.id);
       if (!repository) {
         return res.status(404).json({ error: "Repository not found" });
       }
@@ -1117,7 +1179,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get repository technologies
   app.get("/api/technologies/:id", async (req, res) => {
     try {
-      const repository = await storage.getRepository(req.params.id);
+      repository = await storage.getRepository(req.params.id);
       if (!repository) {
         return res.status(404).json({ error: "Repository not found" });
       }
@@ -1143,7 +1205,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const analysisRequest = req.body as AnalysisRequest;
       
-      const repository = await storage.getRepository(analysisRequest.repositoryId);
+      repository = await storage.getRepository(analysisRequest.repositoryId);
       if (!repository) {
         return res.status(404).json({ error: "Repository not found" });
       }
@@ -1218,7 +1280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { repositoryId } = req.body;
       
-      const repository = await storage.getRepository(repositoryId);
+      repository = await storage.getRepository(repositoryId);
       if (!repository) {
         return res.status(404).json({ error: "Repository not found" });
       }
@@ -1271,7 +1333,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Analysis report has no associated repository" });
       }
       
-      const repository = await storage.getRepository(analysisReport.repositoryId);
+      repository = await storage.getRepository(analysisReport.repositoryId);
       if (!repository) {
         return res.status(404).json({ error: "Repository not found" });
       }
@@ -1339,7 +1401,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get repository
-      const repository = await storage.getRepository(id);
+      repository = await storage.getRepository(id);
       if (!repository) {
         return res.status(404).json({ error: "Repository not found" });
       }
@@ -1386,7 +1448,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get repository
-      const repository = await storage.getRepository(id);
+      repository = await storage.getRepository(id);
       if (!repository) {
         return res.status(404).json({ error: "Repository not found" });
       }
@@ -1463,7 +1525,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
 
       // Get repository
-      const repository = await storage.getRepository(id);
+      repository = await storage.getRepository(id);
       if (!repository) {
         return res.status(404).json({ error: "Repository not found" });
       }
