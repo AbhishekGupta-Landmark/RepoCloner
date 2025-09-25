@@ -65,8 +65,12 @@ class ApiKeyOnlyChatModel(BaseChatModel):
         if 'deployments' not in self.base_url.lower():
             payload["model"] = self.model_name
         
-        # Use OpenAI-compatible Authorization header format
-        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
+        # Use EPAM-specific Api-Key header format (not standard OpenAI Bearer token)
+        if 'epam' in self.base_url.lower():
+            headers = {"Content-Type": "application/json", "Api-Key": self.api_key}
+        else:
+            # Standard OpenAI format for other providers
+            headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
         
         # Add API version header ONLY for Azure OpenAI (not EPAM proxy - it uses URL params)
         api_version = getattr(self, 'api_version', None)
