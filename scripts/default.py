@@ -3,16 +3,31 @@ import re
 import json
 import requests
 import subprocess
-from typing import TypedDict, List, Dict, Any
+import sys
+from typing import TypedDict, List, Dict, Any, Optional
+from urllib.parse import quote, urlparse, parse_qs, urlencode, urlunparse
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.outputs import ChatResult, ChatGeneration
 
-MODEL = "claude-3-5-haiku@20241022"
-API_VERSION = "3.5 Haiku"
-BASE_URL = f"https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version={API_VERSION}"
-API_KEY = "dial-qux0bkmzf5twpslx680o4gk0fqf"
+import argparse
+
+# Parse command line arguments for AI configuration
+def parse_args():
+    parser = argparse.ArgumentParser(description='AI-powered repository analysis for Kafka to Azure Service Bus migration')
+    parser.add_argument('repo_url', help='Repository URL to analyze')
+    parser.add_argument('repo_path', help='Local path to clone/analyze repository')
+    parser.add_argument('--model', default=os.environ.get("AI_MODEL", "gpt-4"), help='AI model to use')
+    parser.add_argument('--api-version', default=os.environ.get("AI_API_VERSION", "2024-02-15-preview"), help='API version')
+    parser.add_argument('--base-url', default=os.environ.get("AI_ENDPOINT_URL", "https://api.openai.com/v1/chat/completions"), help='API endpoint URL')
+    parser.add_argument('--api-key', default=os.environ.get("AI_API_KEY"), help='AI API key (required)')
+    return parser.parse_args()
+
+# Safe defaults - no hardcoded credentials
+DEFAULT_MODEL = "gpt-4"
+DEFAULT_API_VERSION = "2024-02-15-preview"
+DEFAULT_BASE_URL = "https://api.openai.com/v1/chat/completions"
 
 class RepoAnalysisState(TypedDict):
     repo_url: str
@@ -22,14 +37,22 @@ class RepoAnalysisState(TypedDict):
     analysis: str
     kafka_inventory: List[dict]
     code_diffs: List[dict]
+    # AI configuration (optional)
+    model: str
+    api_version: str
+    base_url: str
+    api_key: str
 
 class ApiKeyOnlyChatModel(BaseChatModel):
     model_name: str
     base_url: str
     api_key: str
+    api_version: Optional[str] = None
 
     def _generate(self, messages: List[BaseMessage], stop=None, run_manager=None, **kwargs):
         role_map = {"human": "user", "ai": "assistant", "system": "system"}
+        
+        # For deployment-based URLs (Azure OpenAI, EPAM proxy), don't include model in payload
         payload = {
             "messages": [
                 {"role": role_map.get(m.type, m.type), "content": m.content}
@@ -37,11 +60,53 @@ class ApiKeyOnlyChatModel(BaseChatModel):
             ],
             "temperature": 0,
         }
-        headers = {"Content-Type": "application/json", "Api-Key": self.api_key}
-        resp = requests.post(self.base_url, headers=headers, json=payload, timeout=120)
-        resp.raise_for_status()
-        data = resp.json()
-        content = data["choices"][0]["message"]["content"]
+        
+        # Only add model name for direct OpenAI API calls (not deployment-based URLs)
+        if 'deployments' not in self.base_url.lower():
+            payload["model"] = self.model_name
+        
+        # Use EPAM-specific Api-Key header format (not standard OpenAI Bearer token)
+        if 'epam' in self.base_url.lower():
+            headers = {"Content-Type": "application/json", "Api-Key": self.api_key}
+        else:
+            # Standard OpenAI format for other providers
+            headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
+        
+        # Add API version header ONLY for Azure OpenAI (not EPAM proxy - it uses URL params)
+        api_version = getattr(self, 'api_version', None)
+        if api_version and 'azure' in self.base_url.lower() and 'epam' not in self.base_url.lower():
+            headers["api-version"] = api_version
+            
+        # Special handling for EPAM proxy - may need additional headers
+        if 'epam' in self.base_url.lower():
+            # Add any additional headers needed for EPAM proxy
+            headers["User-Agent"] = "RepoCloner-AI-Analysis/1.0"
+            
+        try:
+            # For EPAM proxy, use the URL as-is since it already contains properly formatted parameters
+            print(f"🌐 Making API request to: {self.base_url}")
+            print(f"🔧 Headers: {headers}")
+            print(f"📋 Payload: {payload}")
+            
+            resp = requests.post(self.base_url, headers=headers, json=payload, timeout=120)
+            
+            print(f"🔍 Response Status: {resp.status_code}")
+            print(f"📄 Response Headers: {dict(resp.headers)}")
+            
+            if resp.status_code != 200:
+                print(f"❌ Error Response Body: {resp.text}")
+                resp.raise_for_status()
+            
+            data = resp.json()
+            print(f"✅ Success! Response keys: {list(data.keys())}")
+            content = data["choices"][0]["message"]["content"]
+        except requests.exceptions.RequestException as e:
+            error_details = f"Status: {getattr(e.response, 'status_code', 'Unknown')}, Response: {getattr(e.response, 'text', 'No response body')}"
+            raise Exception(f"API request failed: {e}. Details: {error_details}")
+        except Exception as e:
+            print(f"❌ Unexpected error: {e}")
+            raise
+            
         ai_msg = AIMessage(content=content)
         return ChatResult(generations=[ChatGeneration(message=ai_msg)])
 
@@ -53,6 +118,11 @@ def clone_repo(state: RepoAnalysisState):
     repo_url = state["repo_url"]
     local_path = state["repo_path"]
 
+    # Check if repository files already exist (cloned by main application)
+    if os.path.exists(local_path) and os.listdir(local_path):
+        print(f"Repository files already exist at {local_path} (cloned by main application)")
+        return state
+    
     if os.path.exists(os.path.join(local_path, ".git")):
         print(f"Repository already exists at {local_path}, checking for updates...")
 
@@ -103,11 +173,17 @@ def get_updated_state_with_code_chunks(state: RepoAnalysisState) -> RepoAnalysis
             except (IOError, OSError):
                 continue
 
-    print(f"Total chunks loaded: {len(chunks)}")
+    print(f"📊 Total chunks loaded: {len(chunks)}")
+    print(f"🔍 Phase 2: Starting AI-powered analysis...")
     return {**state, "code_chunks": chunks}
 
 def analyze_code(state: RepoAnalysisState):
-    llm = ApiKeyOnlyChatModel(model_name=MODEL, base_url=BASE_URL, api_key=API_KEY)
+    llm = ApiKeyOnlyChatModel(
+        model_name=state.get('model', DEFAULT_MODEL), 
+        base_url=state.get('base_url', DEFAULT_BASE_URL), 
+        api_key=state.get('api_key'),
+        api_version=state.get('api_version')
+    )
     summaries = []
     for chunk in state["code_chunks"]:
         prompt = f"Summarize the purpose and functionality of this code:\n\n{chunk}"
@@ -118,7 +194,12 @@ def analyze_code(state: RepoAnalysisState):
     return {**state, "analysis": analysis}
 
 def scan_for_kafka_usage_ai(state: RepoAnalysisState) -> RepoAnalysisState:
-    llm = ApiKeyOnlyChatModel(model_name=MODEL, base_url=BASE_URL, api_key=API_KEY)
+    llm = ApiKeyOnlyChatModel(
+        model_name=state.get('model', DEFAULT_MODEL), 
+        base_url=state.get('base_url', DEFAULT_BASE_URL), 
+        api_key=state.get('api_key'),
+        api_version=state.get('api_version')
+    )
     inventory: List[Dict[str, Any]] = []
     code_chunks = state["code_chunks"]
 
@@ -134,7 +215,7 @@ def scan_for_kafka_usage_ai(state: RepoAnalysisState) -> RepoAnalysisState:
             f"Code chunk:\n{chunk}"
         )
         resp = llm.invoke([HumanMessage(content=prompt)])
-        text = getattr(resp, "content", None) or str(resp)
+        text = getattr(resp, "content", "") or str(resp)
 
         match = re.search(r"\{.*\}", text, flags=re.S)
         if match:
@@ -151,14 +232,23 @@ def scan_for_kafka_usage_ai(state: RepoAnalysisState) -> RepoAnalysisState:
     print(f"AI-identified Kafka usage in {len(inventory)} files.")
     return {**state, "kafka_inventory": inventory}
 
+# Fallback report generation removed - reports only generated with working AI
+
 def generate_code_diffs(state: RepoAnalysisState) -> RepoAnalysisState:
-    llm = ApiKeyOnlyChatModel(model_name=MODEL, base_url=BASE_URL, api_key=API_KEY)
+    llm = ApiKeyOnlyChatModel(
+        model_name=state.get('model', DEFAULT_MODEL), 
+        base_url=state.get('base_url', DEFAULT_BASE_URL), 
+        api_key=state.get('api_key'),
+        api_version=state.get('api_version')
+    )
     inventory = state.get("kafka_inventory", [])
     repo_path = state["repo_path"]
 
     diffs = []
     for item in inventory:
         file_rel = item.get("file")
+        if not file_rel:
+            continue
         file_abs = os.path.join(repo_path, file_rel)
 
         if not os.path.exists(file_abs):
@@ -187,7 +277,7 @@ def generate_code_diffs(state: RepoAnalysisState) -> RepoAnalysisState:
         resp = llm.invoke([HumanMessage(content=prompt)])
         diffs.append({"file": file_rel, "diff": resp.content})
     
-        print(f"Generated diffs for {len(diffs)} files.")
+    print(f"Generated diffs for {len(diffs)} files.")
 
     return {**state, "code_diffs": diffs}
 
@@ -197,7 +287,11 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
     Writes each section to disk incrementally instead of building one huge prompt.
     """
 
-    llm = ApiKeyOnlyChatModel(model_name=MODEL, base_url=BASE_URL, api_key=API_KEY)
+    llm = ApiKeyOnlyChatModel(
+        model_name=state.get('model', DEFAULT_MODEL), 
+        base_url=state.get('base_url', DEFAULT_BASE_URL), 
+        api_key=state.get('api_key')
+    )
 
     with open(report_path, "w", encoding="utf-8") as f:
         # Header
@@ -212,10 +306,9 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
             f.write(f"| {item.get('file')} | {', '.join(item.get('kafka_apis', []))} | {item.get('summary', '')} |\n")
         f.write("\n")
 
-        # 3. Code Migration Diffs (all files, no token explosion)
-        f.write("## 3. Code Migration Diffs\n")
+        # 2. Code Migration Diffs (all files, no token explosion)
+        f.write("## 2. Code Migration Diffs\n\n")
         diffs = state.get("code_diffs", [])
-        f.write("## 3. Code Migration Diffs\n\n")
         for diff in diffs:
             file_name = diff.get("file", "").lower()
             file_diff = diff.get("diff", "")
@@ -267,5 +360,62 @@ def run_analysis(question: str = "Provide a summary of the repository and its Ka
     })
     print("\nAI Proxy Response:\n", result["messages"][-1].content)
 
-# Example usage:
-run_analysis()
+# Main execution with proper argument parsing
+if __name__ == "__main__":
+    import time
+    args = parse_args()
+    
+    # Generate unique report filename
+    analysis_id = str(int(time.time() * 1000))
+    report_filename = f"migration-report-{analysis_id}.md"
+    report_path = os.path.join(args.repo_path, report_filename)
+    
+    print(f"🚀 Starting migration analysis...")
+    print(f"📁 Repository URL: {args.repo_url}")
+    print(f"📂 Repository Path: {args.repo_path}")
+    print(f"🤖 Using Model: {args.model}")
+    print(f"🔧 Using API Version: {args.api_version}")
+    print(f"🌐 Using Endpoint: {args.base_url}")
+    print(f"📊 Phase 1: Repository validation and code loading...")
+    
+    report_generated = False
+    analysis_type = "Static Analysis"
+    
+    # Try AI analysis if we have credentials
+    if args.api_key and args.base_url:
+        try:
+            print("🤖 Attempting AI analysis...")
+            result = app.invoke({
+                "repo_url": args.repo_url,
+                "repo_path": args.repo_path,
+                "code_chunks": [],
+                "analysis": "",
+                "kafka_inventory": [],
+                "code_diffs": [],
+                "messages": [HumanMessage(content="Analyze this repository for Kafka usage and generate migration report.")],
+                # AI configuration from command-line arguments
+                "model": args.model,
+                "api_version": args.api_version,
+                "base_url": args.base_url,
+                "api_key": args.api_key
+            })
+            
+            print("\n✅ AI Migration analysis completed!")
+            print(f"📄 REPORT_GENERATED: {report_filename}")
+            analysis_type = "AI Analysis"
+            report_generated = True
+        
+        except Exception as e:
+            print(f"\n❌ AI Analysis failed: {str(e)}")
+            print("🔄 Falling back to static analysis...")
+    else:
+        print("⚠️ No AI credentials provided, using static analysis")
+    
+    # Only generate report if AI succeeded - no fallbacks
+    if report_generated:
+        print(f"✅ Analysis complete - Report available: {report_filename}")
+        sys.exit(0)
+    else:
+        print("❌ No AI credentials provided or AI analysis failed - no report generated")
+        print("💡 Configure AI settings in the application to generate reports")
+        sys.exit(1)

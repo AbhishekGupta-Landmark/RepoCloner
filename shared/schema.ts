@@ -73,6 +73,18 @@ export const oauthConfigs = pgTable("oauth_configs", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// AI configuration settings table
+export const aiSettings = pgTable("ai_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  apiKey: text("api_key").notNull(), // Will be encrypted
+  model: text("model").notNull().default("gpt-4"),
+  apiVersion: text("api_version").notNull().default("2024-02-15-preview"),
+  apiEndpointUrl: text("api_endpoint_url").notNull().default("https://api.openai.com/v1/chat/completions"),
+  isEnabled: boolean("is_enabled").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Insert schemas
 export const insertRepositorySchema = createInsertSchema(repositories).omit({
   id: true,
@@ -94,6 +106,17 @@ export const insertOAuthConfigSchema = createInsertSchema(oauthConfigs).omit({
   updatedAt: true,
 });
 
+export const insertAISettingsSchema = createInsertSchema(aiSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertUserSchema = createInsertSchema(users).pick({
+  username: true,
+  password: true,
+});
+
 // Types
 export type InsertRepository = z.infer<typeof insertRepositorySchema>;
 export type Repository = typeof repositories.$inferSelect;
@@ -103,13 +126,10 @@ export type InsertAuthToken = z.infer<typeof insertAuthTokenSchema>;
 export type AuthToken = typeof authTokens.$inferSelect;
 export type InsertOAuthConfig = z.infer<typeof insertOAuthConfigSchema>;
 export type OAuthConfig = typeof oauthConfigs.$inferSelect;
+export type InsertAISettings = z.infer<typeof insertAISettingsSchema>;
+export type AISettings = typeof aiSettings.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
-
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
 
 // Git provider types
 export interface GitProvider {

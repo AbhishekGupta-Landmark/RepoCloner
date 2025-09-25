@@ -27,6 +27,30 @@ import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { apiRequest } from "@/lib/queryClient";
 
+// Model to API Version mapping
+const MODEL_API_MAPPING = {
+  "gpt-4": {
+    apiVersion: "",
+    endpoint: "https://api.openai.com/v1/chat/completions"
+  },
+  "gpt-3.5-turbo": {
+    apiVersion: "",
+    endpoint: "https://api.openai.com/v1/chat/completions"
+  },
+  "claude-3-5-haiku@20241022": {
+    apiVersion: "3.5 Haiku", 
+    endpoint: "https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions"
+  },
+  "claude-3-opus": {
+    apiVersion: "2024-06-01",
+    endpoint: "https://api.anthropic.com/v1/messages"
+  },
+  "claude-3-sonnet": {
+    apiVersion: "2024-06-01",
+    endpoint: "https://api.anthropic.com/v1/messages"
+  }
+};
+
 // Comprehensive Git provider definitions
 const GIT_PROVIDERS = {
   github: {
@@ -96,7 +120,9 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
   const [settings, setSettings] = useState({
     openai: {
       apiKey: "",
-      model: "gpt-4"
+      model: "gpt-4",
+      apiVersion: "2024-02-15-preview",
+      apiEndpointUrl: "https://api.openai.com/v1/chat/completions"
     },
     gitProvider: {
       defaultProvider: "github" as keyof typeof GIT_PROVIDERS,
@@ -134,12 +160,15 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [hasUnsavedOauthChanges, setHasUnsavedOauthChanges] = useState(false);
+  const [aiHasKey, setAiHasKey] = useState(false);
+  const [newApiKey, setNewApiKey] = useState("");
 
   const { toast } = useToast();
 
   // Load configuration on mount
   useEffect(() => {
     loadConfiguration();
+    loadAISettings();
   }, []);
 
   const loadConfiguration = async () => {
@@ -163,6 +192,28 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadAISettings = async () => {
+    try {
+      const response = await apiRequest('GET', '/api/admin/ai-settings');
+      const data = await response.json();
+      
+      setAiHasKey(data.hasApiKey || false);
+      if (data.settings) {
+        setSettings(prev => ({
+          ...prev,
+          openai: {
+            apiKey: "", // Don't store the actual key in state
+            model: data.settings.model || "gpt-4",
+            apiVersion: data.settings.apiVersion || "2024-02-15-preview",
+            apiEndpointUrl: data.settings.apiEndpointUrl || "https://api.openai.com/v1/chat/completions"
+          }
+        }));
+      }
+    } catch (error) {
+      console.warn('Failed to load AI settings:', error);
     }
   };
 
@@ -198,7 +249,57 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
         [key]: value
       }
     }));
-    // Note: OpenAI and Analysis settings are stored locally in browser
+  };
+
+  const handleSaveAISettings = async () => {
+    try {
+      setIsLoading(true);
+      
+      const hasNewApiKey = newApiKey.trim() !== "";
+      const payload: any = {
+        model: settings.openai.model,
+        apiVersion: settings.openai.apiVersion,
+        apiEndpointUrl: settings.openai.apiEndpointUrl
+      };
+      
+      // Determine the right method and payload
+      let method = 'PATCH';
+      let endpoint = '/api/admin/ai-settings';
+      
+      // If user provided a new API key, always use POST
+      if (hasNewApiKey) {
+        payload.apiKey = newApiKey.trim();
+        method = 'POST';
+      } else if (!aiHasKey) {
+        // If no existing key and no new key provided, show error
+        toast({
+          title: "API Key Required",
+          description: "Please enter an OpenAI API key to save settings.",
+          variant: "destructive"
+        });
+        return;
+      }
+      // Otherwise use PATCH for updates without changing the key
+      
+      await apiRequest(method, endpoint, payload);
+      
+      // Clear the new API key input and reload settings
+      setNewApiKey("");
+      await loadAISettings();
+      
+      toast({
+        title: "AI Settings Saved",
+        description: "AI configuration has been updated successfully."
+      });
+    } catch (error) {
+      toast({
+        title: "Save Error", 
+        description: "Failed to save AI settings. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const updateOauthSetting = (provider: string, key: string, value: string) => {
@@ -289,10 +390,10 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
                   <h3 className="text-lg font-semibold flex items-center gap-2">
                     <Bot className="w-5 h-5" />
                     AI Configuration
-                    <span className="text-xs bg-muted px-2 py-1 rounded-md font-normal">Local Settings</span>
+                    <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-md font-normal">Server Settings</span>
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    Configure OpenAI integration for intelligent code analysis and insights. Settings are stored locally in your browser.
+                    Configure OpenAI integration for intelligent code analysis and insights. Settings are stored on the server.
                   </p>
                 </div>
 
@@ -303,7 +404,7 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
                         OpenAI API Key
                       </Label>
                       <div className="flex items-center gap-1 text-xs">
-                        {status.hasOpenAI ? (
+                        {aiHasKey ? (
                           <>
                             <CheckCircle className="w-3 h-3 text-green-500" />
                             <span className="text-green-500">Configured</span>
@@ -320,9 +421,9 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
                   <Input
                     id="api-key"
                     type={showSecrets.apiKey ? "text" : "password"}
-                    placeholder="sk-..."
-                    value={settings.openai.apiKey}
-                    onChange={(e) => updateSetting('openai', 'apiKey', e.target.value)}
+                    placeholder={aiHasKey ? 'API key configured (enter new key to change)' : 'sk-...'}
+                    value={newApiKey}
+                    onChange={(e) => setNewApiKey(e.target.value)}
                     data-testid="input-openai-api-key"
                     className="pr-10"
                   />
@@ -347,7 +448,14 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
                 </Label>
                 <Select 
                   value={settings.openai.model} 
-                  onValueChange={(value) => updateSetting('openai', 'model', value)}
+                  onValueChange={(value) => {
+                    const mapping = MODEL_API_MAPPING[value as keyof typeof MODEL_API_MAPPING];
+                    updateSetting('openai', 'model', value);
+                    if (mapping) {
+                      updateSetting('openai', 'apiVersion', mapping.apiVersion);
+                      updateSetting('openai', 'apiEndpointUrl', mapping.endpoint);
+                    }
+                  }}
                 >
                   <SelectTrigger data-testid="select-openai-model">
                     <SelectValue />
@@ -355,8 +463,69 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
                   <SelectContent>
                     <SelectItem value="gpt-4">GPT-4 (Recommended)</SelectItem>
                     <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo (Faster)</SelectItem>
+                    <SelectItem value="claude-3-5-haiku@20241022">Claude 3.5 Haiku (EPAM)</SelectItem>
+                    <SelectItem value="claude-3-opus">Claude 3 Opus</SelectItem>
+                    <SelectItem value="claude-3-sonnet">Claude 3 Sonnet</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="api-version" className="text-sm font-medium">
+                  API Version
+                </Label>
+                <Input
+                  id="api-version"
+                  placeholder="Auto-selected from model"
+                  value={settings.openai.apiVersion}
+                  onChange={(e) => updateSetting('openai', 'apiVersion', e.target.value)}
+                  data-testid="input-api-version"
+                  className="bg-background border-border"
+                />
+                <p className="text-xs text-muted-foreground">
+                  API version automatically set when model is selected
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="api-endpoint" className="text-sm font-medium">
+                  API Endpoint URL
+                </Label>
+                <Input
+                  id="api-endpoint"
+                  placeholder="https://api.openai.com/v1/chat/completions"
+                  value={settings.openai.apiEndpointUrl}
+                  onChange={(e) => updateSetting('openai', 'apiEndpointUrl', e.target.value)}
+                  data-testid="input-api-endpoint"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Custom API endpoint for different AI providers or proxies
+                </p>
+              </div>
+              
+              {/* AI Settings Save Button */}
+              <div className="flex items-center justify-between pt-4 border-t border-border">
+                <div className="text-sm text-muted-foreground">
+                  Changes are saved to server immediately
+                </div>
+                <Button 
+                  onClick={handleSaveAISettings}
+                  disabled={isLoading || (!newApiKey.trim() && !aiHasKey)}
+                  className="min-w-[120px]"
+                  data-testid="button-save-ai-settings"
+                >
+                  {isLoading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      Saving...
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Save className="w-4 h-4" />
+                      Save AI Settings
+                    </div>
+                  )}
+                </Button>
               </div>
             </div>
           </motion.div>

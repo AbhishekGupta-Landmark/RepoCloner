@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Download, Share, FileText, Clock, ChevronDown, Loader2 } from "lucide-react";
+import { Download, FileText, Clock, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAppContext } from "@/context/AppContext";
@@ -25,8 +25,22 @@ export default function ReportsPanel() {
   });
 
   // Helper function to get report title and description based on analysis type
-  const getReportInfo = (analysisType: string) => {
+  const getReportInfo = (analysisType: string, results?: any) => {
     switch (analysisType) {
+      case 'python-script':
+        // Extract filename from generated files
+        if (results?.pythonScriptOutput?.generatedFiles?.length > 0) {
+          const filename = results.pythonScriptOutput.generatedFiles[0].name;
+          const reportName = filename.replace(/\.(md|pdf|xlsx|docx)$/, '').replace(/-\d+$/, '');
+          return {
+            title: reportName.split('-').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
+            description: `Generated ${filename.split('.').pop()?.toUpperCase()} file`
+          };
+        }
+        return {
+          title: 'Generated Report',
+          description: 'Python script generated analysis'
+        };
       case 'security':
         return {
           title: 'Security Analysis Report',
@@ -94,11 +108,32 @@ export default function ReportsPanel() {
     return `${Math.floor(diffInMinutes / 1440)} days ago`;
   };
 
-  const downloadReport = async (reportId: string, format: 'pdf' | 'xlsx' | 'docx') => {
+  const downloadReport = async (reportId: string, format: 'pdf' | 'xlsx' | 'docx' | 'md') => {
     try {
       setDownloadingReports(prev => ({ ...prev, [reportId]: true }));
 
-      const response = await fetch(`/api/reports/${reportId}/export?format=${format}`);
+      let response;
+      if (format === 'md') {
+        // For markdown files, try to download the generated migration report directly
+        // First find the report to get the repository ID and actual filename
+        const report = displayReports.find(r => r.id === reportId);
+        if (report && report.repositoryId) {
+          // Get the actual filename from generated files
+          const results = report.results as any;
+          const generatedFiles = results?.pythonScriptOutput?.generatedFiles;
+          if (generatedFiles && generatedFiles.length > 0) {
+            const filename = generatedFiles[0].name;
+            response = await fetch(`/api/analysis/reports/${report.repositoryId}/download/${filename}`);
+          } else {
+            throw new Error('Generated file not found');
+          }
+        } else {
+          throw new Error('Repository information not found for markdown download');
+        }
+      } else {
+        // For other formats, use the existing export API
+        response = await fetch(`/api/reports/${reportId}/export?format=${format}`);
+      }
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Download failed' }));
@@ -129,15 +164,29 @@ export default function ReportsPanel() {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
+      const fileTypeDescription = format === 'md' ? 'Markdown File' : format.toUpperCase();
       toast({
         title: "Download Successful",
-        description: `Report downloaded as ${format.toUpperCase()} format`,
+        description: `${fileTypeDescription} downloaded successfully`,
       });
 
     } catch (error) {
+      console.error('Download error:', error);
+      let errorMessage = "Failed to download report";
+      
+      if (error instanceof Error) {
+        if (error.message.includes("Repository not found")) {
+          errorMessage = "Repository no longer available. The files may have been cleaned up.";
+        } else if (error.message.includes("Generated file not found")) {
+          errorMessage = "Report file not generated or no longer available.";
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       toast({
         title: "Download Failed",
-        description: error instanceof Error ? error.message : "Failed to download report",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -145,12 +194,6 @@ export default function ReportsPanel() {
     }
   };
 
-  const shareReports = () => {
-    toast({
-      title: "Coming Soon",
-      description: "Report sharing feature will be available in a future update",
-    });
-  };
 
   const displayReports = reports?.reports || [];
 
@@ -158,17 +201,6 @@ export default function ReportsPanel() {
     <div className="p-6 h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-semibold">Generated Reports</h2>
-        <div className="flex gap-2">
-          <Button 
-            variant="secondary" 
-            size="sm"
-            onClick={shareReports}
-            data-testid="button-share-reports"
-          >
-            <Share className="mr-2 h-4 w-4" />
-            Share
-          </Button>
-        </div>
       </div>
       
       <ScrollArea className="flex-1">
@@ -263,9 +295,19 @@ export default function ReportsPanel() {
         ) : (
           <div className="space-y-4">
             {displayReports.map((report) => {
-              const reportInfo = getReportInfo(report.analysisType);
-              const metrics = getMetrics(report.results as AnalysisResult);
+              const results = report.results as any;
+              const reportInfo = getReportInfo(report.analysisType, results);
+              const metrics = getMetrics(results as AnalysisResult);
               const createdAt = report.createdAt ? new Date(report.createdAt).toISOString() : new Date().toISOString();
+              
+              // Check if generated file exists for download - be more strict
+              const hasGeneratedFile = report.analysisType === 'python-script' 
+                ? (results?.pythonScriptOutput?.generatedFiles?.length > 0 && 
+                   results?.pythonScriptOutput?.success === true &&
+                   results?.pythonScriptOutput?.generatedFiles?.[0]?.name && 
+                   results?.pythonScriptOutput?.generatedFiles?.[0]?.size > 0 &&
+                   report.repositoryId) // Ensure repository ID exists
+                : true; // For other report types, assume they can be exported
               
               return (
                 <Card key={report.id} data-testid={`report-${report.id}`}>
@@ -311,62 +353,35 @@ export default function ReportsPanel() {
                             {metrics.securityScore}% Security
                           </Badge>
                         )}
-                        {metrics.recommendations > 0 && (
-                          <Badge variant="secondary" className="bg-green-500/20 text-green-400">
-                            {metrics.recommendations} Recommendations
-                          </Badge>
-                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <Button 
-                          variant="link" 
-                          size="sm" 
-                          className="h-auto p-0 text-primary hover:underline"
-                          data-testid={`button-view-details-${report.id}`}
+                          variant="default" 
+                          size="sm"
+                          disabled={downloadingReports[report.id] || !hasGeneratedFile}
+                          onClick={() => {
+                            // Determine file type based on analysis type
+                            if (report.analysisType === 'python-script') {
+                              // For migration reports, download the markdown file
+                              downloadReport(report.id, 'md');
+                            } else {
+                              // For other reports, default to PDF
+                              downloadReport(report.id, 'pdf');
+                            }
+                          }}
+                          data-testid={`button-download-${report.id}`}
+                          className="bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-primary dark:text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          View Details
+                          {downloadingReports[report.id] ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary-foreground" />
+                          ) : (
+                            <Download className="mr-2 h-4 w-4 text-primary-foreground" />
+                          )}
+                          {report.analysisType === 'python-script' 
+                            ? 'Download Markdown Documentation File'
+                            : 'Download Report'
+                          }
                         </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              disabled={downloadingReports[report.id]}
-                              data-testid={`button-download-${report.id}`}
-                            >
-                              {downloadingReports[report.id] ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              ) : (
-                                <Download className="mr-2 h-4 w-4" />
-                              )}
-                              Download
-                              <ChevronDown className="ml-2 h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem 
-                              onClick={() => downloadReport(report.id, 'pdf')}
-                              data-testid={`download-pdf-${report.id}`}
-                            >
-                              <FileText className="mr-2 h-4 w-4" />
-                              Download PDF
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => downloadReport(report.id, 'xlsx')}
-                              data-testid={`download-excel-${report.id}`}
-                            >
-                              <FileText className="mr-2 h-4 w-4" />
-                              Download Excel
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => downloadReport(report.id, 'docx')}
-                              data-testid={`download-word-${report.id}`}
-                            >
-                              <FileText className="mr-2 h-4 w-4" />
-                              Download Word
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
                       </div>
                     </div>
                   </CardContent>

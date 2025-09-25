@@ -148,7 +148,7 @@ import { openaiService } from "./services/openaiService";
 import { ReportBuilder, type ExportFormat } from "./services/reportBuilder";
 import { pythonScriptService } from "./services/pythonScriptService";
 import { enhancedTechnologyDetectionService } from "./services/enhancedTechnologyDetection";
-import { insertRepositorySchema, insertAnalysisReportSchema, AuthCredentials, AnalysisRequest } from "@shared/schema";
+import { insertRepositorySchema, insertAnalysisReportSchema, insertAISettingsSchema, AuthCredentials, AnalysisRequest } from "@shared/schema";
 import { z } from "zod";
 import { randomUUID } from "crypto";
 import { url } from "inspector";
@@ -486,6 +486,147 @@ export async function registerRoutes(app: Application): Promise<Server> {
     } catch (error) {
       res.status(500).json({ 
         error: "Failed to retrieve OAuth configuration" 
+      });
+    }
+  });
+
+  // AI Settings configuration endpoints
+  app.post("/api/admin/ai-settings", async (req, res) => {
+    try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      
+      // Validate using Zod schema - allow partial input with defaults
+      const validationResult = insertAISettingsSchema.omit({}).partial().safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          error: 'Invalid AI settings data',
+          details: validationResult.error.errors
+        });
+      }
+      
+      const { apiKey, ...otherSettings } = validationResult.data;
+      
+      // Ensure apiKey is provided (required field)
+      if (!apiKey) {
+        return res.status(400).json({ error: 'API key is required' });
+      }
+      
+      const settingsData = { apiKey, ...otherSettings };
+      
+      // Check if settings exist, update or create accordingly
+      const existingSettings = await storage.getAISettings();
+      let savedSettings;
+      
+      if (existingSettings) {
+        savedSettings = await storage.updateAISettings(settingsData);
+      } else {
+        savedSettings = await storage.createAISettings(settingsData);
+      }
+      
+      res.json({ 
+        success: true, 
+        message: "AI settings saved successfully",
+        settings: {
+          model: savedSettings?.model,
+          apiVersion: savedSettings?.apiVersion,
+          apiEndpointUrl: savedSettings?.apiEndpointUrl,
+          isEnabled: savedSettings?.isEnabled
+        }
+      });
+    } catch (error) {
+      console.error('AI Settings save error:', error);
+      res.status(500).json({ 
+        error: "Failed to save AI settings" 
+      });
+    }
+  });
+
+  // AI Settings update/toggle endpoint
+  app.patch("/api/admin/ai-settings", async (req, res) => {
+    try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      
+      const validationResult = insertAISettingsSchema.omit({}).partial().safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          error: 'Invalid AI settings data',
+          details: validationResult.error.errors
+        });
+      }
+      
+      const updatedSettings = await storage.updateAISettings(validationResult.data);
+      
+      if (!updatedSettings) {
+        return res.status(404).json({ error: 'No AI settings found to update' });
+      }
+      
+      res.json({ 
+        success: true, 
+        message: "AI settings updated successfully",
+        settings: {
+          model: updatedSettings.model,
+          apiVersion: updatedSettings.apiVersion,
+          apiEndpointUrl: updatedSettings.apiEndpointUrl,
+          isEnabled: updatedSettings.isEnabled
+        }
+      });
+    } catch (error) {
+      console.error('AI Settings update error:', error);
+      res.status(500).json({ 
+        error: "Failed to update AI settings" 
+      });
+    }
+  });
+
+  // AI Settings delete endpoint  
+  app.delete("/api/admin/ai-settings", async (req, res) => {
+    try {
+      const deleted = await storage.deleteAISettings();
+      
+      if (!deleted) {
+        return res.status(404).json({ error: 'No AI settings found to delete' });
+      }
+      
+      res.json({ 
+        success: true, 
+        message: "AI settings deleted successfully"
+      });
+    } catch (error) {
+      console.error('AI Settings delete error:', error);
+      res.status(500).json({ 
+        error: "Failed to delete AI settings" 
+      });
+    }
+  });
+
+  app.get("/api/admin/ai-settings", async (req, res) => {
+    try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('ETag', '');
+      
+      const settings = await storage.getAISettings();
+      
+      const response = {
+        configured: !!settings,
+        hasApiKey: !!(settings?.apiKey),
+        settings: settings ? {
+          model: settings.model,
+          apiVersion: settings.apiVersion,
+          apiEndpointUrl: settings.apiEndpointUrl,
+          isEnabled: settings.isEnabled
+        } : {
+          model: 'gpt-4',
+          apiVersion: '2024-02-15-preview',
+          apiEndpointUrl: 'https://api.openai.com/v1/chat/completions',
+          isEnabled: false
+        }
+      };
+      
+      res.json(response);
+    } catch (error) {
+      console.error('AI Settings load error:', error);
+      res.status(500).json({ 
+        error: "Failed to load AI settings" 
       });
     }
   });
@@ -1100,29 +1241,20 @@ export async function registerRoutes(app: Application): Promise<Server> {
         detectedTechnologies
       });
 
-      res.json({
-        success: true,
-        repository,
-        fileStructure,
-        detectedTechnologies
-      });
-    } catch (error) {
-      res.status(500).json({ 
-        error: error instanceof Error ? error.message : "Clone operation failed" 
-      });
-    }
-  });
-
-  // Execute Python script after successful clone and repository creation
+      // Execute Python script after successful clone and repository creation
       console.log("🔄 Starting Python script execution...");
-      broadcastLog('INFO', `Executing default Python script for repository: ${url}`);
+      broadcastLog('INFO', `Executing post-clone Python script for repository: ${url}`);
 
       try {
+        // Fetch AI settings from storage to pass to Python script (with API key for internal use)
+        const aiSettings = await storage.getAISettingsForScript();
+        
         // Now repository exists and has valid data
         const pythonResult = await pythonScriptService.executePostCloneScript(
           repository.localPath, //|| cloneResult.localPath!, // Use repository.localPath now
           repository.url,                                  // Use repository.url now
-          repository.id                                    // Use repository.id now
+          repository.id,                                   // Use repository.id now
+          aiSettings                                       // FIXED: Pass AI settings to Python script!
         );
 
         console.log("🐍 Python script result:", pythonResult);
@@ -1162,6 +1294,12 @@ export async function registerRoutes(app: Application): Promise<Server> {
           pythonError: pythonError instanceof Error ? pythonError.message : 'Python execution failed'
         });
       }
+    } catch (error) {
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : "Clone operation failed" 
+      });
+    }
+  });
 
   app.get("/api/repositories/:id/files", async (req, res) => {
     try {
@@ -1270,9 +1408,86 @@ export async function registerRoutes(app: Application): Promise<Server> {
   app.get("/api/analysis/reports/:repositoryId", async (req, res) => {
     try {
       const reports = await storage.getAnalysisReportsByRepository(req.params.repositoryId);
-      res.json({ reports });
+      
+      // Also check for generated migration reports in the repository directory
+      const repoPath = await storage.getRepositoryPath(req.params.repositoryId);
+      const generatedReports: any[] = [];
+      
+      if (repoPath) {
+        try {
+          const fs = await import('fs');
+          const path = await import('path');
+          
+          // Look for migration report files
+          const files = await fs.promises.readdir(repoPath);
+          const migrationReports = files.filter(file => file.startsWith('migration-report-') && file.endsWith('.md'));
+          
+          for (const reportFile of migrationReports) {
+            const filePath = path.join(repoPath, reportFile);
+            const stats = await fs.promises.stat(filePath);
+            generatedReports.push({
+              id: reportFile.replace('.md', ''),
+              fileName: reportFile,
+              type: 'migration-report',
+              createdAt: stats.birthtime,
+              size: stats.size
+            });
+          }
+        } catch (error) {
+          // Silent fail - if we can't read directory, just return database reports
+          console.log('Could not scan for generated reports:', error);
+        }
+      }
+      
+      res.json({ 
+        reports,
+        generatedReports: generatedReports.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      });
     } catch (error) {
       res.status(500).json({ error: "Failed to retrieve analysis reports" });
+    }
+  });
+
+  // Download generated migration report endpoint
+  app.get("/api/analysis/reports/:repositoryId/download/:fileName", async (req, res) => {
+    try {
+      const { repositoryId, fileName } = req.params;
+      
+      // Validate filename - allow all markdown files for now to debug
+      broadcastLog('DEBUG', `Attempting to download file: ${fileName}`);
+      if (!fileName.endsWith('.md')) {
+        return res.status(400).json({ error: "Only markdown files are allowed" });
+      }
+      
+      const repoPath = await storage.getRepositoryPath(repositoryId);
+      if (!repoPath) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+      
+      const fs = await import('fs');
+      const path = await import('path');
+      const filePath = path.join(repoPath, fileName);
+      
+      // Ensure file exists and is within the repository directory (security check)
+      if (!filePath.startsWith(repoPath) || !await fs.promises.access(filePath).then(() => true).catch(() => false)) {
+        return res.status(404).json({ error: "Report file not found" });
+      }
+      
+      // Read file content
+      const fileContent = await fs.promises.readFile(filePath, 'utf-8');
+      const stats = await fs.promises.stat(filePath);
+      
+      // Set download headers
+      res.setHeader('Content-Type', 'text/markdown');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.setHeader('Content-Length', Buffer.byteLength(fileContent, 'utf-8').toString());
+      
+      broadcastLog('INFO', `Migration report download: ${fileName} (${stats.size} bytes)`);
+      res.send(fileContent);
+      
+    } catch (error) {
+      broadcastLog('ERROR', `Migration report download error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      res.status(500).json({ error: "Report download failed" });
     }
   });
 
