@@ -12,23 +12,24 @@ export function useAnalysis() {
   // Logging is handled by proper toast notifications
 
   const analysisMutation = useMutation({
-    mutationFn: async (request: AnalysisRequest) => {
-      const response = await apiRequest('POST', '/api/analysis/analyze', request);
+    mutationFn: async (repositoryId: string) => {
+      const response = await apiRequest('POST', '/api/analysis/run', { repositoryId });
       return await response.json();
     },
     onSuccess: (data) => {
-      setAnalysisResult(data.results);
+      // Store the full Python result for structured data access
+      setAnalysisResult(data.pythonResult);
       queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
       
       toast({
-        title: "Analysis Complete",
-        description: `Code analysis finished with ${data.results.issues.length} issues found`
+        title: "Migration Analysis Complete",
+        description: data.message || "Migration analysis completed successfully"
       });
     },
     onError: (error: any) => {
       toast({
-        title: "Analysis Failed",
-        description: error.message || "Failed to analyze code",
+        title: "Migration Analysis Failed",
+        description: error.message || "Failed to run migration analysis",
         variant: "destructive"
       });
     }
@@ -63,9 +64,9 @@ export function useAnalysis() {
     enabled: false // Only fetch when we have a repository
   });
 
-  const analyzeCode = async (request: AnalysisRequest): Promise<boolean> => {
+  const analyzeCode = async (repositoryId: string): Promise<boolean> => {
     try {
-      await analysisMutation.mutateAsync(request);
+      await analysisMutation.mutateAsync(repositoryId);
       return true;
     } catch (error) {
       return false;

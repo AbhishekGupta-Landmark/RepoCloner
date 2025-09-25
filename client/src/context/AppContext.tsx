@@ -17,10 +17,21 @@ interface LogService {
   getLogsByLevel: (level: LogEntry['level']) => LogEntry[];
 }
 
+interface RepositoryStatus {
+  repositoryId: string;
+  cloneStatus: 'pending' | 'cloned' | 'failed';
+  localPath?: string;
+  lastAnalysisAt?: string;
+  lastReportId?: string;
+}
+
 interface AppContextType {
   currentRepository: Repository | null;
   setCurrentRepository: (repo: Repository | null) => void;
   isRepositoryLoading: boolean;
+  repositoryStatus: RepositoryStatus | null;
+  refreshRepositoryStatus: (repositoryId: string) => Promise<void>;
+  isCodeAnalysisEnabled: boolean;
   logService: LogService;
   showRepoPanel: boolean;
   toggleRepoPanel: () => void;
@@ -41,6 +52,7 @@ interface AppProviderProps {
 
 export function AppProvider({ children }: AppProviderProps) {
   const [currentRepository, setCurrentRepository] = useState<Repository | null>(null);
+  const [repositoryStatus, setRepositoryStatus] = useState<RepositoryStatus | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   
   // Sidebar visibility state with localStorage persistence
@@ -117,6 +129,19 @@ export function AppProvider({ children }: AppProviderProps) {
     retry: false, // Prevent retries that might cause context issues
   });
 
+  // Function to refresh repository status
+  const refreshRepositoryStatus = async (repositoryId: string) => {
+    try {
+      const response = await fetch(`/api/repositories/${repositoryId}/status`);
+      if (response.ok) {
+        const status = await response.json();
+        setRepositoryStatus(status);
+      }
+    } catch (error) {
+      console.error('Failed to fetch repository status:', error);
+    }
+  };
+
   // Set the most recent repository as current on load, or clear when empty
   useEffect(() => {
     if (repositoriesData?.repositories && Array.isArray(repositoriesData.repositories)) {
@@ -132,6 +157,15 @@ export function AppProvider({ children }: AppProviderProps) {
       }
     }
   }, [repositoriesData, currentRepository]);
+
+  // Refresh repository status when current repository changes
+  useEffect(() => {
+    if (currentRepository?.id) {
+      refreshRepositoryStatus(currentRepository.id);
+    } else {
+      setRepositoryStatus(null);
+    }
+  }, [currentRepository]);
 
   // LogService implementation
   const logService: LogService = {
@@ -167,10 +201,18 @@ export function AppProvider({ children }: AppProviderProps) {
     logService.addLog('INFO', 'Activity logging system initialized', 'AppContext');
   }, []);
 
+  // Compute if Code Analysis is enabled based on repository clone status
+  const isCodeAnalysisEnabled = currentRepository !== null && 
+    repositoryStatus !== null && 
+    repositoryStatus.cloneStatus === 'cloned';
+
   const value = {
     currentRepository,
     setCurrentRepository,
     isRepositoryLoading: isLoading,
+    repositoryStatus,
+    refreshRepositoryStatus,
+    isCodeAnalysisEnabled,
     logService,
     showRepoPanel,
     toggleRepoPanel,
@@ -196,6 +238,9 @@ export const useAppContext = () => {
       currentRepository: null,
       setCurrentRepository: () => {},
       isRepositoryLoading: false,
+      repositoryStatus: null,
+      refreshRepositoryStatus: async () => {},
+      isCodeAnalysisEnabled: false,
       logService: {
         logs: [],
         addLog: () => {},

@@ -11,7 +11,9 @@ export interface IStorage {
   createRepository(repository: InsertRepository): Promise<Repository>;
   getRepository(id: string): Promise<Repository | undefined>;
   getAllRepositories(): Promise<Repository[]>;
-  createAnalysisReport(report: InsertAnalysisReport): Promise<AnalysisReport>;
+  updateRepositoryCloneStatus(repositoryId: string, status: 'pending' | 'cloned' | 'failed', localPath?: string): Promise<Repository | undefined>;
+  updateRepositoryAnalysis(repositoryId: string, lastAnalysisAt: Date, lastReportId?: string): Promise<Repository | undefined>;
+  createAnalysisReport(report: InsertAnalysisReport & { structuredData?: any }): Promise<AnalysisReport>;
   getAnalysisReport(id: string): Promise<AnalysisReport | undefined>;
   getAnalysisReportsByRepository(repositoryId: string): Promise<AnalysisReport[]>;
   
@@ -75,11 +77,46 @@ export class MemStorage implements IStorage {
       createdAt: new Date(),
       clonedUrl: insertRepository.clonedUrl ?? null,
       localPath: insertRepository.localPath ?? null,
+      cloneStatus: insertRepository.cloneStatus ?? "pending",
       fileStructure: insertRepository.fileStructure ?? null,
-      detectedTechnologies: insertRepository.detectedTechnologies ?? null
+      detectedTechnologies: insertRepository.detectedTechnologies ?? null,
+      lastAnalysisAt: insertRepository.lastAnalysisAt ?? null,
+      lastReportId: insertRepository.lastReportId ?? null
     };
     this.repositories.set(id, repository);
     return repository;
+  }
+
+  async updateRepositoryCloneStatus(repositoryId: string, status: 'pending' | 'cloned' | 'failed', localPath?: string): Promise<Repository | undefined> {
+    const existing = this.repositories.get(repositoryId);
+    if (!existing) {
+      return undefined;
+    }
+    
+    const updated: Repository = {
+      ...existing,
+      cloneStatus: status,
+      localPath: localPath ?? existing.localPath
+    };
+    
+    this.repositories.set(repositoryId, updated);
+    return updated;
+  }
+
+  async updateRepositoryAnalysis(repositoryId: string, lastAnalysisAt: Date, lastReportId?: string): Promise<Repository | undefined> {
+    const existing = this.repositories.get(repositoryId);
+    if (!existing) {
+      return undefined;
+    }
+    
+    const updated: Repository = {
+      ...existing,
+      lastAnalysisAt,
+      lastReportId: lastReportId ?? existing.lastReportId
+    };
+    
+    this.repositories.set(repositoryId, updated);
+    return updated;
   }
 
   async getRepository(id: string): Promise<Repository | undefined> {
@@ -90,13 +127,14 @@ export class MemStorage implements IStorage {
     return Array.from(this.repositories.values());
   }
 
-  async createAnalysisReport(insertReport: InsertAnalysisReport): Promise<AnalysisReport> {
+  async createAnalysisReport(insertReport: InsertAnalysisReport & { structuredData?: any }): Promise<AnalysisReport> {
     const id = randomUUID();
     const report: AnalysisReport = { 
       ...insertReport, 
       id, 
       createdAt: new Date(),
-      repositoryId: insertReport.repositoryId ?? null
+      repositoryId: insertReport.repositoryId ?? null,
+      structuredData: insertReport.structuredData ?? null
     };
     this.analysisReports.set(id, report);
     return report;

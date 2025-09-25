@@ -1017,7 +1017,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
   });
 
   let repository: any = null; // Declare early
-  // Repository routes
+  // Repository routes - CLONE ONLY (separated from analysis)
   app.post("/api/repositories/clone", async (req, res) => {
     try {
       const { url, options } = req.body;
@@ -1097,16 +1097,14 @@ export async function registerRoutes(app: Application): Promise<Server> {
           return res.status(500).json({ error: pushResult.error });
         }
 
-        // Keep analysis clone for file downloads (don't clean up)
-
-
-        // Create repository record with new URL
+        // Create repository record with new URL - CLONE STATUS = CLONED
         repository = await storage.createRepository({
           name: createResult.repoName!,
           url,
           provider,
           clonedUrl: createResult.repoUrl!, // Use the new personal repo URL
           localPath: analysisCloneResult.localPath!, // Store the analysis clone path
+          cloneStatus: 'cloned', // Set status to cloned
           fileStructure,
           detectedTechnologies
         });
@@ -1189,16 +1187,14 @@ export async function registerRoutes(app: Application): Promise<Server> {
           return res.status(500).json({ error: pushResult.error });
         }
 
-        // Keep analysis clone for file downloads (don't clean up)
-
-
-        // Create repository record with new URL
+        // Create repository record with new URL - CLONE STATUS = CLONED
         repository = await storage.createRepository({
           name: createResult.repoName!,
           url,
           provider,
           clonedUrl: createResult.repoUrl!, // Use the new personal repo URL
           localPath: analysisCloneResult.localPath!, // Store the analysis clone path
+          cloneStatus: 'cloned', // Set status to cloned
           fileStructure,
           detectedTechnologies
         });
@@ -1230,73 +1226,143 @@ export async function registerRoutes(app: Application): Promise<Server> {
       const detectedTechnologies = await enhancedTechnologyDetectionService.detectTechnologies(cloneResult.localPath!);
       broadcastLog('INFO', `Technology detection completed. Found ${detectedTechnologies.length} technologies`);
 
-      // Create repository record
+      // Create repository record - CLONE STATUS = CLONED (no Python script execution)
       repository = await storage.createRepository({
         name: url.split('/').pop()?.replace('.git', '') || 'Unknown',
         url,
         provider,
         clonedUrl: cloneResult.remoteUrl,
         localPath: cloneResult.localPath!, // Store the clone path
+        cloneStatus: 'cloned', // Set status to cloned
         fileStructure,
         detectedTechnologies
       });
 
-      // Execute Python script after successful clone and repository creation
-      console.log("🔄 Starting Python script execution...");
-      broadcastLog('INFO', `Executing post-clone Python script for repository: ${url}`);
+      // Return response to React frontend - NO PYTHON SCRIPT EXECUTION
+      res.json({
+        success: true,
+        repository,
+        fileStructure,
+        detectedTechnologies,
+        message: "Repository cloned successfully. You can now run analysis from the Code Analysis tab."
+      });
+
+    } catch (error) {
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : "Clone operation failed" 
+      });
+    }
+  });
+
+  // NEW: Repository status endpoint
+  app.get("/api/repositories/:id/status", async (req, res) => {
+    try {
+      const repository = await storage.getRepository(req.params.id);
+      if (!repository) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+
+      res.json({
+        repositoryId: repository.id,
+        cloneStatus: repository.cloneStatus || 'pending',
+        localPath: repository.localPath,
+        lastAnalysisAt: repository.lastAnalysisAt,
+        lastReportId: repository.lastReportId
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get repository status" });
+    }
+  });
+
+  // NEW: Analysis run endpoint (PYTHON SCRIPT ONLY)
+  app.post("/api/analysis/run", async (req, res) => {
+    try {
+      const { repositoryId } = req.body;
+      
+      if (!repositoryId) {
+        return res.status(400).json({ error: "Repository ID is required" });
+      }
+
+      const repository = await storage.getRepository(repositoryId);
+      if (!repository) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+
+      // Check if repository is cloned
+      if (repository.cloneStatus !== 'cloned') {
+        return res.status(400).json({ 
+          error: "Repository must be cloned before running analysis. Please clone the repository first." 
+        });
+      }
+
+      // Check if local path exists
+      if (!repository.localPath) {
+        return res.status(400).json({ 
+          error: "Repository local path not found. Please re-clone the repository." 
+        });
+      }
+
+      // Execute Python script for migration analysis
+      console.log("🔄 Starting Python script execution for migration analysis...");
+      broadcastLog('INFO', `Executing Python script for migration analysis: ${repository.name}`);
 
       try {
-        // Fetch AI settings from storage to pass to Python script (with API key for internal use)
+        // Fetch AI settings from storage to pass to Python script
         const aiSettings = await storage.getAISettingsForScript();
         
-        // Now repository exists and has valid data
+        // Execute Python script
         const pythonResult = await pythonScriptService.executePostCloneScript(
-          repository.localPath, //|| cloneResult.localPath!, // Use repository.localPath now
-          repository.url,                                  // Use repository.url now
-          repository.id,                                   // Use repository.id now
-          aiSettings                                       // FIXED: Pass AI settings to Python script!
+          repository.localPath,
+          repository.url,
+          repository.id,
+          aiSettings
         );
 
         console.log("🐍 Python script result:", pythonResult);
 
         // Create Python script report if migration-report.md was generated
+        let reportId = undefined;
         if (pythonResult.success && pythonResult.generatedFiles && pythonResult.generatedFiles.length > 0) {
           console.log("💾 Creating Python script report...");
           
-          await pythonScriptService.createPythonScriptReport(
-            repository.id,
-            repository.url,
-            repository.localPath || '',
-            pythonResult,
-            path.join(__dirname, '../scripts/default.py')
-          );
+          try {
+            const report = await pythonScriptService.createPythonScriptReport(
+              repository.id,
+              repository.url,
+              repository.localPath,
+              pythonResult,
+              path.join(__dirname, '../scripts/default.py')
+            );
+            reportId = report?.id;
+          } catch (reportError) {
+            console.warn("Failed to create Python script report:", reportError);
+          }
           console.log("📊 Python script report created - will appear in Reports tab");
         }
 
-        // Return response to React frontend
+        // Update repository with analysis timestamp and report ID
+        await storage.updateRepositoryAnalysis(repository.id, new Date(), reportId);
+
+        // Return structured migration data AND success info
         res.json({
           success: true,
-          repository,
-          fileStructure,
-          detectedTechnologies,
-          pythonResult
+          repositoryId: repository.id,
+          pythonResult,
+          reportId,
+          message: "Migration analysis completed successfully",
+          structuredData: (pythonResult as any).parsedMigrationData // Include parsed structured data
         });
 
       } catch (pythonError) {
         console.error("❌ Python script execution failed:", pythonError);
         
-        // Still return success for repository clone even if Python fails
-        res.json({
-          success: true,
-          repository,
-          fileStructure,
-          detectedTechnologies,
-          pythonError: pythonError instanceof Error ? pythonError.message : 'Python execution failed'
+        res.status(500).json({
+          error: pythonError instanceof Error ? pythonError.message : 'Migration analysis failed'
         });
       }
     } catch (error) {
       res.status(500).json({ 
-        error: error instanceof Error ? error.message : "Clone operation failed" 
+        error: error instanceof Error ? error.message : "Analysis operation failed" 
       });
     }
   });
@@ -1516,6 +1582,33 @@ export async function registerRoutes(app: Application): Promise<Server> {
       res.status(500).json({ 
         error: error instanceof Error ? error.message : "Report generation failed" 
       });
+    }
+  });
+
+  // Get structured migration data for a repository
+  app.get('/api/reports/:repositoryId/structured', async (req, res) => {
+    try {
+      const { repositoryId } = req.params;
+      const reports = await storage.getAnalysisReportsByRepository(repositoryId);
+      
+      // Find the most recent report with structured data
+      const reportWithStructuredData = reports
+        .filter(report => report.structuredData)
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
+      
+      if (!reportWithStructuredData) {
+        res.json({ structuredData: null });
+        return;
+      }
+      
+      res.json({ 
+        structuredData: reportWithStructuredData.structuredData,
+        reportId: reportWithStructuredData.id,
+        createdAt: reportWithStructuredData.createdAt
+      });
+    } catch (error) {
+      console.error('Error fetching structured migration data:', error);
+      res.status(500).json({ error: 'Failed to fetch structured migration data' });
     }
   });
 
