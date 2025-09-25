@@ -3,7 +3,7 @@ import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
 import { broadcastLog } from '../utils/logger';
-import { GeneratedFile, PythonScriptResult } from '@shared/schema';
+import { GeneratedFile, PythonScriptResult, MigrationReportData } from '@shared/schema';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -155,7 +155,7 @@ class PythonScriptService {
       
       // Add AI settings as command-line arguments if available
       broadcastLog('DEBUG', `AI settings debug: exists=${!!aiSettings}, hasApiKey=${!!aiSettings?.apiKey}, hasModel=${!!aiSettings?.model}`);
-      broadcastLog('DEBUG', `AI settings full object: ${JSON.stringify(aiSettings)}`);
+      broadcastLog('DEBUG', `AI settings (masked): ${JSON.stringify({ ...aiSettings, apiKey: '***' })}`);
       broadcastLog('DEBUG', `AI settings keys: ${aiSettings ? Object.keys(aiSettings).join(', ') : 'null'}`);
       
       if (aiSettings && aiSettings.apiKey && aiSettings.model) {
@@ -477,6 +477,87 @@ if __name__ == "__main__":
   }
 
   /**
+   * Parse markdown report to extract structured data
+   */
+  async parseMarkdownReport(filePath: string): Promise<MigrationReportData | null> {
+    try {
+      const reportContent = await fs.promises.readFile(filePath, 'utf-8');
+      
+      // Simple parser implementation (we'll enhance this with Python parser later)
+      const title = this.extractTitle(reportContent);
+      const kafkaInventory = this.parseKafkaInventory(reportContent);
+      const codeDiffs = this.parseCodeDiffs(reportContent);
+      
+      return {
+        title,
+        kafka_inventory: kafkaInventory,
+        code_diffs: codeDiffs,
+        sections: {},
+        stats: {
+          total_files_with_kafka: kafkaInventory.length,
+          total_files_with_diffs: codeDiffs.length,
+          sections_count: 2
+        }
+      };
+    } catch (error) {
+      broadcastLog('ERROR', `Failed to parse markdown report: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return null;
+    }
+  }
+
+  private extractTitle(content: string): string {
+    const titleMatch = content.match(/^# (.+)$/m);
+    return titleMatch ? titleMatch[1].trim() : 'Migration Report';
+  }
+
+  private parseKafkaInventory(content: string): any[] {
+    const inventory: any[] = [];
+    const inventoryMatch = content.match(/## 1\. Kafka Usage Inventory[\s\S]*?\n\n(.*?)(?=\n## |\n# |\Z)/);
+    
+    if (!inventoryMatch) return inventory;
+    
+    const lines = inventoryMatch[1].split('\n');
+    let inTable = false;
+    
+    for (const line of lines) {
+      if (line.includes('|') && line.includes('---')) {
+        inTable = true;
+        continue;
+      }
+      if (line.startsWith('|') && inTable) {
+        const columns = line.split('|').map(col => col.trim()).filter(col => col);
+        if (columns.length >= 3) {
+          inventory.push({
+            file: columns[0],
+            apis_used: columns[1],
+            summary: columns[2]
+          });
+        }
+      } else if (!line.startsWith('|') && inTable) {
+        break;
+      }
+    }
+    
+    return inventory;
+  }
+
+  private parseCodeDiffs(content: string): any[] {
+    const diffs: any[] = [];
+    const diffRegex = /### ([^\n]+)\n```diff\n([\s\S]*?)\n```/g;
+    let diffMatch: RegExpExecArray | null;
+    
+    while ((diffMatch = diffRegex.exec(content)) !== null) {
+      diffs.push({
+        file: diffMatch[1].trim(),
+        diff_content: diffMatch[2].trim(),
+        language: 'diff'
+      });
+    }
+    
+    return diffs;
+  }
+
+  /**
    * Create an analysis report for Python script execution
    */
   async createPythonScriptReport(
@@ -507,6 +588,24 @@ if __name__ == "__main__":
           : 0
       };
 
+      // Try to parse markdown reports for structured data
+      let structuredData: MigrationReportData | null = null;
+      const markdownFiles = executionResult.generatedFiles.filter(file => 
+        file.relativePath.endsWith('.md') || file.relativePath.endsWith('.markdown')
+      );
+      
+      if (markdownFiles.length > 0) {
+        // Parse the first markdown file found
+        const markdownFile = markdownFiles[0];
+        const fullPath = path.join(repositoryPath, markdownFile.relativePath);
+        structuredData = await this.parseMarkdownReport(fullPath);
+        
+        if (structuredData) {
+          broadcastLog('INFO', `Successfully parsed migration report: ${structuredData.title}`);
+          broadcastLog('INFO', `Found ${structuredData.kafka_inventory.length} Kafka files and ${structuredData.code_diffs.length} code diffs`);
+        }
+      }
+
       const analysisResult = {
         summary: {},
         issues: [],
@@ -523,7 +622,8 @@ if __name__ == "__main__":
       await storage.createAnalysisReport({
         repositoryId,
         analysisType: 'python-script',
-        results: analysisResult as any
+        results: analysisResult as any,
+        structuredData: structuredData as any
       });
 
       broadcastLog('INFO', `Created Python script analysis report with ${executionResult.generatedFiles.length} generated files`);

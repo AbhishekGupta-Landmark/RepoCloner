@@ -8,12 +8,15 @@ import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAnalysis } from "@/hooks/useAnalysis";
 import { useAppContext } from "../context/AppContext";
-import { Brain, CheckCircle, Shield, Wrench, AlertTriangle, Lightbulb } from "lucide-react";
+import { Brain, CheckCircle, Shield, Wrench, AlertTriangle, Lightbulb, FileText, Code, ArrowRight, GitCompare } from "lucide-react";
 
 export default function AnalysisPanel() {
-  const [analysisType, setAnalysisType] = useState("quality");
-  const [depthLevel, setDepthLevel] = useState("detailed");
-  const { currentRepository } = useAppContext();
+  const [analysisType, setAnalysisType] = useState("migration");
+  const { currentRepository, isCodeAnalysisEnabled } = useAppContext();
+  
+  const handleAnalysisTypeChange = (type: string) => {
+    setAnalysisType(type);
+  };
   
   const { analyzeCode, analysisResult, isLoading } = useAnalysis();
 
@@ -22,11 +25,7 @@ export default function AnalysisPanel() {
       return;
     }
     
-    await analyzeCode({
-      repositoryId: currentRepository.id,
-      analysisType: analysisType as any,
-      depth: depthLevel as any
-    });
+    await analyzeCode(currentRepository.id);
   };
 
   const getSeverityColor = (severity: string) => {
@@ -52,7 +51,7 @@ export default function AnalysisPanel() {
           <h2 className="text-lg font-semibold">OpenAI Code Analysis</h2>
           <Button 
             onClick={handleAnalysis}
-            disabled={isLoading || !currentRepository}
+            disabled={isLoading || !currentRepository || !isCodeAnalysisEnabled}
             data-testid="button-analyze-code"
             className="hover-lift transition-smooth group relative overflow-hidden gradient-primary"
           >
@@ -111,29 +110,12 @@ export default function AnalysisPanel() {
         <div className="flex gap-4">
           <div className="flex-1">
             <label className="block text-sm font-medium mb-2">Analysis Type</label>
-            <Select value={analysisType} onValueChange={setAnalysisType}>
+            <Select value={analysisType} onValueChange={handleAnalysisTypeChange}>
               <SelectTrigger data-testid="select-analysis-type">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="quality">Code Quality Assessment</SelectItem>
-                <SelectItem value="security">Security Vulnerability Scan</SelectItem>
-                <SelectItem value="performance">Performance Analysis</SelectItem>
-                <SelectItem value="documentation">Documentation Review</SelectItem>
-                <SelectItem value="architecture">Architecture Analysis</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex-1">
-            <label className="block text-sm font-medium mb-2">Depth Level</label>
-            <Select value={depthLevel} onValueChange={setDepthLevel}>
-              <SelectTrigger data-testid="select-depth-level">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="surface">Surface Level</SelectItem>
-                <SelectItem value="detailed">Detailed Analysis</SelectItem>
-                <SelectItem value="deep">Deep Dive</SelectItem>
+                <SelectItem value="migration">Migration Analysis</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -141,7 +123,130 @@ export default function AnalysisPanel() {
       </div>
       
       <ScrollArea className="flex-1 p-4">
-        {!analysisResult ? (
+        {analysisType === 'migration' ? (
+          // Migration Analysis Display
+          <div className="space-y-6">
+            {analysisResult ? (
+              <>
+                {/* Migration Analysis Header */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <GitCompare className="h-5 w-5 text-blue-500" />
+                      Kafka → Azure Service Bus Migration Report
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {(analysisResult as any).structuredData?.filesWithKafka?.length || 0}
+                        </div>
+                        <div className="text-sm text-muted-foreground">Files with Kafka</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-600">
+                          {(analysisResult as any).structuredData?.migrationPatches?.length || 0}
+                        </div>
+                        <div className="text-sm text-muted-foreground">Migration Patches</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-purple-600">
+                          {(analysisResult as any).generatedFiles?.length || 0}
+                        </div>
+                        <div className="text-sm text-muted-foreground">Generated Files</div>
+                      </div>
+                    </div>
+                    
+                    {/* Download Report Button */}
+                    {(analysisResult as any).generatedFiles && (analysisResult as any).generatedFiles.length > 0 && (
+                      <div className="mt-4 pt-4 border-t">
+                        <Button
+                          onClick={() => {
+                            // Switch to Reports tab to download MD file
+                            const reportsTab = document.querySelector('[data-testid="tab-reports"]') as HTMLElement;
+                            if (reportsTab) {
+                              reportsTab.click();
+                            }
+                          }}
+                          variant="outline"
+                          className="w-full"
+                          data-testid="button-download-report"
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          Download Full Migration Report (MD)
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <Card>
+                <CardContent className="text-center py-12">
+                  <GitCompare className="h-16 w-16 mx-auto mb-4 opacity-30" />
+                  <h3 className="text-lg font-medium mb-2">Migration Analysis Ready</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Click "Analyze Code" to run Kafka → Azure Service Bus migration analysis
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    This will generate structured migration data and a downloadable report
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Display Python script output if available */}
+            {analysisResult && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Code className="h-5 w-5 text-green-500" />
+                    Migration Analysis Results
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {(analysisResult as any).stdout && (
+                      <div>
+                        <h4 className="font-medium mb-2">Analysis Output</h4>
+                        <pre className="text-xs bg-muted p-3 rounded border overflow-x-auto">
+                          {(analysisResult as any).stdout}
+                        </pre>
+                      </div>
+                    )}
+                    
+                    {(analysisResult as any).stderr && (
+                      <div>
+                        <h4 className="font-medium mb-2 text-yellow-600">Analysis Warnings</h4>
+                        <pre className="text-xs bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded border overflow-x-auto">
+                          {(analysisResult as any).stderr}
+                        </pre>
+                      </div>
+                    )}
+                    
+                    {(analysisResult as any).generatedFiles && (analysisResult as any).generatedFiles.length > 0 && (
+                      <div>
+                        <h4 className="font-medium mb-2">Generated Files</h4>
+                        <ul className="space-y-2">
+                          {(analysisResult as any).generatedFiles.map((file: any, index: number) => (
+                            <li key={index} className="flex items-center gap-2 text-sm">
+                              <FileText className="h-4 w-4 text-blue-500" />
+                              <span className="font-mono">{file.relativePath}</span>
+                              <Badge variant="secondary" className="text-xs">
+                                {file.size} bytes
+                              </Badge>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        ) : !analysisResult ? (
           <div className="text-center py-12 text-muted-foreground" data-testid="analysis-empty-state">
             <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
             <h3 className="text-lg font-medium mb-2">Ready for Analysis</h3>

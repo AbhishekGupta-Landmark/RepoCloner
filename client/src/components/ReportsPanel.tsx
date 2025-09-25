@@ -5,12 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Download, FileText, Clock, Loader2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Download, FileText, Clock, Loader2, BarChart3 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAppContext } from "@/context/AppContext";
 import { AnalysisReport, AnalysisResult } from "@shared/schema";
 import { motion, AnimatePresence } from "framer-motion";
+import { MigrationReportViewer } from "./MigrationReportViewer";
 
 
 export default function ReportsPanel() {
@@ -200,10 +202,23 @@ export default function ReportsPanel() {
   return (
     <div className="p-6 h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-semibold">Generated Reports</h2>
+        <h2 className="text-lg font-semibold">Analysis Reports</h2>
       </div>
       
-      <ScrollArea className="flex-1">
+      <Tabs defaultValue="reports" className="h-full flex flex-col">
+        <TabsList className="mb-4 grid w-fit grid-cols-2">
+          <TabsTrigger value="reports" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            All Reports
+          </TabsTrigger>
+          <TabsTrigger value="migration" className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Migration Analysis
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="reports" className="flex-1">
+          <ScrollArea className="h-full">
         {isLoading ? (
           <motion.div 
             className="space-y-4" 
@@ -390,7 +405,19 @@ export default function ReportsPanel() {
             })}
           </div>
         )}
-      </ScrollArea>
+          </ScrollArea>
+        </TabsContent>
+
+        <TabsContent value="migration" className="flex-1 overflow-hidden">
+          {currentRepository ? (
+            <MigrationReportViewer repositoryId={currentRepository.id} />
+          ) : (
+            <div className="text-center text-muted-foreground p-8">
+              No repository selected for migration analysis.
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

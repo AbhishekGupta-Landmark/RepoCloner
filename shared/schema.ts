@@ -37,8 +37,11 @@ export const repositories = pgTable("repositories", {
   provider: text("provider").notNull(), // github, gitlab, azure
   clonedUrl: text("cloned_url"),
   localPath: text("local_path"), // Local clone directory path
+  cloneStatus: text("clone_status").default("pending"), // pending, cloned, failed
   fileStructure: jsonb("file_structure"),
   detectedTechnologies: jsonb("detected_technologies"), // Technology detection results
+  lastAnalysisAt: timestamp("last_analysis_at"),
+  lastReportId: varchar("last_report_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -47,6 +50,7 @@ export const analysisReports = pgTable("analysis_reports", {
   repositoryId: varchar("repository_id").references(() => repositories.id),
   analysisType: text("analysis_type").notNull(),
   results: jsonb("results").notNull(),
+  structuredData: jsonb("structured_data"), // Parsed structured data from reports
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -84,6 +88,31 @@ export const aiSettings = pgTable("ai_settings", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// Migration report structured data types
+export interface KafkaUsageItem {
+  file: string;
+  apis_used: string;
+  summary: string;
+}
+
+export interface CodeDiff {
+  file: string;
+  diff_content: string;
+  language: string;
+}
+
+export interface MigrationReportData {
+  title: string;
+  kafka_inventory: KafkaUsageItem[];
+  code_diffs: CodeDiff[];
+  sections: Record<string, any>;
+  stats: {
+    total_files_with_kafka: number;
+    total_files_with_diffs: number;
+    sections_count: number;
+  };
+}
 
 // Insert schemas
 export const insertRepositorySchema = createInsertSchema(repositories).omit({
@@ -177,8 +206,9 @@ export interface FileNode {
 
 export interface AnalysisRequest {
   repositoryId: string;
-  analysisType: 'quality' | 'security' | 'performance' | 'documentation' | 'architecture';
+  analysisType: 'quality' | 'security' | 'performance' | 'documentation' | 'architecture' | 'migration';
   depth: 'surface' | 'detailed' | 'deep';
+  migrationDepth?: 'basic'; // Only available for migration analysis
 }
 
 // Technology detection types
@@ -266,4 +296,30 @@ export interface PythonScriptResult {
     stderr: string;
     generatedFiles: GeneratedFile[];
   };
+  parsedMigrationData?: ParsedMigrationReport; // For migration analysis type
+}
+
+// Migration report parsing types
+export interface ParsedMigrationReport {
+  title: string;
+  kafkaInventory: KafkaUsageItem[];
+  codeDiffs: CodeDiff[];
+  sections: Record<string, any>;
+  stats: {
+    totalFilesWithKafka: number;
+    totalFilesWithDiffs: number;
+    sectionsCount: number;
+  };
+}
+
+export interface KafkaUsageItem {
+  file: string;
+  apisUsed: string;
+  summary: string;
+}
+
+export interface CodeDiff {
+  file: string;
+  diffContent: string;
+  language: string;
 }
