@@ -85,11 +85,23 @@ class ApiKeyOnlyChatModel(BaseChatModel):
             print(f"📋 Payload: {payload}")
             
             resp = requests.post(self.base_url, headers=headers, json=payload, timeout=120)
-            resp.raise_for_status()
+            
+            print(f"🔍 Response Status: {resp.status_code}")
+            print(f"📄 Response Headers: {dict(resp.headers)}")
+            
+            if resp.status_code != 200:
+                print(f"❌ Error Response Body: {resp.text}")
+                resp.raise_for_status()
+            
             data = resp.json()
+            print(f"✅ Success! Response keys: {list(data.keys())}")
             content = data["choices"][0]["message"]["content"]
         except requests.exceptions.RequestException as e:
-            raise Exception(f"API request failed: {e}")
+            error_details = f"Status: {getattr(e.response, 'status_code', 'Unknown')}, Response: {getattr(e.response, 'text', 'No response body')}"
+            raise Exception(f"API request failed: {e}. Details: {error_details}")
+        except Exception as e:
+            print(f"❌ Unexpected error: {e}")
+            raise
             
         ai_msg = AIMessage(content=content)
         return ChatResult(generations=[ChatGeneration(message=ai_msg)])
