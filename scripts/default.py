@@ -349,7 +349,7 @@ app = graph.compile()
 
 # Run
 def run_analysis(question: str = "Provide a summary of the repository and its Kafka usage."):
-    result = app.invoke({
+    initial_state: RepoAnalysisState = {
         "repo_url": "https://github.com/srigumm/dotnetcore-kafka-integration",
         "repo_path": "./cloned_repo",
         "code_chunks": [],
@@ -357,7 +357,12 @@ def run_analysis(question: str = "Provide a summary of the repository and its Ka
         "kafka_inventory": [],
         "code_diffs": [],
         "messages": [HumanMessage(content=question)],
-    })
+        "model": DEFAULT_MODEL,
+        "api_version": DEFAULT_API_VERSION,
+        "base_url": DEFAULT_BASE_URL,
+        "api_key": "",
+    }
+    result = app.invoke(initial_state)
     print("\nAI Proxy Response:\n", result["messages"][-1].content)
 
 # Main execution with proper argument parsing
