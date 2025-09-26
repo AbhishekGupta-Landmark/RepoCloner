@@ -174,6 +174,7 @@ class PythonScriptService {
         }
         
         if (aiSettings.apiVersion) {
+          // Handle API versions with spaces by quoting them
           scriptArgs.push('--api-version', aiSettings.apiVersion);
         }
         
@@ -274,6 +275,7 @@ class PythonScriptService {
           scriptArgs.push('--base-url', aiSettings.apiEndpointUrl);
         }
         if (aiSettings.apiVersion) {
+          // Handle API versions with spaces by quoting them
           scriptArgs.push('--api-version', aiSettings.apiVersion);
         }
       } else {
