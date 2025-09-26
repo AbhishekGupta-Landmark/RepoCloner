@@ -901,6 +901,9 @@ if __name__ == "__main__":
         broadcastLog('WARN', `⚠️  No migration report found in generated files`);
       }
 
+      // CRITICAL FIX: Add parsedMigrationData to pythonScriptResult for structured endpoint retrieval
+      (pythonScriptResult as any).parsedMigrationData = structuredData;
+
       const analysisResult = {
         summary: {},
         issues: [],
