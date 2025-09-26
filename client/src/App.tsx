@@ -28,27 +28,64 @@ function CacheBuster() {
         const currentBuild = Date.now().toString();
         const storedBuild = sessionStorage.getItem('app-build');
         
-        // Smart cache busting - only clear if build actually changed
-        if (!storedBuild || storedBuild !== currentBuild) {
-          console.log('🔄 Cache busting: Clearing cached data for new build');
+        // NUCLEAR CACHE BUSTING - Force complete refresh with timestamp verification
+        const requiredVersion = "MIGRATION-ANALYSIS-SETUP-UI";
+        const lastVersion = sessionStorage.getItem('ui-version');
+        
+        console.log('🚨 NUCLEAR CACHE BUST - Required:', requiredVersion, 'Last:', lastVersion);
+        
+        if (lastVersion !== requiredVersion) {
+          console.log('🔄 FORCING COMPLETE CACHE CLEAR - NEW UI VERSION REQUIRED');
           
-          // Clear session storage
+          // Clear ALL storage
           sessionStorage.clear();
+          localStorage.clear();
           
-          // Clear service worker caches if available
+          // Clear ALL caches aggressively
           if ('caches' in window) {
             try {
               const cacheNames = await caches.keys();
               await Promise.all(cacheNames.map(name => caches.delete(name)));
+              console.log('🗑️  Cleared all caches:', cacheNames);
             } catch (e) {
               console.warn('Cache clearing failed:', e);
             }
           }
           
-          // Set new build version
-          sessionStorage.setItem('app-build', currentBuild);
-          sessionStorage.setItem('cache-cleared', 'true');
+          // Set new version
+          sessionStorage.setItem('ui-version', requiredVersion);
+          sessionStorage.setItem('cache-cleared', new Date().toISOString());
+          
+          // Force reload with timestamp if URL doesn't have fresh timestamp
+          const urlParams = new URLSearchParams(window.location.search);
+          const currentTimestamp = urlParams.get('fresh');
+          const freshTimestamp = Date.now().toString();
+          
+          if (currentTimestamp !== freshTimestamp) {
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.set('fresh', freshTimestamp);
+            newUrl.searchParams.set('v', requiredVersion);
+            
+            console.log('🔄 FORCING PAGE RELOAD WITH FRESH TIMESTAMP');
+            window.location.replace(newUrl.toString());
+            return;
+          }
         }
+        
+        // Verify UI components loaded correctly
+        setTimeout(() => {
+          const setupText = document.querySelector('[title*="Migration Analysis Setup"], *[aria-label*="Migration Analysis Setup"]');
+          const oldKafkaText = document.querySelector('*:contains("Kafka → Azure Service Bus")');
+          
+          console.log('🔍 UI Verification:');
+          console.log('  Setup UI found:', !!setupText);
+          console.log('  Old Kafka UI found:', !!oldKafkaText);
+          
+          if (!setupText && window.location.search.includes('fresh=')) {
+            console.log('🚨 SETUP UI NOT FOUND - TRYING HARD REFRESH');
+            window.location.reload();
+          }
+        }, 3000);
         
         // Periodic check for updates (every 2 minutes)
         const checkInterval = setInterval(async () => {
