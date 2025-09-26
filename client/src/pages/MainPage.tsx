@@ -680,6 +680,11 @@ export default function MainPage() {
           </Dialog>
         )}
       </AnimatePresence>
+      
+      {/* Version Footer for Debugging */}
+      <footer className="fixed bottom-2 right-2 text-xs text-muted-foreground bg-background/80 px-2 py-1 rounded border">
+        Build: {new Date().toISOString().slice(0,16)} | Replit-bcf7c59
+      </footer>
     </motion.div>
   );
 }
