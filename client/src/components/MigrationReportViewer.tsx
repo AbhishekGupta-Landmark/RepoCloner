@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { FileText, Code, BarChart3, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAnalysis } from '@/hooks/useAnalysis';
 
 interface KafkaUsageItem {
   file: string;
@@ -36,7 +37,10 @@ interface MigrationReportViewerProps {
 }
 
 export function MigrationReportViewer({ repositoryId }: MigrationReportViewerProps) {
-  const { data, isLoading, error, refetch } = useQuery({
+  // Get analysis functions and loading state
+  const { analyzeCode, isLoading: isAnalyzing } = useAnalysis();
+  
+  const { data, isLoading: isQueryLoading, error, refetch } = useQuery({
     queryKey: ['structured-report', repositoryId],
     queryFn: async () => {
       const response = await fetch(`/api/reports/${repositoryId}/structured`);
@@ -48,8 +52,9 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
     enabled: !!repositoryId,
     refetchInterval: 30000 // Auto-refresh every 30 seconds
   });
-
-  if (isLoading) {
+  
+  // Only show loading card when initially loading data (not during analysis)
+  if (isQueryLoading && !data) {
     return (
       <Card>
         <CardContent className="flex items-center justify-center py-8">
@@ -103,12 +108,14 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  onClick={() => refetch()}
-                  disabled={isLoading}
+                  onClick={async () => {
+                    await analyzeCode(repositoryId);
+                  }}
+                  disabled={isAnalyzing}
                   className="border-red-200 text-red-600 hover:bg-red-50"
                 >
-                  <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                  Check Again
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isAnalyzing ? 'animate-spin' : ''}`} />
+                  {isAnalyzing ? 'Running Analysis...' : 'Check Again'}
                 </Button>
               </div>
             </CardContent>
@@ -175,9 +182,9 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
                 variant="outline" 
                 size="sm" 
                 onClick={() => refetch()}
-                disabled={isLoading}
+                disabled={isQueryLoading}
               >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-4 w-4 mr-2 ${isQueryLoading ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
             </div>
