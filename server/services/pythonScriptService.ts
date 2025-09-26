@@ -3,6 +3,8 @@ import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
 import { broadcastLog } from '../utils/logger';
+import { findReadmePath, getReadmeContent, validateReadmePath } from '../utils/readmeResolver';
+import { findMigrationReport, validateMigrationReport } from './migrationReportFinder';
 import { GeneratedFile, PythonScriptResult, MigrationReportData } from '@shared/schema';
 
 const execAsync = promisify(exec);
@@ -187,6 +189,27 @@ class PythonScriptService {
         workingDirectory: repositoryPath,
         args: scriptArgs
       });
+      
+      // Use robust README resolver for MD file generation - pass report directory to script
+      broadcastLog('INFO', `🔍 Using README resolver to find correct README file path`);
+      const readmePath = findReadmePath(repositoryPath);
+      const readmeValidation = validateReadmePath(readmePath);
+      
+      let reportDirectory = repositoryPath; // Default to repo root
+      if (readmeValidation.isValid && readmePath) {
+        reportDirectory = path.dirname(readmePath);
+        broadcastLog('INFO', `✅ README resolver found valid file: ${readmePath} (${readmeValidation.size} bytes)`);
+        broadcastLog('INFO', `📁 Setting report directory to: ${reportDirectory}`);
+        
+        // Pass report directory to Python script via environment variable
+        if (process.env.REPORT_DIR !== reportDirectory) {
+          process.env.REPORT_DIR = reportDirectory;
+          broadcastLog('INFO', `🔧 Set REPORT_DIR environment variable: ${reportDirectory}`);
+        }
+      } else {
+        broadcastLog('WARN', `⚠️  README resolver issue: ${readmeValidation.error || 'No README file found'}`);
+        broadcastLog('INFO', `📁 Using default report directory: ${reportDirectory}`);
+      }
       
       // DEBUGGING: Log expected MD file path and check what files actually exist
       const expectedMdPattern = `migration-report-*.md`;
@@ -613,22 +636,22 @@ if __name__ == "__main__":
           : 0
       };
 
-      // Try to parse markdown reports for structured data
+      // Use smart MD report discovery with README resolver
       let structuredData: MigrationReportData | null = null;
-      const markdownFiles = executionResult.generatedFiles.filter(file => 
-        file.relativePath.endsWith('.md') || file.relativePath.endsWith('.markdown')
-      );
+      const migrationReportPath = await findMigrationReport(repositoryPath, executionResult.generatedFiles);
       
-      if (markdownFiles.length > 0) {
-        // Parse the first markdown file found
-        const markdownFile = markdownFiles[0];
-        const fullPath = path.join(repositoryPath, markdownFile.relativePath);
-        structuredData = await this.parseMarkdownReport(fullPath);
+      if (migrationReportPath) {
+        broadcastLog('INFO', `🎯 Found migration report: ${migrationReportPath}`);
+        structuredData = await this.parseMarkdownReport(migrationReportPath);
         
         if (structuredData) {
-          broadcastLog('INFO', `Successfully parsed migration report: ${structuredData.title}`);
-          broadcastLog('INFO', `Found ${structuredData.kafka_inventory.length} Kafka files and ${structuredData.code_diffs.length} code diffs`);
+          broadcastLog('INFO', `✅ Successfully parsed migration report: ${structuredData.title}`);
+          broadcastLog('INFO', `📊 Found ${structuredData.kafka_inventory.length} Kafka files and ${structuredData.code_diffs.length} code diffs`);
+        } else {
+          broadcastLog('WARN', `⚠️  Failed to parse migration report from: ${migrationReportPath}`);
         }
+      } else {
+        broadcastLog('WARN', `⚠️  No migration report found in generated files`);
       }
 
       const analysisResult = {
