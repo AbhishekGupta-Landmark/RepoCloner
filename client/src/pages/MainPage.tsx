@@ -102,7 +102,9 @@ export default function MainPage() {
     if (currentRepository) {
       setActiveTab("technology");
     } else {
-      setActiveTab("analysis");
+      // Keep Technology Stack as default even when no repository is present
+      // Analysis tab should be disabled anyway without a repository
+      setActiveTab("technology");
     }
   }, [currentRepository]);
 
