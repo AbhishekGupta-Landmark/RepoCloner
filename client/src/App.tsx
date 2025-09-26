@@ -28,11 +28,9 @@ function CacheBuster() {
         const currentBuild = Date.now().toString();
         const storedBuild = sessionStorage.getItem('app-build');
         
-        // NUCLEAR CACHE BUSTING - Force complete refresh with timestamp verification
-        const requiredVersion = "MIGRATION-ANALYSIS-SETUP-UI";
+        // Cache version check
+        const requiredVersion = "v1.0";
         const lastVersion = sessionStorage.getItem('ui-version');
-        
-        console.log('🚨 NUCLEAR CACHE BUST - Required:', requiredVersion, 'Last:', lastVersion);
         
         if (lastVersion !== requiredVersion) {
           console.log('🔄 FORCING COMPLETE CACHE CLEAR - NEW UI VERSION REQUIRED');
@@ -74,15 +72,16 @@ function CacheBuster() {
         
         // Verify UI components loaded correctly
         setTimeout(() => {
-          const setupText = document.querySelector('[title*="Migration Analysis Setup"], *[aria-label*="Migration Analysis Setup"]');
-          const oldKafkaText = document.querySelector('*:contains("Kafka → Azure Service Bus")');
+          const setupText = document.querySelector('[title*="Migration Analysis Setup"], [aria-label*="Migration Analysis Setup"]');
+          const bodyText = document.body.textContent || '';
+          const hasOldKafkaText = bodyText.includes('Kafka → Azure Service Bus');
           
           console.log('🔍 UI Verification:');
           console.log('  Setup UI found:', !!setupText);
-          console.log('  Old Kafka UI found:', !!oldKafkaText);
+          console.log('  Old Kafka UI found:', hasOldKafkaText);
           
-          if (!setupText && window.location.search.includes('fresh=')) {
-            console.log('🚨 SETUP UI NOT FOUND - TRYING HARD REFRESH');
+          if (!setupText && hasOldKafkaText && window.location.search.includes('fresh=')) {
+            console.log('🚨 OLD UI DETECTED - TRYING HARD REFRESH');
             window.location.reload();
           }
         }, 3000);
