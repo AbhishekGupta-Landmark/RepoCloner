@@ -280,9 +280,9 @@ class GitHubPusher {
       const mainOid = await this.getMainBranchOid();
       console.log('📍 Got main branch OID:', mainOid.substring(0, 8));
 
-      // Use existing branch specified by user
-      const branchName = 'feature-workflow-separation-2025-09-25T13-22-56';
-      console.log('🎯 Pushing to existing branch:', branchName);
+      // Use existing branch (it was created in previous attempt)
+      const branchName = 'feature-notes-and-fixes-2025-09-26T18-05-15';
+      console.log('🎯 Using existing branch:', branchName);
       
       // Get current branch OID instead of creating new branch
       let currentOid = await this.getBranchOid(branchName);
