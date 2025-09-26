@@ -1630,7 +1630,21 @@ export async function registerRoutes(app: Application): Promise<Server> {
           const filePath = await resolveReportFilePath(repositoryId, markdownFile.name);
           if (filePath) {
             // Get structured data from Python script output (already parsed during analysis)
-            const structuredData = pythonOutput.parsedMigrationData || null;
+            const structuredData = pythonOutput.parsedMigrationData;
+            
+            // CRITICAL FIX: Don't return success if no structured data was parsed
+            if (!structuredData) {
+              broadcastLog('WARN', `Analysis completed but no structured data was parsed for repository ${repositoryId}`);
+              
+              res.json({ 
+                structuredData: null,
+                status: 'failed',
+                error: 'Analysis completed but failed to parse migration data from generated report',
+                reportId: successfulReport.id,
+                createdAt: successfulReport.createdAt
+              });
+              return;
+            }
             
             broadcastLog('INFO', `Serving structured migration data for repository ${repositoryId}: Data found`);
             
@@ -1643,6 +1657,17 @@ export async function registerRoutes(app: Application): Promise<Server> {
             return;
           }
         }
+        
+        // If we reach here, successful report exists but files are missing - this is a failure
+        broadcastLog('WARN', `Report exists but files are missing for repository ${repositoryId}`);
+        res.json({ 
+          structuredData: null,
+          status: 'failed',
+          error: 'Report files are missing or inaccessible',
+          reportId: successfulReport.id,
+          createdAt: successfulReport.createdAt
+        });
+        return;
       }
       
       // If no successful report but we have reports, check if the latest one failed
