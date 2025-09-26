@@ -28,26 +28,26 @@ function CacheBuster() {
         const currentBuild = Date.now().toString();
         const storedBuild = sessionStorage.getItem('app-build');
         
-        // If this is a fresh session or build changed, clear everything
+        // Smart cache busting - only clear if build actually changed
         if (!storedBuild || storedBuild !== currentBuild) {
-          console.log('🔄 Cache busting: Clearing all cached data');
+          console.log('🔄 Cache busting: Clearing cached data for new build');
           
-          // Clear storage
+          // Clear session storage
           sessionStorage.clear();
+          
+          // Clear service worker caches if available
+          if ('caches' in window) {
+            try {
+              const cacheNames = await caches.keys();
+              await Promise.all(cacheNames.map(name => caches.delete(name)));
+            } catch (e) {
+              console.warn('Cache clearing failed:', e);
+            }
+          }
           
           // Set new build version
           sessionStorage.setItem('app-build', currentBuild);
-          
-          // Add timestamp to force browser revalidation
-          const currentUrl = new URL(window.location.href);
-          currentUrl.searchParams.set('cb', currentBuild);
-          
-          // Only reload if URL actually needs updating and we're not already in a reload
-          if (!window.location.search.includes('cb=') && !sessionStorage.getItem('cache-bust-done')) {
-            sessionStorage.setItem('cache-bust-done', 'true');
-            window.location.replace(currentUrl.toString());
-            return;
-          }
+          sessionStorage.setItem('cache-cleared', 'true');
         }
         
         // Periodic check for updates (every 2 minutes)
