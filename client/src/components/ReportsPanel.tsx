@@ -3,20 +3,16 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Download, FileText, Clock, Loader2, BarChart3 } from "lucide-react";
+import { FileText, Clock, Loader2, BarChart3 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
 import { useAppContext } from "@/context/AppContext";
 import { AnalysisReport, AnalysisResult } from "@shared/schema";
 import { motion, AnimatePresence } from "framer-motion";
 
 
 export default function ReportsPanel() {
-  const [downloadingReports, setDownloadingReports] = useState<Record<string, boolean>>({});
-  const { toast } = useToast();
   const { currentRepository } = useAppContext();
 
   // Fetch actual reports from the API
@@ -109,91 +105,6 @@ export default function ReportsPanel() {
     return `${Math.floor(diffInMinutes / 1440)} days ago`;
   };
 
-  const downloadReport = async (reportId: string, format: 'pdf' | 'xlsx' | 'docx' | 'md') => {
-    try {
-      setDownloadingReports(prev => ({ ...prev, [reportId]: true }));
-
-      let response;
-      if (format === 'md') {
-        // For markdown files, try to download the generated migration report directly
-        // First find the report to get the repository ID and actual filename
-        const report = displayReports.find(r => r.id === reportId);
-        if (report && report.repositoryId) {
-          // Get the actual filename from generated files
-          const results = report.results as any;
-          const generatedFiles = results?.pythonScriptOutput?.generatedFiles;
-          if (generatedFiles && generatedFiles.length > 0) {
-            const filename = generatedFiles[0].name;
-            response = await fetch(`/api/analysis/reports/${report.repositoryId}/download/${filename}`);
-          } else {
-            throw new Error('Generated file not found');
-          }
-        } else {
-          throw new Error('Repository information not found for markdown download');
-        }
-      } else {
-        // For other formats, use the existing export API
-        response = await fetch(`/api/reports/${reportId}/export?format=${format}`);
-      }
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Download failed' }));
-        throw new Error(errorData.error || 'Download failed');
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      
-      // Get filename from Content-Disposition header or generate one
-      const contentDisposition = response.headers.get('Content-Disposition');
-      let filename = `report.${format}`;
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
-        if (filenameMatch) {
-          filename = filenameMatch[1];
-        }
-      }
-
-      // Create temporary link and trigger download
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      
-      // Cleanup
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-      const fileTypeDescription = format === 'md' ? 'Markdown File' : format.toUpperCase();
-      toast({
-        title: "Download Successful",
-        description: `${fileTypeDescription} downloaded successfully`,
-      });
-
-    } catch (error) {
-      console.error('Download error:', error);
-      let errorMessage = "Failed to download report";
-      
-      if (error instanceof Error) {
-        if (error.message.includes("Repository not found")) {
-          errorMessage = "Repository no longer available. The files may have been cleaned up.";
-        } else if (error.message.includes("Generated file not found")) {
-          errorMessage = "Report file not generated or no longer available.";
-        } else {
-          errorMessage = error.message;
-        }
-      }
-      
-      toast({
-        title: "Download Failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setDownloadingReports(prev => ({ ...prev, [reportId]: false }));
-    }
-  };
 
 
   const displayReports = reports?.reports || [];
@@ -314,15 +225,6 @@ export default function ReportsPanel() {
               const metrics = getMetrics(results as AnalysisResult);
               const createdAt = report.createdAt ? new Date(report.createdAt).toISOString() : new Date().toISOString();
               
-              // Check if generated file exists for download - be more strict
-              const hasGeneratedFile = report.analysisType === 'python-script' 
-                ? (results?.pythonScriptOutput?.generatedFiles?.length > 0 && 
-                   results?.pythonScriptOutput?.success === true &&
-                   results?.pythonScriptOutput?.generatedFiles?.[0]?.name && 
-                   results?.pythonScriptOutput?.generatedFiles?.[0]?.size > 0 &&
-                   report.repositoryId) // Ensure repository ID exists
-                : true; // For other report types, assume they can be exported
-              
               return (
                 <Card key={report.id} data-testid={`report-${report.id}`}>
                   <CardHeader className="pb-3">
@@ -367,11 +269,6 @@ export default function ReportsPanel() {
                             {metrics.securityScore}% Security
                           </Badge>
                         )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm text-muted-foreground">
-                          View analysis results in Code Analysis tab
-                        </p>
                       </div>
                     </div>
                   </CardContent>
