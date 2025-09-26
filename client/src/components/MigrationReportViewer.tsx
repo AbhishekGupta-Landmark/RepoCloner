@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileText, Code, BarChart3, Loader2, RefreshCw, Download } from 'lucide-react';
+import { FileText, Code, BarChart3, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface KafkaUsageItem {
@@ -134,25 +134,6 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => {
-                  const jsonData = JSON.stringify(reportData, null, 2);
-                  const blob = new Blob([jsonData], { type: 'application/json' });
-                  const url = window.URL.createObjectURL(blob);
-                  const link = document.createElement('a');
-                  link.href = url;
-                  link.download = `migration-report-${repositoryId}.json`;
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                  window.URL.revokeObjectURL(url);
-                }}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Export JSON
               </Button>
             </div>
           </div>

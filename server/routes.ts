@@ -1514,6 +1514,26 @@ export async function registerRoutes(app: Application): Promise<Server> {
     }
   });
 
+  // Helper function to resolve report file path (shared by download and structured endpoints)
+  async function resolveReportFilePath(repositoryId: string, fileName: string): Promise<string | null> {
+    const fs = await import('fs');
+    const path = await import('path');
+    
+    const repoPath = await storage.getRepositoryPath(repositoryId);
+    if (!repoPath) {
+      return null;
+    }
+    
+    const filePath = path.join(repoPath, fileName);
+    
+    // Ensure file exists and is within the repository directory (security check)
+    if (!filePath.startsWith(repoPath) || !await fs.promises.access(filePath).then(() => true).catch(() => false)) {
+      return null;
+    }
+    
+    return filePath;
+  }
+
   // Download generated migration report endpoint
   app.get("/api/analysis/reports/:repositoryId/download/:fileName", async (req, res) => {
     try {
@@ -1525,19 +1545,12 @@ export async function registerRoutes(app: Application): Promise<Server> {
         return res.status(400).json({ error: "Only markdown files are allowed" });
       }
       
-      const repoPath = await storage.getRepositoryPath(repositoryId);
-      if (!repoPath) {
-        return res.status(404).json({ error: "Repository not found" });
+      const filePath = await resolveReportFilePath(repositoryId, fileName);
+      if (!filePath) {
+        return res.status(404).json({ error: "Report file not found" });
       }
       
       const fs = await import('fs');
-      const path = await import('path');
-      const filePath = path.join(repoPath, fileName);
-      
-      // Ensure file exists and is within the repository directory (security check)
-      if (!filePath.startsWith(repoPath) || !await fs.promises.access(filePath).then(() => true).catch(() => false)) {
-        return res.status(404).json({ error: "Report file not found" });
-      }
       
       // Read file content
       const fileContent = await fs.promises.readFile(filePath, 'utf-8');
@@ -1589,22 +1602,45 @@ export async function registerRoutes(app: Application): Promise<Server> {
   app.get('/api/reports/:repositoryId/structured', async (req, res) => {
     try {
       const { repositoryId } = req.params;
-      const reports = await storage.getAnalysisReportsByRepository(repositoryId);
       
-      // Find the most recent report with structured data
-      const reportWithStructuredData = reports
-        .filter(report => report.structuredData)
+      // Find the most recent generated migration report file (same logic as Reports download)
+      const reports = await storage.getAnalysisReportsByRepository(repositoryId);
+      const latestReport = reports
+        .filter(report => report.results && (report.results as any).pythonScriptOutput?.generatedFiles)
         .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
       
-      if (!reportWithStructuredData) {
+      if (!latestReport) {
         res.json({ structuredData: null });
         return;
       }
       
+      // Get the generated markdown file (same as Reports download logic)
+      const pythonOutput = (latestReport.results as any).pythonScriptOutput;
+      const markdownFile = pythonOutput.generatedFiles.find((file: any) => file.name.endsWith('.md'));
+      
+      if (!markdownFile) {
+        res.json({ structuredData: null });
+        return;
+      }
+      
+      // Use same path resolution as download route
+      const filePath = await resolveReportFilePath(repositoryId, markdownFile.name);
+      if (!filePath) {
+        res.json({ structuredData: null });
+        return;
+      }
+      
+      // Read and parse the markdown file
+      const fs = await import('fs');
+      const fileContent = await fs.promises.readFile(filePath, 'utf-8');
+      
+      // Parse markdown content to structured data (same logic as Python script output)
+      const structuredData = pythonOutput.parsedMigrationData || null;
+      
       res.json({ 
-        structuredData: reportWithStructuredData.structuredData,
-        reportId: reportWithStructuredData.id,
-        createdAt: reportWithStructuredData.createdAt
+        structuredData,
+        reportId: latestReport.id,
+        createdAt: latestReport.createdAt
       });
     } catch (error) {
       console.error('Error fetching structured migration data:', error);
