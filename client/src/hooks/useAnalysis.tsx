@@ -16,9 +16,25 @@ export function useAnalysis() {
       const response = await apiRequest('POST', '/api/analysis/run', { repositoryId });
       return await response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: async (data, repositoryId: string) => {
       // Store the full Python result for structured data access
       setAnalysisResult(data.pythonResult);
+      
+      // Immediate cache update for successful analysis
+      queryClient.setQueryData(['structured-report', repositoryId], {
+        status: 'completed',
+        structuredData: data.structuredData,
+        reportId: data.reportId,
+        createdAt: new Date().toISOString()
+      });
+      
+      // Then refetch to ensure data consistency
+      await queryClient.refetchQueries({ 
+        queryKey: ['structured-report', repositoryId], 
+        type: 'active', 
+        exact: true 
+      });
+      
       queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
       
       toast({
@@ -26,7 +42,25 @@ export function useAnalysis() {
         description: data.message || "Migration analysis completed successfully"
       });
     },
-    onError: (error: any) => {
+    onError: async (error: any, repositoryId: string) => {
+      // Immediate cache update for failed analysis
+      queryClient.setQueryData(['structured-report', repositoryId], {
+        status: 'failed',
+        error: error.message || "Analysis failed",
+        structuredData: null,
+        reportId: null,
+        createdAt: new Date().toISOString()
+      });
+      
+      // Then refetch to get actual server response
+      await queryClient.refetchQueries({ 
+        queryKey: ['structured-report', repositoryId], 
+        type: 'active', 
+        exact: true 
+      });
+      
+      queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
+      
       toast({
         title: "Migration Analysis Failed",
         description: error.message || "Failed to run migration analysis",
@@ -69,6 +103,9 @@ export function useAnalysis() {
       await analysisMutation.mutateAsync(repositoryId);
       return true;
     } catch (error) {
+      // CRITICAL FIX: Always invalidate structured report cache after analysis attempt
+      queryClient.invalidateQueries({ queryKey: ['structured-report', repositoryId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
       return false;
     }
   };
