@@ -19,21 +19,11 @@ def parse_args():
     parser.add_argument('repo_url', help='Repository URL to analyze')
     parser.add_argument('repo_path', help='Local path to clone/analyze repository')
     
-    # AI API key with EPAM fallback
+    # AI API key (required - no fallbacks)
     ai_api_key = os.environ.get("AI_API_KEY")
     base_url = os.environ.get("AI_ENDPOINT_URL", "https://api.openai.com/v1/chat/completions")
     model = os.environ.get("AI_MODEL", "gpt-4")
     api_version = os.environ.get("AI_API_VERSION", "2024-02-15-preview")
-    
-    if not ai_api_key:
-        # Fallback to EPAM AI proxy if no app-configured AI key
-        ai_api_key = os.environ.get("EPAM_AI_API_KEY")
-        if ai_api_key:
-            print("🔧 Using EPAM AI proxy credentials from environment")
-            # Set EPAM-specific defaults
-            base_url = "https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions"
-            model = "claude-3-5-haiku@20241022"
-            api_version = "3.5 Haiku"
     
     parser.add_argument('--model', default=model, help='AI model to use')
     parser.add_argument('--api-version', default=api_version, help='API version')
@@ -69,7 +59,7 @@ class ApiKeyOnlyChatModel(BaseChatModel):
     def _generate(self, messages: List[BaseMessage], stop=None, run_manager=None, **kwargs):
         role_map = {"human": "user", "ai": "assistant", "system": "system"}
         
-        # For deployment-based URLs (Azure OpenAI, EPAM proxy), don't include model in payload
+        # Standard OpenAI API payload
         payload = {
             "messages": [
                 {"role": role_map.get(m.type, m.type), "content": m.content}
@@ -82,25 +72,15 @@ class ApiKeyOnlyChatModel(BaseChatModel):
         if 'deployments' not in self.base_url.lower():
             payload["model"] = self.model_name
         
-        # Use EPAM-specific Api-Key header format (not standard OpenAI Bearer token)
-        if 'epam' in self.base_url.lower():
-            headers = {"Content-Type": "application/json", "Api-Key": self.api_key}
-        else:
-            # Standard OpenAI format for other providers
-            headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
+        # Standard OpenAI Authorization header
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
         
-        # Add API version header ONLY for Azure OpenAI (not EPAM proxy - it uses URL params)
+        # Add API version header for Azure OpenAI or EPAM proxy
         api_version = getattr(self, 'api_version', None)
-        if api_version and 'azure' in self.base_url.lower() and 'epam' not in self.base_url.lower():
+        if api_version and ('azure' in self.base_url.lower() or 'epam' in self.base_url.lower()):
             headers["api-version"] = api_version
             
-        # Special handling for EPAM proxy - may need additional headers
-        if 'epam' in self.base_url.lower():
-            # Add any additional headers needed for EPAM proxy
-            headers["User-Agent"] = "RepoCloner-AI-Analysis/1.0"
-            
         try:
-            # For EPAM proxy, use the URL as-is since it already contains properly formatted parameters
             print(f"🌐 Making API request to: {self.base_url}")
             print(f"🔧 Headers: {{'Content-Type': 'application/json', 'Authorization': 'Bearer ***'}}")
             print(f"📋 Payload: {payload}")
@@ -249,7 +229,7 @@ def scan_for_kafka_usage_ai(state: RepoAnalysisState) -> RepoAnalysisState:
     print(f"AI-identified Kafka usage in {len(inventory)} files.")
     return {**state, "kafka_inventory": inventory}
 
-# Static analysis fallback implemented - reports generated even when AI fails
+# AI-powered analysis - requires valid API configuration
 
 def extract_description_and_diff(raw: str) -> tuple[str, str]:
     """
@@ -468,6 +448,11 @@ if __name__ == "__main__":
     analysis_type = "Static Analysis"
     
     # Try AI analysis if we have credentials
+    print(f"🔧 DEBUG: API key present: {bool(args.api_key)}")
+    print(f"🔧 DEBUG: Base URL present: {bool(args.base_url)}")
+    print(f"🔧 DEBUG: API key value check: {args.api_key != 'test'}")
+    print(f"🔧 DEBUG: Base URL value check: {args.base_url != 'test'}")
+    
     if args.api_key and args.base_url and args.api_key != "test" and args.base_url != "test":
         try:
             print("🤖 Attempting AI analysis...")

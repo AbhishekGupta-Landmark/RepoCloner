@@ -6,7 +6,7 @@ Extracts structured data from markdown migration reports
 
 import re
 from typing import Dict, List, Any, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 @dataclass
 class KafkaUsageItem:
@@ -20,6 +20,8 @@ class CodeDiff:
     diff_content: str
     language: str = "diff"
     description: str = ""
+    key_changes: List[str] = field(default_factory=list)
+    notes: List[str] = field(default_factory=list)
 
 @dataclass
 class MigrationReport:
@@ -101,7 +103,7 @@ class MigrationReportParser:
     
     def _parse_code_diffs(self, content: str) -> List[CodeDiff]:
         """
-        Parse code migration diffs
+        Parse code migration diffs with key changes and notes extraction
         """
         diffs = []
         
@@ -127,11 +129,16 @@ class MigrationReportParser:
             # Extract description (text between filename and ```diff)
             description = description_part if description_part and not description_part.startswith('```') else ""
             
+            # Extract and filter key changes and notes from diff content
+            clean_diff, key_changes, notes = self._extract_key_changes_and_notes(diff_content)
+            
             diffs.append(CodeDiff(
                 file=file_name,
-                diff_content=diff_content,
+                diff_content=clean_diff,
                 language="diff",
-                description=description
+                description=description,
+                key_changes=key_changes,
+                notes=notes
             ))
             
         return diffs
@@ -170,6 +177,64 @@ class MigrationReportParser:
                 }
                 
         return sections
+    
+    def _extract_key_changes_and_notes(self, diff_content: str) -> tuple[str, List[str], List[str]]:
+        """
+        Extract key changes and notes from diff content, removing them from the diff.
+        Returns: (clean_diff_content, key_changes_list, notes_list)
+        """
+        lines = diff_content.split('\n')
+        clean_lines = []
+        key_changes = []
+        notes = []
+        
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            # Check for "Key changes:" section
+            if line.lower() == "key changes:" or line.lower() == "+ key changes:":
+                # Skip the "Key changes:" line itself
+                i += 1
+                # Collect following lines until we hit a diff line or end
+                while i < len(lines):
+                    next_line = lines[i]
+                    # Stop if we hit actual diff content (lines starting with +, -, @, or diff markers)
+                    if (next_line.startswith(('+', '-', '@@', 'diff --git', 'index ', '--- ', '+++ ')) and 
+                        not next_line.strip().lower().startswith('+ ')):
+                        break
+                    # Stop if we hit a Note section
+                    if next_line.strip().lower().startswith('note:') or next_line.strip().lower().startswith('+ note:'):
+                        break
+                    if next_line.strip():  # Only add non-empty lines
+                        # Clean the + prefix if it exists
+                        clean_line = next_line[1:].strip() if next_line.startswith('+') else next_line.strip()
+                        if clean_line:  # Only add non-empty cleaned lines
+                            key_changes.append(clean_line)
+                    i += 1
+                continue
+            
+            # Check for "Note:" section
+            elif line.lower().startswith("note:") or line.lower().startswith("+ note:"):
+                # Extract the note text (everything after "Note:")
+                note_text = line
+                if note_text.lower().startswith("+ note:"):
+                    note_text = note_text[7:].strip()  # Remove "+ Note:"
+                elif note_text.lower().startswith("note:"):
+                    note_text = note_text[5:].strip()  # Remove "Note:"
+                
+                if note_text:  # Only add non-empty note
+                    notes.append(note_text)
+                
+                # Continue to next line (don't include this line in clean diff)
+                i += 1
+                continue
+            
+            # Regular diff line - keep it
+            clean_lines.append(lines[i])
+            i += 1
+        
+        return '\n'.join(clean_lines), key_changes, notes
     
     def to_json_serializable(self, report: MigrationReport) -> Dict[str, Any]:
         """
