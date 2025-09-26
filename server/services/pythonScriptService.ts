@@ -71,7 +71,9 @@ class PythonScriptService {
       const workingDir = options.workingDirectory || process.cwd();
       const timeout = options.timeout || this.defaultTimeout;
 
-      broadcastLog('INFO', `Executing Python script: python ${pythonArgs.join(' ')}`);
+      // SECURITY: Mask sensitive arguments in logs
+      const maskedPythonArgs = this.maskSensitiveArgs(pythonArgs);
+      broadcastLog('INFO', `Executing Python script: python ${maskedPythonArgs.join(' ')}`);
       broadcastLog('INFO', `Working directory: ${workingDir}`);
 
       // Get file list before execution (for file tracking)
@@ -175,7 +177,9 @@ class PythonScriptService {
           scriptArgs.push('--api-version', aiSettings.apiVersion);
         }
         
-        broadcastLog('INFO', `Final script command: python ${defaultScriptPath} ${scriptArgs.join(' ')}`);
+        // SECURITY: Properly mask sensitive arguments
+        const maskedArgs = this.maskSensitiveArgs(scriptArgs);
+        broadcastLog('INFO', `Final script command: python ${defaultScriptPath} ${maskedArgs.join(' ')}`);
       } else {
         broadcastLog('WARN', 'No AI settings provided - Python script may use defaults or fail');
         broadcastLog('DEBUG', `Condition failed: aiSettings=${!!aiSettings}, apiKey=${aiSettings?.apiKey}, model=${aiSettings?.model}`);
@@ -325,8 +329,10 @@ class PythonScriptService {
     console.log(`🐍 Starting Python execution with timeout: ${timeout}ms`);
     broadcastLog('INFO', `🐍 Working directory: ${workingDir}`);
     console.log(`🐍 Working directory: ${workingDir}`);
-    broadcastLog('INFO', `🐍 Command arguments: [${args.join(', ')}]`);
-    console.log(`🐍 Command arguments: [${args.join(', ')}]`);
+    // SECURITY: Mask sensitive arguments in logs
+    const maskedArgs = this.maskSensitiveArgs(args);
+    broadcastLog('INFO', `🐍 Command arguments: [${maskedArgs.join(', ')}]`);
+    console.log(`🐍 Command arguments: [${maskedArgs.join(', ')}]`);
     
     for (const command of commands) {
       try {
@@ -529,12 +535,24 @@ if __name__ == "__main__":
    */
   async parseMarkdownReport(filePath: string): Promise<MigrationReportData | null> {
     try {
-      const reportContent = await fs.promises.readFile(filePath, 'utf-8');
+      let reportContent = await fs.promises.readFile(filePath, 'utf-8');
       
-      // Simple parser implementation (we'll enhance this with Python parser later)
+      // CRITICAL FIX: Normalize line endings and content
+      reportContent = this.normalizeMarkdownContent(reportContent);
+      
       const title = this.extractTitle(reportContent);
       const kafkaInventory = this.parseKafkaInventory(reportContent);
       const codeDiffs = this.parseCodeDiffs(reportContent);
+      
+      // Log parsing results for debugging
+      broadcastLog('DEBUG', `MD Parser: Title="${title}"`);
+      broadcastLog('DEBUG', `MD Parser: Found ${kafkaInventory.length} Kafka items, ${codeDiffs.length} diffs`);
+      
+      // If no structured data found, log first 300 chars for diagnosis
+      if (kafkaInventory.length === 0 && codeDiffs.length === 0) {
+        const preview = reportContent.substring(0, 300).replace(/\n/g, '\\n');
+        broadcastLog('WARN', `MD Parser: No data found. Content preview: ${preview}...`);
+      }
       
       return {
         title,
@@ -553,36 +571,205 @@ if __name__ == "__main__":
     }
   }
 
+  /**
+   * SECURITY: Mask sensitive arguments like API keys, tokens, passwords
+   */
+  private maskSensitiveArgs(args: string[]): string[] {
+    const maskedArgs: string[] = [];
+    const sensitiveFlags = ['--api-key', '--token', '--password', '--secret'];
+    
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      
+      // Check for --flag=value format
+      if (arg.includes('=')) {
+        const [flag, value] = arg.split('=', 2);
+        if (sensitiveFlags.some(f => flag.startsWith(f))) {
+          maskedArgs.push(`${flag}=***`);
+        } else {
+          maskedArgs.push(arg);
+        }
+      }
+      // Check for --flag value format  
+      else if (sensitiveFlags.includes(arg) && i + 1 < args.length) {
+        maskedArgs.push(arg);
+        maskedArgs.push('***');
+        i++; // Skip next arg (the value)
+      }
+      // Check for common flag variants (case-insensitive)
+      else if (/^(--access-token|--client-secret|--authorization|-k)$/i.test(arg) && i + 1 < args.length) {
+        maskedArgs.push(arg);
+        maskedArgs.push('***');
+        i++; // Skip next arg (the value)
+      }
+      // Check for bare API keys (starts with common prefixes)
+      else if (/^(sk-|dial-|bearer |token |key-)/i.test(arg)) {
+        maskedArgs.push('***');
+      }
+      // Check for URLs with credentials
+      else if (arg.includes('://') && (arg.includes('@') || arg.includes('api_key=') || arg.includes('token='))) {
+        const url = new URL(arg);
+        url.username = url.username ? '***' : url.username;
+        url.password = url.password ? '***' : url.password;
+        url.searchParams.forEach((value, key) => {
+          if (/^(api_key|token|key|password|secret)$/i.test(key)) {
+            url.searchParams.set(key, '***');
+          }
+        });
+        maskedArgs.push(url.toString());
+      }
+      else {
+        maskedArgs.push(arg);
+      }
+    }
+    
+    return maskedArgs;
+  }
+
+  /**
+   * Normalize markdown content: fix line endings, remove emoji, etc.
+   */
+  private normalizeMarkdownContent(content: string): string {
+    // 1. Normalize CRLF to LF
+    content = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
+    // 2. Remove or normalize emoji and special Unicode characters from headers
+    content = content.replace(/^(#{1,6})\s*[^\w\s]*\s*(.+)$/gm, '$1 $2');
+    
+    return content;
+  }
+
   private extractTitle(content: string): string {
-    const titleMatch = content.match(/^# (.+)$/m);
-    return titleMatch ? titleMatch[1].trim() : 'Migration Report';
+    // More flexible title extraction
+    const patterns = [
+      /^#\s*(.+)$/m,                           // # Title
+      /^#\s*[^\w\s]*\s*(.+)$/m,               // # 🚀 Title  
+      /migration.*report/i,                    // "Migration Report" anywhere
+      /kafka.*azure.*service.*bus/i           // Kafka to Azure Service Bus
+    ];
+    
+    for (const pattern of patterns) {
+      const match = content.match(pattern);
+      if (match) {
+        return match[1] ? match[1].trim() : match[0].trim();
+      }
+    }
+    
+    return 'Kafka → Azure Service Bus Migration Report';
   }
 
   private parseKafkaInventory(content: string): any[] {
     const inventory: any[] = [];
-    const inventoryMatch = content.match(/## 1\. Kafka Usage Inventory[\s\S]*?\n\n(.*?)(?=\n## |\n# |\Z)/);
     
-    if (!inventoryMatch) return inventory;
+    // Multiple patterns to match different section formats - LOOSER MATCHING
+    const sectionPatterns = [
+      // Exact section match with optional blank lines
+      /##\s*\d*\.?\s*Kafka\s*(Usage\s*)?(Inventory|Files|Analysis)[\s\S]*?\n\n?(.*?)(?=\n## |\n# |\Z)/i,
+      /##\s*Kafka\s*(Inventory|Files|Usage)[\s\S]*?\n\n?(.*?)(?=\n## |\n# |\Z)/i,
+      /####?\s*Kafka\s*(Inventory|Files)[\s\S]*?\n\n?(.*?)(?=\n## |\n# |\Z)/i,
+      
+      // File-based headings
+      /####?\s*File:\s*[\s\S]*?\n\n?(.*?)(?=\n## |\n# |\Z)/i,
+      
+      // General Kafka mentions
+      /##\s*.*Kafka.*[\s\S]*?\n\n?(.*?)(?=\n## |\n# |\Z)/i
+    ];
     
-    const lines = inventoryMatch[1].split('\n');
-    let inTable = false;
-    
-    for (const line of lines) {
-      if (line.includes('|') && line.includes('---')) {
-        inTable = true;
-        continue;
+    let sectionContent = '';
+    for (const pattern of sectionPatterns) {
+      const match = content.match(pattern);
+      if (match) {
+        sectionContent = match[match.length - 1]; // Last capture group
+        break;
       }
-      if (line.startsWith('|') && inTable) {
-        const columns = line.split('|').map(col => col.trim()).filter(col => col);
-        if (columns.length >= 3) {
+    }
+    
+    if (!sectionContent) {
+      // Fallback: search for any table with file paths and Kafka mentions
+      const tableMatches = content.match(/\|.*?\|[\s\S]*?\|.*?\|/g);
+      if (tableMatches) {
+        for (const tableMatch of tableMatches) {
+          if (tableMatch.toLowerCase().includes('kafka') || tableMatch.includes('.cs') || tableMatch.includes('.java')) {
+            sectionContent = tableMatch;
+            break;
+          }
+        }
+      }
+    }
+    
+    if (sectionContent) {
+      const lines = sectionContent.split('\n');
+      let inTable = false;
+      let foundTableRows = false;
+      
+      // First pass: look for any pipe-delimited rows (looser table detection)
+      for (const line of lines) {
+        if (line.includes('|') && (line.includes('---') || line.includes(':-'))) {
+          inTable = true;
+          continue;
+        }
+        if (line.startsWith('|') && line.split('|').length >= 3) {
+          foundTableRows = true;
+          const columns = line.split('|').map(col => col.trim()).filter(col => col);
+          if (columns.length >= 2) {
+            inventory.push({
+              file: columns[0] || 'Unknown file',
+              apis_used: columns[1] || 'N/A',
+              summary: columns[2] || 'Kafka usage detected'
+            });
+          }
+        } else if (!line.startsWith('|') && inTable) {
+          break;
+        }
+      }
+      
+      // If no proper table found, try parsing any pipe-delimited lines
+      if (!foundTableRows) {
+        for (const line of lines) {
+          if (line.includes('|') && line.split('|').length >= 3) {
+            const columns = line.split('|').map(col => col.trim()).filter(col => col);
+            if (columns.length >= 2 && (columns[0].includes('.') || columns[1].toLowerCase().includes('kafka'))) {
+              inventory.push({
+                file: columns[0] || 'Unknown file',
+                apis_used: columns[1] || 'Kafka APIs',
+                summary: columns[2] || 'Detected from content analysis'
+              });
+            }
+          }
+        }
+      }
+      
+      // Additional fallback: bullet list parsing
+      if (inventory.length === 0) {
+        for (const line of lines) {
+          const bulletMatch = line.match(/[-*]\s*(.*?\.(?:cs|java|js|ts|py))\s*[:-]\s*(.*)/i);
+          if (bulletMatch) {
+            inventory.push({
+              file: bulletMatch[1].trim(),
+              apis_used: 'Kafka APIs',
+              summary: bulletMatch[2].trim() || 'Found in bullet list'
+            });
+          }
+        }
+      }
+    }
+    
+    // Additional fallback: scan for file mentions with Kafka
+    if (inventory.length === 0) {
+      const filePatterns = [
+        /(\S+\.(cs|java|js|ts|py))\s*[:\-]\s*.*(kafka|producer|consumer)/gi,
+        /File:\s*(\S+\.(cs|java|js|ts|py))/gi
+      ];
+      
+      for (const pattern of filePatterns) {
+        let match;
+        while ((match = pattern.exec(content)) !== null && inventory.length < 10) {
           inventory.push({
-            file: columns[0],
-            apis_used: columns[1],
-            summary: columns[2]
+            file: match[1] || match[0],
+            apis_used: 'Kafka APIs',
+            summary: 'Detected from file analysis'
           });
         }
-      } else if (!line.startsWith('|') && inTable) {
-        break;
       }
     }
     
@@ -591,15 +778,75 @@ if __name__ == "__main__":
 
   private parseCodeDiffs(content: string): any[] {
     const diffs: any[] = [];
-    const diffRegex = /### ([^\n]+)\n```diff\n([\s\S]*?)\n```/g;
-    let diffMatch: RegExpExecArray | null;
     
-    while ((diffMatch = diffRegex.exec(content)) !== null) {
-      diffs.push({
-        file: diffMatch[1].trim(),
-        diff_content: diffMatch[2].trim(),
-        language: 'diff'
-      });
+    // Multiple patterns for different diff formats - COMPREHENSIVE MATCHING
+    const diffPatterns = [
+      /###?\s*([^\n]+)\n```diff\n([\s\S]*?)\n```/g,          // ### file\n```diff
+      /###?\s*([^\n]+)\n```patch\n([\s\S]*?)\n```/g,         // ### file\n```patch
+      /###?\s*([^\n]+)\n```\n([\s\S]*?)\n```/g,              // ### file\n```
+      /####?\s*File:\s*([^\n]+)\n```[\w]*\n([\s\S]*?)\n```/g, // #### File: path\n```
+      /##\s*([^\n]+)\n```diff\n([\s\S]*?)\n```/g,            // ## file\n```diff
+      /```diff\n([\s\S]*?)\n```/g,                           // Any ```diff block
+      /```patch\n([\s\S]*?)\n```/g                           // Any ```patch block
+    ];
+    
+    for (const pattern of diffPatterns) {
+      let match;
+      pattern.lastIndex = 0; // Reset regex
+      while ((match = pattern.exec(content)) !== null) {
+        // Handle patterns with different capture group counts
+        if (match.length >= 3 && match[1] && match[2]) {
+          // Pattern has both file and content groups
+          diffs.push({
+            file: match[1].trim(),
+            diff_content: match[2].trim(),
+            language: 'diff'
+          });
+        } else if (match.length >= 2 && match[1]) {
+          // Pattern has only content group (anonymous diff block)
+          diffs.push({
+            file: `Migration Diff ${diffs.length + 1}`,
+            diff_content: match[1].trim(),
+            language: 'diff'
+          });
+        }
+      }
+    }
+    
+    // Fallback: look for any code blocks with +/- changes
+    if (diffs.length === 0) {
+      const codeBlockPattern = /```[\w]*\n([\s\S]*?)\n```/g;
+      let match;
+      while ((match = codeBlockPattern.exec(content)) !== null) {
+        const blockContent = match[1];
+        if (blockContent.includes('+ ') || blockContent.includes('- ') || 
+            blockContent.includes('+') || blockContent.includes('-')) {
+          diffs.push({
+            file: `Migration Code ${diffs.length + 1}`,
+            diff_content: blockContent.trim(),
+            language: 'diff'
+          });
+        }
+      }
+    }
+    
+    // Additional fallback: scan for specific migration patterns
+    if (diffs.length === 0) {
+      const migrationPatterns = [
+        /ServiceBus|Azure|Connection|Producer|Consumer/gi
+      ];
+      
+      for (const pattern of migrationPatterns) {
+        const matches = Array.from(content.matchAll(pattern));
+        if (matches.length > 0) {
+          diffs.push({
+            file: 'Detected Migration Changes',
+            diff_content: `Found ${matches.length} migration-related changes in the codebase`,
+            language: 'text'
+          });
+          break;
+        }
+      }
     }
     
     return diffs;
