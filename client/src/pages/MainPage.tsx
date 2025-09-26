@@ -681,10 +681,6 @@ export default function MainPage() {
         )}
       </AnimatePresence>
       
-      {/* Version Footer for Debugging */}
-      <footer className="fixed bottom-2 right-2 text-xs text-muted-foreground bg-background/80 px-2 py-1 rounded border">
-        🎯 MIGRATION-ANALYSIS-SETUP-UI | {new Date().toISOString().slice(0,16)} | Fresh: {new URLSearchParams(window.location.search).get('fresh') || 'none'}
-      </footer>
     </motion.div>
   );
 }
