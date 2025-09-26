@@ -6,7 +6,80 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider } from "./context/AppContext";
 import MainPage from "@/pages/MainPage";
 import NotFound from "@/pages/not-found";
-import { Component, ErrorInfo, ReactNode } from "react";
+import { Component, ErrorInfo, ReactNode, useEffect } from "react";
+
+// Cache busting component - prevents browser caching issues
+function CacheBuster() {
+  useEffect(() => {
+    const performCacheBuster = async () => {
+      try {
+        // Set initial cache control on document
+        if (document.documentElement) {
+          document.documentElement.style.setProperty('--cache-bust', Date.now().toString());
+        }
+        
+        // Force clear any existing caches
+        if ('caches' in window) {
+          const cacheNames = await caches.keys();
+          await Promise.all(cacheNames.map(name => caches.delete(name)));
+        }
+        
+        // Version checking mechanism
+        const currentBuild = Date.now().toString();
+        const storedBuild = sessionStorage.getItem('app-build');
+        
+        // If this is a fresh session or build changed, clear everything
+        if (!storedBuild || storedBuild !== currentBuild) {
+          console.log('🔄 Cache busting: Clearing all cached data');
+          
+          // Clear storage
+          sessionStorage.clear();
+          
+          // Set new build version
+          sessionStorage.setItem('app-build', currentBuild);
+          
+          // Add timestamp to force browser revalidation
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.set('cb', currentBuild);
+          
+          // Only reload if URL actually needs updating and we're not already in a reload
+          if (!window.location.search.includes('cb=') && !sessionStorage.getItem('cache-bust-done')) {
+            sessionStorage.setItem('cache-bust-done', 'true');
+            window.location.replace(currentUrl.toString());
+            return;
+          }
+        }
+        
+        // Periodic check for updates (every 2 minutes)
+        const checkInterval = setInterval(async () => {
+          try {
+            const healthCheck = await fetch(`/api/admin/oauth-config?t=${Date.now()}`, {
+              method: 'GET',
+              cache: 'no-cache',
+              headers: { 'Cache-Control': 'no-cache, no-store' }
+            });
+            
+            // If server is unreachable or returns different response, might be updated
+            if (!healthCheck.ok) {
+              console.log('🔄 Server response changed, considering refresh...');
+            }
+          } catch (error) {
+            // Silently handle network errors
+            console.debug('Health check failed:', error);
+          }
+        }, 120000); // 2 minutes
+        
+        return () => clearInterval(checkInterval);
+      } catch (error) {
+        console.debug('Cache busting failed:', error);
+      }
+    };
+    
+    performCacheBuster();
+  }, []);
+  
+  return null;
+}
 
 // ErrorBoundary to catch and log the real error
 class ErrorBoundary extends Component<{children: ReactNode}, {hasError: boolean; error?: Error}> {
@@ -54,6 +127,7 @@ function Router() {
 function App() {
   return (
     <ErrorBoundary>
+      <CacheBuster />
       <QueryClientProvider client={queryClient}>
         <AppProvider>
           <TooltipProvider>
