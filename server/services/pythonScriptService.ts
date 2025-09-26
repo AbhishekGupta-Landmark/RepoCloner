@@ -788,7 +788,7 @@ if __name__ == "__main__":
 
   private parseCodeDiffs(content: string): any[] {
     const diffs: any[] = [];
-    console.log('🔧 Starting parseCodeDiffs with streaming parser');
+    console.log('🔧 Starting parseCodeDiffs with enhanced streaming parser');
     
     const lines = content.split('\n');
     let currentFile = '';
@@ -797,6 +797,10 @@ if __name__ == "__main__":
     let codeBlock: string[] = [];
     let fencesFound = 0;
     let blocksAccepted = 0;
+    let keyChanges: string[] = [];
+    
+    // Extract key changes section first
+    keyChanges = this.extractKeyChanges(content);
     
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -826,17 +830,12 @@ if __name__ == "__main__":
         console.log(`🚪 Closing fence: ${codeBlock.length} lines collected`);
         
         // Process the collected code block
-        const normalizedDiff = this.normalizeDiffBlock(codeBlock, fenceLanguage);
-        if (normalizedDiff && normalizedDiff.length > 0) {
-          const fileName = currentFile || `Migration Diff ${diffs.length + 1}`;
-          diffs.push({
-            file: fileName,
-            diff_content: normalizedDiff,
-            language: 'diff'
-          });
+        const structuredDiff = this.parseStructuredDiff(codeBlock, fenceLanguage, currentFile);
+        if (structuredDiff && structuredDiff.diff_content && structuredDiff.diff_content.length > 0) {
+          diffs.push(structuredDiff);
           blocksAccepted++;
-          console.log(`✅ Accepted diff block for "${fileName}" (${normalizedDiff.split('\n').length} lines)`);
-          console.log(`📝 Preview: ${normalizedDiff.substring(0, 120)}...`);
+          console.log(`✅ Accepted diff block for "${structuredDiff.file}" (${structuredDiff.hunks?.length || 0} hunks)`);
+          console.log(`📝 Preview: ${structuredDiff.diff_content.substring(0, 120)}...`);
         } else {
           console.log(`❌ Rejected block for "${currentFile}" - no valid diff content`);
         }
@@ -858,7 +857,12 @@ if __name__ == "__main__":
       diffs.push(...this.parseFallbackDiffs(content));
     }
     
-    console.log(`🎯 parseCodeDiffs results: ${fencesFound} fences found, ${blocksAccepted} blocks accepted, ${diffs.length} total diffs`);
+    // Add key changes as metadata to the first diff if available
+    if (diffs.length > 0 && keyChanges.length > 0) {
+      diffs[0].key_changes = keyChanges;
+    }
+    
+    console.log(`🎯 parseCodeDiffs results: ${fencesFound} fences found, ${blocksAccepted} blocks accepted, ${diffs.length} total diffs, ${keyChanges.length} key changes`);
     return diffs;
   }
   
@@ -958,6 +962,202 @@ if __name__ == "__main__":
     
     console.log(`🔄 Fallback parser found ${fallbackDiffs.length} diffs`);
     return fallbackDiffs;
+  }
+
+  /**
+   * Extract key changes summary from markdown content
+   */
+  private extractKeyChanges(content: string): string[] {
+    const keyChanges: string[] = [];
+    const lines = content.split('\n');
+    let inKeyChangesSection = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Detect "Key changes:" section
+      if (line.toLowerCase().includes('key changes:')) {
+        inKeyChangesSection = true;
+        continue;
+      }
+      
+      // Stop at next section or end
+      if (inKeyChangesSection && (line.startsWith('#') || line.startsWith('```'))) {
+        break;
+      }
+      
+      // Extract bullet points or numbered items
+      if (inKeyChangesSection && (line.startsWith('-') || line.startsWith('*') || /^\d+\./.test(line))) {
+        const cleanChange = line.replace(/^[-*\d.]\s*/, '').trim();
+        if (cleanChange && cleanChange.length > 0) {
+          keyChanges.push(cleanChange);
+        }
+      }
+    }
+    
+    console.log(`🔑 Extracted ${keyChanges.length} key changes`);
+    return keyChanges;
+  }
+  
+  /**
+   * Parse structured diff data from code block
+   */
+  private parseStructuredDiff(lines: string[], language: string, fileName: string): any {
+    // Check if this should be treated as a diff block
+    const isDiffLang = ['diff', 'patch'].includes(language.toLowerCase());
+    const hasDiffMarkers = lines.filter(line => 
+      /^(\+|-|@@|--- |\+\+\+ |diff --git|Index:)/.test(line)
+    ).length >= 3;
+    
+    if (!isDiffLang && !hasDiffMarkers) {
+      return null; // Not a diff block
+    }
+    
+    // Remove any nested fence lines within the block
+    let cleanedLines = lines.filter(line => !line.match(/^```.*$/));
+    
+    // Extract file extension for syntax highlighting
+    const fileExt = fileName.split('.').pop()?.toLowerCase() || 'txt';
+    const syntaxLang = this.mapFileExtToLanguage(fileExt);
+    
+    // Parse diff hunks
+    const hunks = this.parseDiffHunks(cleanedLines);
+    
+    if (hunks.length === 0) {
+      return null;
+    }
+    
+    return {
+      file: fileName || `Migration Diff`,
+      diff_content: cleanedLines.join('\n').trim(),
+      language: syntaxLang,
+      hunks: hunks,
+      stats: this.calculateDiffStats(hunks)
+    };
+  }
+  
+  /**
+   * Map file extensions to language identifiers
+   */
+  private mapFileExtToLanguage(ext: string): string {
+    const langMap: { [key: string]: string } = {
+      'cs': 'csharp',
+      'js': 'javascript', 
+      'ts': 'typescript',
+      'json': 'json',
+      'xml': 'xml',
+      'csproj': 'xml',
+      'java': 'java',
+      'py': 'python',
+      'md': 'markdown'
+    };
+    return langMap[ext] || 'text';
+  }
+  
+  /**
+   * Parse diff content into structured hunks
+   */
+  private parseDiffHunks(lines: string[]): any[] {
+    const hunks: any[] = [];
+    let currentHunk: any = null;
+    let lineNumber = 1;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      // Detect hunk header (@@)
+      if (line.startsWith('@@')) {
+        if (currentHunk) {
+          hunks.push(currentHunk);
+        }
+        
+        const hunkMatch = line.match(/@@ -(\d+),?(\d+)? \+(\d+),?(\d+)? @@/);
+        currentHunk = {
+          header: line,
+          old_start: hunkMatch ? parseInt(hunkMatch[1]) : lineNumber,
+          old_count: hunkMatch ? (parseInt(hunkMatch[2]) || 1) : 1,
+          new_start: hunkMatch ? parseInt(hunkMatch[3]) : lineNumber,
+          new_count: hunkMatch ? (parseInt(hunkMatch[4]) || 1) : 1,
+          lines: []
+        };
+        continue;
+      }
+      
+      // Process diff lines
+      if (!currentHunk) {
+        // Create a default hunk if none exists
+        currentHunk = {
+          header: `@@ -${lineNumber},10 +${lineNumber},10 @@`,
+          old_start: lineNumber,
+          old_count: 10,
+          new_start: lineNumber,
+          new_count: 10,
+          lines: []
+        };
+      }
+      
+      let lineType = 'context';
+      let content = line;
+      
+      if (line.startsWith('+')) {
+        lineType = 'addition';
+        content = line.substring(1);
+      } else if (line.startsWith('-')) {
+        lineType = 'deletion';
+        content = line.substring(1);
+      } else if (line.startsWith(' ')) {
+        lineType = 'context';
+        content = line.substring(1);
+      }
+      
+      currentHunk.lines.push({
+        type: lineType,
+        content: content,
+        old_line: lineType !== 'addition' ? lineNumber : null,
+        new_line: lineType !== 'deletion' ? lineNumber : null
+      });
+      
+      lineNumber++;
+    }
+    
+    // Add final hunk
+    if (currentHunk && currentHunk.lines.length > 0) {
+      hunks.push(currentHunk);
+    }
+    
+    return hunks;
+  }
+  
+  /**
+   * Calculate diff statistics
+   */
+  private calculateDiffStats(hunks: any[]): any {
+    let additions = 0;
+    let deletions = 0;
+    let context = 0;
+    
+    hunks.forEach(hunk => {
+      hunk.lines.forEach((line: any) => {
+        switch (line.type) {
+          case 'addition':
+            additions++;
+            break;
+          case 'deletion':
+            deletions++;
+            break;
+          case 'context':
+            context++;
+            break;
+        }
+      });
+    });
+    
+    return {
+      additions,
+      deletions,
+      context,
+      total_changes: additions + deletions
+    };
   }
 
   /**
