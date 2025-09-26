@@ -392,7 +392,7 @@ export default function MainPage() {
               whileHover={{ rotate: 90 }}
               transition={{ duration: 0.3, ease: "easeInOut" }}
             >
-              <Settings className="h-4 w-4" />
+              <Settings className="h-4 w-4 text-white" />
             </motion.div>
           </Button>
         </motion.div>
@@ -667,7 +667,7 @@ export default function MainPage() {
                       whileHover={{ rotate: 180 }}
                       transition={{ duration: 0.3 }}
                     >
-                      <Settings className="h-5 w-5 text-primary" />
+                      <Settings className="h-5 w-5 text-white" />
                     </motion.div>
                     Settings
                   </DialogTitle>
