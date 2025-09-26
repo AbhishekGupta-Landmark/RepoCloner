@@ -1,0 +1,26 @@
+Pasted-2025-09-26T18-29-10-442Z-DEBUG-All-files-in-directory-git-gitignore-Api-migration-report--1758911476871_1758911476872.txt
+2025-09-26T18:29:10.442Z [DEBUG] 🐍 All files in directory: .git, .gitignore, Api, migration-report.md, orderhandler.sln, README.md, Test
+2025-09-26T18:29:10.442Z [INFO] 🐍 Python script execution completed - Success: true
+2025-09-26T18:29:10.443Z [INFO] 🐍 Generated 0 files
+🐍 Python script result: {
+  success: true,
+  output: '🚀 Starting migration analysis...\r\n' +
+    '📁 Repository URL: https://github.com/srigumm/dotnetcore-kafka-integration.git\r\n' +        
+    '📂 Repository Path: C:\\Users\\AbhishekGupta12\\source\\repos\\RepoCloner1\\temp\\clone_1758910627138\r\n' +
+    '🤖 Using Model: claude-3-5-haiku@20241022\r\n' +
+    '🔧 Using API Version: 3.5 Haiku\r\n' +
+    '🌐 Using Endpoint: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku\r\n' +
+    '📊 Phase 1: Repository validation and code loading...\r\n' +
+    '🤖 Attempting AI analysis...\r\n' +
+    'Repository files already exist at C:\\Users\\AbhishekGupta12\\source\\repos\\RepoCloner1\\temp\\clone_1758910627138 (cloned by main application)\r\n' +
+    '📊 Total chunks loaded: 21\r\n' +
+    '🔍 Phase 2: Starting AI-powered analysis...\r\n' +
+    '🌐 Making API request to: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku\r\n' +
+    "🔧 Headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ***'}\r\n" +       
+    "📋 Payload: {'messages': [{'role': 'user', 'content': 'Summarize the purpose and functionality of this code:\\n\\nFile: .gitignore\\n*.swp\\n*.*~\\nproject.lock.json\\n.DS_Store\\n*.pyc\\nnupkg/\\n\\n# Visual Studio Code\\n.vscode\\n\\n# Rider\\n.idea\\n\\n# User-specific files\\n*.suo\\n*.user\\n*.userosscache\\n*.sln.docstates\\n\\n# Build results\\n[Dd]ebug/\\n[Dd]ebugPublic/\\n[Rr]elease/\\n[Rr]eleases/\\nx64/\\nx86/\\nbuild/\\nbld/\\n[Bb]in/\\n[Oo]bj/\\n[Oo]ut/\\nmsbuild.log\\nmsbuild.err\\nmsbuild.wrn\\n\\n# Visual Studio 2015\\n.vs/\\n'}], 'temperature': 0}\r\n" +      
+    '🔍 Response Status: 200\r\n' +
+    '📄 Response Headers: ***\r\n' +
+    "✅ Success! Response keys: ['choices', 'usage', 'id', 'created', 'object', 'model']\r\n" +   
+    '🌐 Making API request to: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku\r\n' +
+    "🔧 Headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ***'}\r\n" +       
+    '📋 Payload: {\'messages\': [{\'role\': \'user\', \'content\': \'Summarize the purpose and functionality of this code:\\n\\nFile: migration-report.md\\n# Kafka → Azure Service Bus Migration Report\\n\\n## 1. Kafka Usage Inventory\\n\\n| File | APIs Used | Summary |\\n|------|-----------|---------|\\n| README.md | Kafka, Confluent.Kafka (implied) | This README describes a .NET Core application using Kafka for order management, with a WebAPI producer sending messages to \\\'orderrequests\\\' topic and a background service consuming from that topic and writing to \\\'readytoship\\\' topic. The project demonstrates Kafka integration with .NET Core for building scalable streaming applications. |\\n| Api/Api.csproj | Confluent.Kafka | Project references Confluent.Kafka package, indicating potential Kafka integration |\\n| Api/appsettings.json | producer, consumer | Configuration file with Kafka producer and consumer settings, including bootstrap servers, group ID, Kerberos authentication, and various consumer configuration parameters |\\n| Api/ConsumerWrapper.cs | Confluent.Kafka, Consumer<string,string>, ConsumerConfig, Subscribe, Consume | This code uses Confluent.Kafka library to create a Kafka consumer. It wraps Kafka consumer functionality with methods to subscribe to a topic and consume messages. |\\n| Api/ProducerWrapper.cs | Confluent.Kafka, Producer<string,string>, ProduceAsync, ProducerConfig | This code uses Confluent.Kafka to create a Kafka producer that writes messages to a specified topic with random keys. It includes error handling and logs message delivery details. |\\n| Api/Startup.cs | Confluent.Kafka.ProducerConfig, Confluent.Kafka.ConsumerConfig | This Startup.cs file configures Kafka producer and consumer configurations using Confluent.Kafka library. It binds configuration settings from the application configuration and registers ProducerConfig and ConsumerConfig as singleton services. |\\n| Api/Controllers/OrderController.cs | Confluent.Kafka.ProducerConfig, Confluent.Kafka.ProducerWrapper, Kafka Producer | This code uses Confluent.Kafka to create a Kafka producer in the OrderController. It serializes an order request and writes the message to a Kafka topic named \\\'orderrequests\\\' using a custom ProducerWrapper class. |\\n| Api/Services/ProcessOrdersService.cs | Confluent.Kafka.ConsumerConfig, Confluent.Kafka.ProducerConfig, ConsumerWrapper, ProducerWrapper | This service uses Confluent.Kafka for consuming messages from \\\'orderrequests\\\' topic, processing...
