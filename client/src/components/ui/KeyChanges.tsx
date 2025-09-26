@@ -1,7 +1,9 @@
-import { CheckCircle, ArrowRight, Code2 } from 'lucide-react';
+import { CheckCircle, ArrowRight, Code2, ChevronDown, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import { useState } from 'react';
 
 interface KeyChangesProps {
   changes: string[];
@@ -10,6 +12,8 @@ interface KeyChangesProps {
 }
 
 const KeyChanges = ({ changes, title = "Key Migration Changes", className }: KeyChangesProps) => {
+  const [isOpen, setIsOpen] = useState(true); // Open by default
+  
   if (!changes || changes.length === 0) {
     return null;
   }
@@ -35,24 +39,33 @@ const KeyChanges = ({ changes, title = "Key Migration Changes", className }: Key
 
   return (
     <Card className={cn('border-l-4 border-l-blue-500', className)} data-testid="key-changes">
-      <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <Code2 className="h-5 w-5 text-blue-600" />
-          <CardTitle className="text-lg">{title}</CardTitle>
-        </div>
-        <CardDescription>
-          Summary of the main code transformations in this migration
-        </CardDescription>
-      </CardHeader>
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <CollapsibleTrigger asChild>
+          <CardHeader className="pb-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+            <div className="flex items-center gap-2">
+              {isOpen ? (
+                <ChevronDown className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+              )}
+              <Code2 className="h-5 w-5 text-blue-600" />
+              <CardTitle className="text-lg">{title}</CardTitle>
+            </div>
+            <CardDescription>
+              Summary of the main code transformations in this migration
+            </CardDescription>
+          </CardHeader>
+        </CollapsibleTrigger>
       
-      <CardContent className="space-y-3">
+        <CollapsibleContent>
+          <CardContent className="space-y-3">
         {changes.map((change, index) => {
           const formattedChange = formatChange(change);
           
           return (
             <div
               key={index}
-              className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-900/50 hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors"
+              className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800 transition-colors"
               data-testid={`key-change-${index}`}
             >
               <div className="flex-shrink-0 mt-0.5">
@@ -60,7 +73,7 @@ const KeyChanges = ({ changes, title = "Key Migration Changes", className }: Key
               </div>
               
               <div className="flex-1">
-                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                <p className="text-sm text-slate-800 dark:text-slate-100 leading-relaxed font-medium">
                   {formattedChange.text}
                 </p>
                 
@@ -80,8 +93,8 @@ const KeyChanges = ({ changes, title = "Key Migration Changes", className }: Key
           );
         })}
         
-        <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between text-xs text-gray-500">
+        <div className="mt-4 pt-3 border-t border-blue-200 dark:border-blue-700">
+          <div className="flex items-center justify-between text-xs text-blue-600 dark:text-blue-300">
             <span>{changes.length} change{changes.length !== 1 ? 's' : ''} identified</span>
             <span className="flex items-center gap-1">
               <CheckCircle className="h-3 w-3" />
@@ -89,7 +102,9 @@ const KeyChanges = ({ changes, title = "Key Migration Changes", className }: Key
             </span>
           </div>
         </div>
-      </CardContent>
+          </CardContent>
+        </CollapsibleContent>
+      </Collapsible>
     </Card>
   );
 };
