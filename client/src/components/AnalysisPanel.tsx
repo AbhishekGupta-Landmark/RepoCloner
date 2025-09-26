@@ -124,12 +124,22 @@ export default function AnalysisPanel() {
       </div>
       
       <ScrollArea className="flex-1 p-4">
-        {analysisType === 'migration' ? (
-          // Always show MigrationReportViewer for migration analysis
+        {analysisType === 'migration' && currentRepository?.id ? (
+          // Show MigrationReportViewer only when repository is selected
           <MigrationReportViewer 
-            key={currentRepository?.id || 'default'} 
-            repositoryId={currentRepository?.id || 'default'} 
+            key={currentRepository.id} 
+            repositoryId={currentRepository.id} 
           />
+        ) : analysisType === 'migration' ? (
+          // Show setup state when no repository selected
+          <div className="text-center py-12 text-muted-foreground" data-testid="migration-setup-state">
+            <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
+            <h3 className="text-lg font-medium mb-2">Migration Analysis Setup</h3>
+            <p className="text-sm mb-4">Clone a repository first to analyze Kafka → Azure Service Bus migration</p>
+            <p className="text-xs text-muted-foreground">
+              Use the Repository Explorer to clone a repository containing Kafka code
+            </p>
+          </div>
         ) : (
           <div className="text-center py-12 text-muted-foreground" data-testid="analysis-empty-state">
             <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
