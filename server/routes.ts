@@ -1308,7 +1308,23 @@ export async function registerRoutes(app: Application): Promise<Server> {
 
       try {
         // Fetch AI settings from storage to pass to Python script
-        const aiSettings = await storage.getAISettingsForScript();
+        let aiSettings = await storage.getAISettingsForScript();
+        
+        // CRITICAL FIX: If no AI settings configured, use environment variables
+        if (!aiSettings || !aiSettings.apiKey) {
+          const epamApiKey = process.env.EPAM_AI_API_KEY;
+          if (epamApiKey) {
+            broadcastLog('INFO', 'Using EPAM AI API key from environment variable');
+            aiSettings = {
+              apiKey: epamApiKey,
+              model: 'claude-3-5-haiku@20241022', // Default EPAM model
+              apiEndpointUrl: 'https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions',
+              apiVersion: '2024-02-15-preview'
+            } as any;
+          } else {
+            broadcastLog('WARN', 'No EPAM_AI_API_KEY environment variable found');
+          }
+        }
         
         // Execute Python script
         const pythonResult = await pythonScriptService.executePostCloneScript(
@@ -1324,21 +1340,31 @@ export async function registerRoutes(app: Application): Promise<Server> {
         if (!pythonResult.success) {
           console.error("❌ Python script failed:", pythonResult.error);
           
-          // Store the failed analysis attempt for error display
+          // CRITICAL FIX: Store the failed analysis attempt for error display
+          let failedReportId = undefined;
           try {
-            await pythonScriptService.createPythonScriptReport(
-              repository.id,
-              repository.url,
-              repository.localPath,
-              pythonResult, // Store the failed result
-              path.join(__dirname, '../scripts/default.py')
-            );
+            const failedReport = await storage.createAnalysisReport({
+              repositoryId: repository.id,
+              analysisType: 'migration' as any,
+              results: {
+                pythonScriptOutput: {
+                  exitCode: pythonResult.exitCode || -1,
+                  error: pythonResult.error || 'Python script execution failed',
+                  stderr: pythonResult.error || 'Migration analysis failed',
+                  generatedFiles: [],
+                  parsedMigrationData: null
+                }
+              }
+            });
+            failedReportId = failedReport.id;
+            console.log(`✅ Failed analysis report stored with ID: ${failedReport.id}`);
           } catch (reportError) {
-            console.warn("Failed to create failure report:", reportError);
+            console.error("❌ Failed to create failure report:", reportError);
           }
           
-          // Update repository timestamp even for failures
-          await storage.updateRepositoryAnalysis(repository.id, new Date(), undefined);
+          // CRITICAL FIX: Update repository with the failed report ID
+          await storage.updateRepositoryAnalysis(repository.id, new Date(), failedReportId);
+          console.log(`✅ Repository updated with failed report ID: ${failedReportId}`);
 
           return res.status(500).json({
             success: false,
@@ -1354,14 +1380,15 @@ export async function registerRoutes(app: Application): Promise<Server> {
           console.log("💾 Creating Python script report...");
           
           try {
-            const report = await pythonScriptService.createPythonScriptReport(
+            await pythonScriptService.createPythonScriptReport(
               repository.id,
               repository.url,
               repository.localPath,
               pythonResult,
               path.join(__dirname, '../scripts/default.py')
             );
-            reportId = report?.id;
+            // Note: createPythonScriptReport doesn't return a report ID
+            // The report is created and stored internally
           } catch (reportError) {
             console.warn("Failed to create Python script report:", reportError);
           }
@@ -1383,14 +1410,67 @@ export async function registerRoutes(app: Application): Promise<Server> {
 
       } catch (pythonError) {
         console.error("❌ Python script execution failed:", pythonError);
+        const errorMessage = pythonError instanceof Error ? pythonError.message : 'Migration analysis failed';
+        
+        // CRITICAL FIX: Always persist failed analysis attempts
+        try {
+          const failedReport = await storage.createAnalysisReport({
+            repositoryId: repository.id,
+            analysisType: 'migration' as any,
+            results: {
+              pythonScriptOutput: {
+                exitCode: -1,
+                error: errorMessage,
+                stderr: `Python script execution failed: ${errorMessage}`,
+                generatedFiles: [],
+                parsedMigrationData: null
+              }
+            }
+          });
+          
+          // Update repository to point to this failed report
+          await storage.updateRepositoryAnalysis(repository.id, new Date(), failedReport.id);
+          
+          broadcastLog('INFO', `Failed analysis report stored with ID: ${failedReport.id}`);
+        } catch (storageError) {
+          broadcastLog('ERROR', `Failed to store error report: ${storageError instanceof Error ? storageError.message : 'Unknown error'}`);
+        }
         
         res.status(500).json({
-          error: pythonError instanceof Error ? pythonError.message : 'Migration analysis failed'
+          error: errorMessage
         });
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Analysis operation failed";
+      
+      // CRITICAL FIX: Store failed analysis for general route errors too
+      if (req.body.repositoryId) {
+        try {
+          const failedReport = await storage.createAnalysisReport({
+            repositoryId: req.body.repositoryId,
+            analysisType: 'migration' as any,
+            results: {
+              pythonScriptOutput: {
+                exitCode: -1,
+                error: errorMessage,
+                stderr: `Analysis route failed: ${errorMessage}`,
+                generatedFiles: [],
+                parsedMigrationData: null
+              }
+            }
+          });
+          
+          // Update repository to point to this failed report
+          await storage.updateRepositoryAnalysis(req.body.repositoryId, new Date(), failedReport.id);
+          
+          broadcastLog('INFO', `Failed analysis report stored for route error with ID: ${failedReport.id}`);
+        } catch (storageError) {
+          broadcastLog('ERROR', `Failed to store route error report: ${storageError instanceof Error ? storageError.message : 'Unknown error'}`);
+        }
+      }
+      
       res.status(500).json({ 
-        error: error instanceof Error ? error.message : "Analysis operation failed" 
+        error: errorMessage
       });
     }
   });
@@ -1631,7 +1711,47 @@ export async function registerRoutes(app: Application): Promise<Server> {
     try {
       const { repositoryId } = req.params;
       
-      // Get all analysis reports for this repository, including failed ones
+      // CRITICAL FIX: First check repository's lastReportId
+      const repository = await storage.getRepository(repositoryId);
+      
+      if (repository?.lastReportId) {
+        try {
+          const latestReport = await storage.getAnalysisReport(repository.lastReportId);
+          if (latestReport) {
+            broadcastLog('INFO', `Using repository's lastReportId: ${repository.lastReportId}`);
+            
+            // Check if it's a failed report
+            const pythonOutput = (latestReport.results as any)?.pythonScriptOutput;
+            if (pythonOutput?.error || pythonOutput?.exitCode !== 0 || !pythonOutput?.parsedMigrationData) {
+              const errorMessage = pythonOutput?.error || 'Analysis failed to generate migration data';
+              
+              res.json({ 
+                structuredData: null,
+                status: 'failed',
+                error: errorMessage,
+                reportId: latestReport.id,
+                createdAt: latestReport.createdAt
+              });
+              return;
+            }
+            
+            // It's a successful report with structured data
+            if (pythonOutput?.parsedMigrationData) {
+              res.json({
+                structuredData: pythonOutput.parsedMigrationData,
+                status: 'ready',
+                reportId: latestReport.id,
+                createdAt: latestReport.createdAt
+              });
+              return;
+            }
+          }
+        } catch (reportError) {
+          broadcastLog('WARN', `Could not fetch report ${repository.lastReportId}: ${reportError instanceof Error ? reportError.message : 'Unknown error'}`);
+        }
+      }
+      
+      // Fallback: Get all analysis reports for this repository
       const reports = await storage.getAnalysisReportsByRepository(repositoryId);
       
       if (reports.length === 0) {
