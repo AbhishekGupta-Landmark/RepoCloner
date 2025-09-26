@@ -1603,45 +1603,81 @@ export async function registerRoutes(app: Application): Promise<Server> {
     try {
       const { repositoryId } = req.params;
       
-      // Find the most recent generated migration report file (same logic as Reports download)
+      // Get all analysis reports for this repository, including failed ones
       const reports = await storage.getAnalysisReportsByRepository(repositoryId);
-      const latestReport = reports
+      
+      if (reports.length === 0) {
+        res.json({ structuredData: null, status: 'no_analysis' });
+        return;
+      }
+      
+      // Find the most recent successful report with structured data
+      const successfulReport = reports
         .filter(report => report.results && (report.results as any).pythonScriptOutput?.generatedFiles)
         .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
       
-      if (!latestReport) {
-        res.json({ structuredData: null });
+      // Find the most recent report (successful or failed) to check for failures
+      const latestReport = reports
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
+      
+      // If we have a successful report, return its data
+      if (successfulReport) {
+        const pythonOutput = (successfulReport.results as any).pythonScriptOutput;
+        const markdownFile = pythonOutput.generatedFiles.find((file: any) => file.name.endsWith('.md'));
+        
+        if (markdownFile) {
+          // Use same path resolution as download route
+          const filePath = await resolveReportFilePath(repositoryId, markdownFile.name);
+          if (filePath) {
+            // Get structured data from Python script output (already parsed during analysis)
+            const structuredData = pythonOutput.parsedMigrationData || null;
+            
+            broadcastLog('INFO', `Serving structured migration data for repository ${repositoryId}: Data found`);
+            
+            res.json({ 
+              structuredData,
+              reportId: successfulReport.id,
+              createdAt: successfulReport.createdAt,
+              status: 'success'
+            });
+            return;
+          }
+        }
+      }
+      
+      // If no successful report but we have reports, check if the latest one failed
+      if (latestReport && !successfulReport) {
+        // Determine failure reason
+        let errorMessage = 'Unknown error occurred during analysis';
+        
+        // Check for Python script failure (no pythonScriptOutput)
+        if (!latestReport.results || !(latestReport.results as any).pythonScriptOutput) {
+          errorMessage = 'Python script execution failed';
+        }
+        // Check for AI/analysis failure (pythonScriptOutput exists but no parsedMigrationData)
+        else if (!(latestReport.results as any).pythonScriptOutput.parsedMigrationData) {
+          errorMessage = 'AI analysis failed to generate migration data';
+        }
+        // Check for file generation failure (no generated files)
+        else if (!(latestReport.results as any).pythonScriptOutput.generatedFiles?.length) {
+          errorMessage = 'Failed to generate migration report files';
+        }
+        
+        broadcastLog('WARN', `Analysis failure detected for repository ${repositoryId}: ${errorMessage}`);
+        
+        res.json({ 
+          structuredData: null,
+          status: 'failed',
+          error: errorMessage,
+          reportId: latestReport.id,
+          createdAt: latestReport.createdAt
+        });
         return;
       }
       
-      // Get the generated markdown file (same as Reports download logic)
-      const pythonOutput = (latestReport.results as any).pythonScriptOutput;
-      const markdownFile = pythonOutput.generatedFiles.find((file: any) => file.name.endsWith('.md'));
+      // No reports at all
+      res.json({ structuredData: null, status: 'no_analysis' });
       
-      if (!markdownFile) {
-        res.json({ structuredData: null });
-        return;
-      }
-      
-      // Use same path resolution as download route
-      const filePath = await resolveReportFilePath(repositoryId, markdownFile.name);
-      if (!filePath) {
-        res.json({ structuredData: null });
-        return;
-      }
-      
-      // Read and parse the markdown file
-      const fs = await import('fs');
-      const fileContent = await fs.promises.readFile(filePath, 'utf-8');
-      
-      // Parse markdown content to structured data (same logic as Python script output)
-      const structuredData = pythonOutput.parsedMigrationData || null;
-      
-      res.json({ 
-        structuredData,
-        reportId: latestReport.id,
-        createdAt: latestReport.createdAt
-      });
     } catch (error) {
       console.error('Error fetching structured migration data:', error);
       res.status(500).json({ error: 'Failed to fetch structured migration data' });

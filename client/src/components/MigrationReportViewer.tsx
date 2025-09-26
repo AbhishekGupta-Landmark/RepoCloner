@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileText, Code, BarChart3, Loader2, RefreshCw } from 'lucide-react';
+import { FileText, Code, BarChart3, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface KafkaUsageItem {
@@ -72,7 +72,52 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
     );
   }
 
+  // Handle different analysis states
   if (!data?.structuredData) {
+    // Analysis failed - show error message
+    if (data?.status === 'failed') {
+      return (
+        <div className="space-y-4">
+          <Card className="border-red-200 dark:border-red-800">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                <AlertTriangle className="h-5 w-5" />
+                Migration Analysis Failed
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm mb-4 text-red-600 dark:text-red-400">
+                Migration Analysis failed due to: {data.error}
+              </p>
+              <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-md">
+                <p className="text-sm text-red-700 dark:text-red-300 mb-2">
+                  <strong>Common solutions:</strong>
+                </p>
+                <ul className="list-disc list-inside text-sm space-y-1 text-red-600 dark:text-red-400">
+                  <li>Check AI settings and ensure EPAM Claude API credentials are valid</li>
+                  <li>Verify the repository contains Kafka-related code</li>
+                  <li>Try running the analysis again</li>
+                </ul>
+              </div>
+              <div className="mt-4 flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => refetch()}
+                  disabled={isLoading}
+                  className="border-red-200 text-red-600 hover:bg-red-50"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                  Check Again
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
+    // No analysis has been run yet - show setup instructions
     return (
       <div className="space-y-4">
         <Card className="border-blue-200 dark:border-blue-800">
