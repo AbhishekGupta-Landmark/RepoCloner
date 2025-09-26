@@ -251,6 +251,50 @@ def scan_for_kafka_usage_ai(state: RepoAnalysisState) -> RepoAnalysisState:
 
 # Static analysis fallback implemented - reports generated even when AI fails
 
+def extract_description_and_diff(raw: str) -> tuple[str, str]:
+    """
+    Extract description and diff content from AI response.
+    Returns (description, diff_content) tuple.
+    """
+    s = raw.strip()
+    
+    # Find all fenced code blocks
+    fenced_blocks = list(re.finditer(r"```(\w+)?\s*\n([\s\S]*?)\n```", s, re.I))
+    
+    # Look for diff/patch blocks first
+    for match in fenced_blocks:
+        language = match.group(1) or ""
+        content = match.group(2).strip()
+        
+        # Check if this is a diff block by language or content
+        if (language.lower() in ["diff", "patch"] or 
+            re.search(r"^(diff --git|---\s|\+\+\+\s|@@)", content, re.M)):
+            description = s[:match.start()].strip()
+            return description, content
+    
+    # If no suitable fenced block, look for diff markers with stronger validation
+    lines = s.splitlines()
+    diff_start = None
+    
+    for i, line in enumerate(lines):
+        # Only treat as diff start if we see proper diff headers
+        if re.match(r"^(diff --git|index\s|---\s[^\-]|\+\+\+\s[^\+])", line):
+            diff_start = i
+            break
+        # Look for hunk headers
+        elif re.match(r"^@@\s", line):
+            diff_start = i
+            break
+    
+    # If we found a proper diff start, split there
+    if diff_start is not None:
+        description = "\n".join(lines[:diff_start]).strip()
+        diff_content = "\n".join(lines[diff_start:]).strip()
+        return description, diff_content
+    
+    # If no diff markers found, treat entire response as description
+    return s, ""
+
 def generate_code_diffs(state: RepoAnalysisState) -> RepoAnalysisState:
     llm = ApiKeyOnlyChatModel(
         model_name=state.get('model', DEFAULT_MODEL), 
@@ -292,7 +336,17 @@ def generate_code_diffs(state: RepoAnalysisState) -> RepoAnalysisState:
         - If no Kafka usage is present, return an empty diff.
         """
         resp = llm.invoke([HumanMessage(content=prompt)])
-        diffs.append({"file": file_rel, "diff": resp.content})
+        
+        # Extract description and diff content separately
+        content = resp.content if isinstance(resp.content, str) else str(resp.content)
+        description, diff_content = extract_description_and_diff(content)
+        
+        diffs.append({
+            "file": file_rel,
+            "diff_content": diff_content,
+            "description": description,
+            "language": "diff"
+        })
     
     print(f"Generated diffs for {len(diffs)} files.")
 
@@ -327,17 +381,27 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
         f.write("## 2. Code Migration Diffs\n\n")
         diffs = state.get("code_diffs", [])
         for diff in diffs:
-            file_name = diff.get("file", "").lower()
-            file_diff = diff.get("diff", "")
+            file_name = diff.get("file", "")
+            file_diff = diff.get("diff_content", "") or diff.get("diff", "")
+            description = diff.get("description", "")
 
             # Ignore README.md or other excluded files
-            if file_name == "readme.md":
+            if file_name.lower() == "readme.md":
                 continue
 
             f.write(f"### {file_name}\n")
-            f.write("```diff\n")
-            f.write(file_diff.strip() + "\n")
-            f.write("```\n\n")
+            
+            # Write description above the code block if it exists
+            if description:
+                f.write(f"{description}\n\n")
+            
+            # Only write diff block if there's actual diff content
+            if file_diff:
+                f.write("```diff\n")
+                f.write(file_diff.strip() + "\n")
+                f.write("```\n\n")
+            else:
+                f.write("*No diff content generated*\n\n")
 
 
     print(f"✅ Streaming migration report written to {report_path}")
@@ -460,7 +524,9 @@ if __name__ == "__main__":
                                     })
                                     code_diffs.append({
                                         'file': relative_path,
-                                        'diff': f'''- // Original Kafka implementation\n+ // Recommended Azure Service Bus migration:\n+ using Azure.Messaging.ServiceBus;\n+ // Replace Kafka producers with ServiceBusClient\n+ // Replace Kafka consumers with ServiceBusReceiver\n+ // Update configuration to use Service Bus connection strings'''
+                                        'diff_content': f'''- // Original Kafka implementation\n+ // Recommended Azure Service Bus migration:\n+ using Azure.Messaging.ServiceBus;\n+ // Replace Kafka producers with ServiceBusClient\n+ // Replace Kafka consumers with ServiceBusReceiver\n+ // Update configuration to use Service Bus connection strings''',
+                                        'description': 'Static analysis detected Kafka usage - recommended Azure Service Bus migration',
+                                        'language': 'diff'
                                     })
                         except Exception:
                             continue
@@ -471,7 +537,7 @@ if __name__ == "__main__":
                 f.write("*Generated by static analysis*\n\n")
                 
                 # Kafka inventory section
-                f.write("## Kafka Inventory\n\n")
+                f.write("## 1. Kafka Usage Inventory\n\n")
                 if kafka_files:
                     f.write("Files in your repository that use Kafka APIs:\n\n")
                     f.write("| File | APIs Used | Summary |\n")
@@ -484,12 +550,17 @@ if __name__ == "__main__":
                 f.write("\n")
                 
                 # Code migrations section
-                f.write("## Code Migrations\n\n")
+                f.write("## 2. Code Migration Diffs\n\n")
                 if code_diffs:
                     for diff in code_diffs:
                         f.write(f"### {diff['file']}\n")
+                        
+                        # Write description above the code block if it exists
+                        if diff.get('description'):
+                            f.write(f"{diff['description']}\n\n")
+                        
                         f.write("```diff\n")
-                        f.write(diff['diff'])
+                        f.write(diff.get('diff_content', diff.get('diff', '')))
                         f.write("\n```\n\n")
                 else:
                     f.write("No migration recommendations available from static analysis.\n")

@@ -19,6 +19,7 @@ class CodeDiff:
     file: str
     diff_content: str
     language: str = "diff"
+    description: str = ""
 
 @dataclass
 class MigrationReport:
@@ -113,18 +114,24 @@ class MigrationReportParser:
             
         diff_section = match.group(1)
         
-        # Find individual file diffs
-        file_pattern = r'### ([^\n]+)\n```diff\n(.*?)\n```'
+        # Find individual file diffs with optional descriptions
+        # Pattern matches: ### filename\n[optional description]\n```diff\n...\n```
+        file_pattern = r'### ([^\n]+)\n(.*?)```diff\n(.*?)\n```'
         file_matches = re.finditer(file_pattern, diff_section, re.DOTALL)
         
         for file_match in file_matches:
             file_name = file_match.group(1).strip()
-            diff_content = file_match.group(2).strip()
+            description_part = file_match.group(2).strip()
+            diff_content = file_match.group(3).strip()
+            
+            # Extract description (text between filename and ```diff)
+            description = description_part if description_part and not description_part.startswith('```') else ""
             
             diffs.append(CodeDiff(
                 file=file_name,
                 diff_content=diff_content,
-                language="diff"
+                language="diff",
+                description=description
             ))
             
         return diffs
@@ -182,7 +189,8 @@ class MigrationReportParser:
                 {
                     "file": diff.file,
                     "diff_content": diff.diff_content,
-                    "language": diff.language
+                    "language": diff.language,
+                    "description": diff.description
                 }
                 for diff in report.code_diffs
             ],
