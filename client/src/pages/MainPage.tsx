@@ -43,7 +43,7 @@ const getProviderIcon = (provider: string) => {
 export default function MainPage() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("analysis");
+  const [activeTab, setActiveTab] = useState("technology");
   const settingsAppliedRef = useRef(false);
   const { 
     user, 
