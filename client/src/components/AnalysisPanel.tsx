@@ -49,7 +49,7 @@ export default function AnalysisPanel() {
     <div className="h-full flex flex-col">
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">AI Code Analysis</h2>
+          <h2 className="text-lg font-semibold">OpenAI Code Analysis</h2>
           <Button 
             onClick={handleAnalysis}
             disabled={isLoading || !currentRepository || !isCodeAnalysisEnabled}
