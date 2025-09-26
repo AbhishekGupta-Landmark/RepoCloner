@@ -18,10 +18,27 @@ def parse_args():
     parser = argparse.ArgumentParser(description='AI-powered repository analysis for Kafka to Azure Service Bus migration')
     parser.add_argument('repo_url', help='Repository URL to analyze')
     parser.add_argument('repo_path', help='Local path to clone/analyze repository')
-    parser.add_argument('--model', default=os.environ.get("AI_MODEL", "gpt-4"), help='AI model to use')
-    parser.add_argument('--api-version', default=os.environ.get("AI_API_VERSION", "2024-02-15-preview"), help='API version')
-    parser.add_argument('--base-url', default=os.environ.get("AI_ENDPOINT_URL", "https://api.openai.com/v1/chat/completions"), help='API endpoint URL')
-    parser.add_argument('--api-key', default=os.environ.get("AI_API_KEY"), help='AI API key (required)')
+    
+    # AI API key with EPAM fallback
+    ai_api_key = os.environ.get("AI_API_KEY")
+    base_url = os.environ.get("AI_ENDPOINT_URL", "https://api.openai.com/v1/chat/completions")
+    model = os.environ.get("AI_MODEL", "gpt-4")
+    api_version = os.environ.get("AI_API_VERSION", "2024-02-15-preview")
+    
+    if not ai_api_key:
+        # Fallback to EPAM AI proxy if no app-configured AI key
+        ai_api_key = os.environ.get("EPAM_AI_API_KEY")
+        if ai_api_key:
+            print("🔧 Using EPAM AI proxy credentials from environment")
+            # Set EPAM-specific defaults
+            base_url = "https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions"
+            model = "claude-3-5-haiku@20241022"
+            api_version = "3.5 Haiku"
+    
+    parser.add_argument('--model', default=model, help='AI model to use')
+    parser.add_argument('--api-version', default=api_version, help='API version')
+    parser.add_argument('--base-url', default=base_url, help='API endpoint URL')
+    parser.add_argument('--api-key', default=ai_api_key, help='AI API key (required)')
     return parser.parse_args()
 
 # Safe defaults - no hardcoded credentials
