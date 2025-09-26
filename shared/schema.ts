@@ -100,6 +100,9 @@ export interface CodeDiff {
   file: string;
   diff_content: string;
   language: string;
+  description?: string;
+  key_changes?: string[];
+  notes?: string[];
 }
 
 export interface MigrationReportData {

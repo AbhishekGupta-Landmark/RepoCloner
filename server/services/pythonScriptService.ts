@@ -181,8 +181,13 @@ class PythonScriptService {
         const maskedArgs = this.maskSensitiveArgs(scriptArgs);
         broadcastLog('INFO', `Final script command: python ${defaultScriptPath} ${maskedArgs.join(' ')}`);
       } else {
-        broadcastLog('WARN', 'No AI settings provided - Python script may use defaults or fail');
+        broadcastLog('ERROR', 'AI settings are required for migration analysis');
         broadcastLog('DEBUG', `Condition failed: aiSettings=${!!aiSettings}, apiKey=${aiSettings?.apiKey}, model=${aiSettings?.model}`);
+        return {
+          success: false,
+          error: 'AI configuration is required to perform migration analysis. Please configure AI settings first.',
+          exitCode: -1
+        };
       }
       
       broadcastLog('INFO', `🐍 About to execute Python script with ${scriptArgs.length} arguments`);
@@ -258,7 +263,7 @@ class PythonScriptService {
       broadcastLog('INFO', 'default.py not found, using generated script content');
       const scriptContent = this.generatePostCloneScript(repositoryPath, repositoryUrl);
       
-      // Build args with AI settings for fallback case too
+      // AI settings are required for migration analysis
       let scriptArgs = [repositoryUrl, repositoryPath];
       if (aiSettings && aiSettings.apiKey && aiSettings.model) {
         scriptArgs.push(
@@ -271,6 +276,13 @@ class PythonScriptService {
         if (aiSettings.apiVersion) {
           scriptArgs.push('--api-version', aiSettings.apiVersion);
         }
+      } else {
+        broadcastLog('ERROR', 'AI settings are required for migration analysis (fallback case)');
+        return {
+          success: false,
+          error: 'AI configuration is required to perform migration analysis. Please configure AI settings first.',
+          exitCode: -1
+        };
       }
       
       broadcastLog('INFO', `🐍 About to execute generated Python script with ${scriptArgs.length} arguments`);
