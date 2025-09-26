@@ -661,25 +661,26 @@ if __name__ == "__main__":
   private parseKafkaInventory(content: string): any[] {
     const inventory: any[] = [];
     
-    // Multiple patterns to match different section formats - LOOSER MATCHING
+    // Fixed pattern to match Kafka Inventory section properly
     const sectionPatterns = [
-      // Exact section match with optional blank lines
-      /##\s*\d*\.?\s*Kafka\s*(Usage\s*)?(Inventory|Files|Analysis)[\s\S]*?\n\n?(.*?)(?=\n## |\n# |\Z)/i,
-      /##\s*Kafka\s*(Inventory|Files|Usage)[\s\S]*?\n\n?(.*?)(?=\n## |\n# |\Z)/i,
-      /####?\s*Kafka\s*(Inventory|Files)[\s\S]*?\n\n?(.*?)(?=\n## |\n# |\Z)/i,
+      // Fixed pattern - capture everything after the header until next section
+      /##\s*Kafka\s*(Inventory|Files|Usage)([\s\S]*?)(?=\n## |\n# |\Z)/i,
+      /##\s*\d*\.?\s*Kafka\s*(Usage\s*)?(Inventory|Files|Analysis)([\s\S]*?)(?=\n## |\n# |\Z)/i,
+      /####?\s*Kafka\s*(Inventory|Files)([\s\S]*?)(?=\n## |\n# |\Z)/i,
       
       // File-based headings
-      /####?\s*File:\s*[\s\S]*?\n\n?(.*?)(?=\n## |\n# |\Z)/i,
+      /####?\s*File:\s*([\s\S]*?)(?=\n## |\n# |\Z)/i,
       
       // General Kafka mentions
-      /##\s*.*Kafka.*[\s\S]*?\n\n?(.*?)(?=\n## |\n# |\Z)/i
+      /##\s*.*Kafka.*([\s\S]*?)(?=\n## |\n# |\Z)/i
     ];
     
     let sectionContent = '';
     for (const pattern of sectionPatterns) {
       const match = content.match(pattern);
       if (match) {
-        sectionContent = match[match.length - 1]; // Last capture group
+        // For the fixed patterns, use the correct capture group (index 2)
+        sectionContent = match[2] || match[match.length - 1]; // Use index 2 or last capture group
         break;
       }
     }
@@ -712,11 +713,14 @@ if __name__ == "__main__":
           foundTableRows = true;
           const columns = line.split('|').map(col => col.trim()).filter(col => col);
           if (columns.length >= 2) {
-            inventory.push({
-              file: columns[0] || 'Unknown file',
-              apis_used: columns[1] || 'N/A',
-              summary: columns[2] || 'Kafka usage detected'
-            });
+            // Skip header row (File | APIs Used | Summary)
+            if (columns[0].toLowerCase() !== 'file' && columns[1].toLowerCase() !== 'apis used') {
+              inventory.push({
+                file: columns[0] || 'Unknown file',
+                apis_used: columns[1] || 'N/A',
+                summary: columns[2] || 'Kafka usage detected'
+              });
+            }
           }
         } else if (!line.startsWith('|') && inTable) {
           break;
