@@ -99,7 +99,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
                   <strong>Common solutions:</strong>
                 </p>
                 <ul className="list-disc list-inside text-sm space-y-1 text-red-600 dark:text-red-400">
-                  <li>Check AI settings and ensure EPAM Claude API credentials are valid</li>
+                  <li>Check AI settings and ensure AI API credentials are valid</li>
                   <li>Verify the repository contains Kafka-related code</li>
                   <li>Try running the analysis again</li>
                 </ul>
@@ -139,7 +139,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
               No structured migration report available yet. To generate one:
             </p>
             <ol className="list-decimal list-inside text-sm space-y-1 text-muted-foreground">
-              <li>Configure AI settings with your EPAM Claude API credentials</li>
+              <li>Configure AI settings with your AI API credentials</li>
               <li>Clone a repository containing Kafka code</li>
               <li>The AI will automatically analyze and generate a migration report</li>
             </ol>
