@@ -788,78 +788,176 @@ if __name__ == "__main__":
 
   private parseCodeDiffs(content: string): any[] {
     const diffs: any[] = [];
+    console.log('🔧 Starting parseCodeDiffs with streaming parser');
     
-    // Multiple patterns for different diff formats - COMPREHENSIVE MATCHING
-    const diffPatterns = [
-      /###?\s*([^\n]+)\n```diff\n([\s\S]*?)\n```/g,          // ### file\n```diff
-      /###?\s*([^\n]+)\n```patch\n([\s\S]*?)\n```/g,         // ### file\n```patch
-      /###?\s*([^\n]+)\n```\n([\s\S]*?)\n```/g,              // ### file\n```
-      /####?\s*File:\s*([^\n]+)\n```[\w]*\n([\s\S]*?)\n```/g, // #### File: path\n```
-      /##\s*([^\n]+)\n```diff\n([\s\S]*?)\n```/g,            // ## file\n```diff
-      /```diff\n([\s\S]*?)\n```/g,                           // Any ```diff block
-      /```patch\n([\s\S]*?)\n```/g                           // Any ```patch block
-    ];
+    const lines = content.split('\n');
+    let currentFile = '';
+    let inCodeFence = false;
+    let fenceLanguage = '';
+    let codeBlock: string[] = [];
+    let fencesFound = 0;
+    let blocksAccepted = 0;
     
-    for (const pattern of diffPatterns) {
-      let match;
-      pattern.lastIndex = 0; // Reset regex
-      while ((match = pattern.exec(content)) !== null) {
-        // Handle patterns with different capture group counts
-        if (match.length >= 3 && match[1] && match[2]) {
-          // Pattern has both file and content groups
-          diffs.push({
-            file: match[1].trim(),
-            diff_content: match[2].trim(),
-            language: 'diff'
-          });
-        } else if (match.length >= 2 && match[1]) {
-          // Pattern has only content group (anonymous diff block)
-          diffs.push({
-            file: `Migration Diff ${diffs.length + 1}`,
-            diff_content: match[1].trim(),
-            language: 'diff'
-          });
-        }
-      }
-    }
-    
-    // Fallback: look for any code blocks with +/- changes
-    if (diffs.length === 0) {
-      const codeBlockPattern = /```[\w]*\n([\s\S]*?)\n```/g;
-      let match;
-      while ((match = codeBlockPattern.exec(content)) !== null) {
-        const blockContent = match[1];
-        if (blockContent.includes('+ ') || blockContent.includes('- ') || 
-            blockContent.includes('+') || blockContent.includes('-')) {
-          diffs.push({
-            file: `Migration Code ${diffs.length + 1}`,
-            diff_content: blockContent.trim(),
-            language: 'diff'
-          });
-        }
-      }
-    }
-    
-    // Additional fallback: scan for specific migration patterns
-    if (diffs.length === 0) {
-      const migrationPatterns = [
-        /ServiceBus|Azure|Connection|Producer|Consumer/gi
-      ];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       
-      for (const pattern of migrationPatterns) {
-        const matches = Array.from(content.matchAll(pattern));
-        if (matches.length > 0) {
+      // Track current file from headings (### filename or #### filename)
+      const headingMatch = line.match(/^#{3,6}\s+(.+?)\s*$/);
+      if (headingMatch) {
+        currentFile = headingMatch[1].trim();
+        console.log(`📁 Found file heading: "${currentFile}"`);
+        continue;
+      }
+      
+      // Detect code fence opening
+      const fenceOpenMatch = line.match(/^```(\w+)?\s*$/);
+      if (fenceOpenMatch && !inCodeFence) {
+        inCodeFence = true;
+        fenceLanguage = fenceOpenMatch[1] || '';
+        codeBlock = [];
+        fencesFound++;
+        console.log(`🚪 Opening fence: language="${fenceLanguage}", file="${currentFile}"`);
+        continue;
+      }
+      
+      // Detect code fence closing
+      if (line.match(/^```\s*$/) && inCodeFence) {
+        inCodeFence = false;
+        console.log(`🚪 Closing fence: ${codeBlock.length} lines collected`);
+        
+        // Process the collected code block
+        const normalizedDiff = this.normalizeDiffBlock(codeBlock, fenceLanguage);
+        if (normalizedDiff && normalizedDiff.length > 0) {
+          const fileName = currentFile || `Migration Diff ${diffs.length + 1}`;
           diffs.push({
-            file: 'Detected Migration Changes',
-            diff_content: `Found ${matches.length} migration-related changes in the codebase`,
-            language: 'text'
+            file: fileName,
+            diff_content: normalizedDiff,
+            language: 'diff'
           });
-          break;
+          blocksAccepted++;
+          console.log(`✅ Accepted diff block for "${fileName}" (${normalizedDiff.split('\n').length} lines)`);
+          console.log(`📝 Preview: ${normalizedDiff.substring(0, 120)}...`);
+        } else {
+          console.log(`❌ Rejected block for "${currentFile}" - no valid diff content`);
         }
+        
+        codeBlock = [];
+        fenceLanguage = '';
+        continue;
+      }
+      
+      // Collect lines inside code fence
+      if (inCodeFence) {
+        codeBlock.push(line);
       }
     }
     
+    // Fallback: scan for unfenced diff-like content under headings
+    if (diffs.length === 0) {
+      console.log('🔄 No fenced diffs found, trying fallback parser...');
+      diffs.push(...this.parseFallbackDiffs(content));
+    }
+    
+    console.log(`🎯 parseCodeDiffs results: ${fencesFound} fences found, ${blocksAccepted} blocks accepted, ${diffs.length} total diffs`);
     return diffs;
+  }
+  
+  /**
+   * Normalize a code block to extract only actual diff content
+   */
+  private normalizeDiffBlock(lines: string[], language: string): string {
+    // Check if this should be treated as a diff block
+    const isDiffLang = ['diff', 'patch'].includes(language.toLowerCase());
+    const hasDiffMarkers = lines.filter(line => 
+      /^(\+|-|@@|--- |\+\+\+ |diff --git|Index:)/.test(line)
+    ).length >= 3;
+    
+    if (!isDiffLang && !hasDiffMarkers) {
+      return ''; // Not a diff block
+    }
+    
+    // Remove any nested fence lines within the block
+    let cleanedLines = lines.filter(line => !line.match(/^```.*$/));
+    
+    // Find first and last diff marker lines
+    let firstDiffIndex = -1;
+    let lastDiffIndex = -1;
+    
+    for (let i = 0; i < cleanedLines.length; i++) {
+      if (/^(\+|-|@@|--- |\+\+\+ |diff --git|Index:|\s*\+|\s*-)/.test(cleanedLines[i])) {
+        if (firstDiffIndex === -1) firstDiffIndex = i;
+        lastDiffIndex = i;
+      }
+    }
+    
+    // Extract only the diff content
+    if (firstDiffIndex !== -1 && lastDiffIndex !== -1) {
+      const diffLines = cleanedLines.slice(firstDiffIndex, lastDiffIndex + 1);
+      return diffLines.join('\n').trim();
+    }
+    
+    return '';
+  }
+  
+  /**
+   * Fallback parser for unfenced diff content
+   */
+  private parseFallbackDiffs(content: string): any[] {
+    const fallbackDiffs: any[] = [];
+    const lines = content.split('\n');
+    let currentFile = '';
+    let diffLines: string[] = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      // Track file headings
+      const headingMatch = line.match(/^#{3,6}\s+(.+?)\s*$/);
+      if (headingMatch) {
+        // Save previous diff if exists
+        if (currentFile && diffLines.length > 0) {
+          fallbackDiffs.push({
+            file: currentFile,
+            diff_content: diffLines.join('\n').trim(),
+            language: 'diff'
+          });
+        }
+        
+        currentFile = headingMatch[1].trim();
+        diffLines = [];
+        continue;
+      }
+      
+      // Collect diff-like lines
+      if (/^(\+|-|@@|--- |\+\+\+ |diff --git|\s*\+|\s*-)/.test(line)) {
+        diffLines.push(line);
+      } else if (diffLines.length > 0 && line.trim() === '') {
+        // Allow empty lines within diff blocks
+        diffLines.push(line);
+      } else if (diffLines.length > 0) {
+        // Non-diff line encountered, save current diff if substantial
+        if (diffLines.length >= 3) {
+          fallbackDiffs.push({
+            file: currentFile || `Fallback Diff ${fallbackDiffs.length + 1}`,
+            diff_content: diffLines.join('\n').trim(),
+            language: 'diff'
+          });
+        }
+        diffLines = [];
+      }
+    }
+    
+    // Save final diff
+    if (currentFile && diffLines.length >= 3) {
+      fallbackDiffs.push({
+        file: currentFile,
+        diff_content: diffLines.join('\n').trim(),
+        language: 'diff'
+      });
+    }
+    
+    console.log(`🔄 Fallback parser found ${fallbackDiffs.length} diffs`);
+    return fallbackDiffs;
   }
 
   /**
