@@ -111,14 +111,9 @@ export default function AnalysisPanel() {
         <div className="flex gap-4">
           <div className="flex-1">
             <label className="block text-sm font-medium mb-2">Analysis Type</label>
-            <Select value={analysisType} onValueChange={handleAnalysisTypeChange}>
-              <SelectTrigger data-testid="select-analysis-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="migration">Migration Analysis</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="px-3 py-2 bg-muted/50 rounded-md border text-sm">
+              Migration Analysis
+            </div>
           </div>
         </div>
       </div>
