@@ -660,9 +660,12 @@ if __name__ == "__main__":
 
   private parseKafkaInventory(content: string): any[] {
     const inventory: any[] = [];
+    console.log('🔍 Starting parseKafkaInventory with content length:', content.length);
     
-    // Fixed pattern to match Kafka Inventory section properly
+    // Fixed pattern to match Kafka Inventory section properly  
     const sectionPatterns = [
+      // Pattern specifically for "## 1. Kafka Usage Inventory" format
+      /##\s*\d*\.?\s*Kafka\s*Usage\s*Inventory([\s\S]*?)(?=\n## |\n# |\Z)/i,
       // Fixed pattern - capture everything after the header until next section
       /##\s*Kafka\s*(Inventory|Files|Usage)([\s\S]*?)(?=\n## |\n# |\Z)/i,
       /##\s*\d*\.?\s*Kafka\s*(Usage\s*)?(Inventory|Files|Analysis)([\s\S]*?)(?=\n## |\n# |\Z)/i,
@@ -676,11 +679,14 @@ if __name__ == "__main__":
     ];
     
     let sectionContent = '';
-    for (const pattern of sectionPatterns) {
+    for (let i = 0; i < sectionPatterns.length; i++) {
+      const pattern = sectionPatterns[i];
       const match = content.match(pattern);
       if (match) {
-        // For the fixed patterns, use the correct capture group (index 2)
-        sectionContent = match[2] || match[match.length - 1]; // Use index 2 or last capture group
+        console.log(`✅ Pattern ${i} matched:`, match[0]?.substring(0, 100) + '...');
+        // For the patterns that have multiple capture groups, use the right one
+        sectionContent = match[1] || match[2] || match[match.length - 1];
+        console.log('📄 Section content preview:', sectionContent?.substring(0, 200) + '...');
         break;
       }
     }
