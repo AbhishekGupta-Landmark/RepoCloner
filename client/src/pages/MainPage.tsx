@@ -507,7 +507,7 @@ export default function MainPage() {
               {/* Main Analysis Panel */}
               <ResizablePanel defaultSize={100} minSize={30}>
                 <div className="h-full flex flex-col">
-                  <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+                  <Tabs defaultValue="technology" value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
                     <motion.div
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
