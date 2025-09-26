@@ -798,6 +798,7 @@ if __name__ == "__main__":
     let fencesFound = 0;
     let blocksAccepted = 0;
     let keyChanges: string[] = [];
+    let descriptionLines: string[] = []; // Track description text before code blocks
     
     // Extract key changes section first
     keyChanges = this.extractKeyChanges(content);
@@ -832,6 +833,12 @@ if __name__ == "__main__":
         // Process the collected code block
         const structuredDiff = this.parseStructuredDiff(codeBlock, fenceLanguage, currentFile);
         if (structuredDiff && structuredDiff.diff_content && structuredDiff.diff_content.length > 0) {
+          // Add description text if we have any collected
+          if (descriptionLines.length > 0) {
+            structuredDiff.description = descriptionLines.join(' ');
+            console.log(`📝 Added description: "${structuredDiff.description}"`);
+            descriptionLines = []; // Reset for next block
+          }
           diffs.push(structuredDiff);
           blocksAccepted++;
           console.log(`✅ Accepted diff block for "${structuredDiff.file}" (${structuredDiff.hunks?.length || 0} hunks)`);
@@ -848,6 +855,15 @@ if __name__ == "__main__":
       // Collect lines inside code fence
       if (inCodeFence) {
         codeBlock.push(line);
+      }
+      
+      // If we're not in a code fence and not at a heading, collect as description
+      if (!inCodeFence && !headingMatch && line.trim() && !line.startsWith('#') && !line.startsWith('|') && !line.startsWith('```') && !line.startsWith('@@')) {
+        // Only collect non-empty, meaningful description lines
+        const trimmedLine = line.trim();
+        if (trimmedLine.length > 10 && !trimmedLine.startsWith('-') && !trimmedLine.startsWith('*')) {
+          descriptionLines.push(trimmedLine);
+        }
       }
     }
     
