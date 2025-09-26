@@ -149,7 +149,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
           <CardContent className="py-8">
             <div className="text-center">
               <BarChart3 className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
-              <h3 className="text-lg font-medium mb-2">Ready for Migration Analysis</h3>
+              <h3 className="text-lg font-medium mb-2">Migration Analysis Setup</h3>
               <p className="text-muted-foreground">
                 Once you run AI analysis on a Kafka repository, the structured migration data will appear here.
               </p>
