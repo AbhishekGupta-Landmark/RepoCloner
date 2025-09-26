@@ -188,6 +188,31 @@ class PythonScriptService {
         args: scriptArgs
       });
       
+      // DEBUGGING: Log expected MD file path and check what files actually exist
+      const expectedMdPattern = `migration-report-*.md`;
+      broadcastLog('INFO', `🐍 Expected MD file pattern: ${expectedMdPattern}`);
+      broadcastLog('INFO', `🐍 Repository working directory: ${repositoryPath}`);
+      
+      // Check if any migration report files were actually created
+      try {
+        const fs = await import('fs');
+        const files = await fs.promises.readdir(repositoryPath);
+        const migrationReports = files.filter(file => file.startsWith('migration-report-') && file.endsWith('.md'));
+        broadcastLog('INFO', `🐍 Found ${migrationReports.length} migration report files: ${migrationReports.join(', ')}`);
+        if (migrationReports.length > 0) {
+          migrationReports.forEach(file => {
+            const fullPath = path.join(repositoryPath, file);
+            broadcastLog('INFO', `🐍 MD file found at: ${fullPath}`);
+          });
+        } else {
+          broadcastLog('WARN', `🐍 No migration report MD files found in ${repositoryPath}`);
+          // List all files for debugging
+          broadcastLog('DEBUG', `🐍 All files in directory: ${files.join(', ')}`);
+        }
+      } catch (error) {
+        broadcastLog('ERROR', `🐍 Error checking for MD files: ${error}`);
+      }
+      
       broadcastLog('INFO', `🐍 Python script execution completed - Success: ${result.success}`);
       if (result.success) {
         broadcastLog('INFO', `🐍 Generated ${result.generatedFiles?.length || 0} files`);
