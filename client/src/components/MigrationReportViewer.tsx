@@ -4,9 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileText, Code, BarChart3, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
+import { FileText, Code, BarChart3, Loader2, RefreshCw, AlertTriangle, GitBranch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAnalysis } from '@/hooks/useAnalysis';
+import DiffViewer from '@/components/ui/DiffViewer';
+import KeyChanges from '@/components/ui/KeyChanges';
 
 interface KafkaUsageItem {
   file: string;
@@ -18,6 +20,9 @@ interface CodeDiff {
   file: string;
   diff_content: string;
   language: string;
+  hunks?: any[];
+  stats?: any;
+  key_changes?: string[];
 }
 
 interface MigrationReportData {
@@ -161,6 +166,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
   }
 
   const reportData: MigrationReportData = data.structuredData;
+  const keyChanges = reportData.code_diffs.length > 0 && reportData.code_diffs[0].key_changes ? reportData.code_diffs[0].key_changes : [];
 
   return (
     <div className="space-y-6" data-testid="migration-report-viewer">
@@ -272,43 +278,40 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
         </TabsContent>
 
         <TabsContent value="diffs" className="space-y-4">
+          {/* Key Changes Summary */}
+          {keyChanges.length > 0 && (
+            <KeyChanges 
+              changes={keyChanges}
+              title="Migration Summary"
+              data-testid="migration-key-changes"
+            />
+          )}
+          
+          {/* Interactive Diff Viewer */}
           <Card>
             <CardHeader>
-              <CardTitle>Code Migration Diffs</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <GitBranch className="h-5 w-5" />
+                Code Migration Diffs
+              </CardTitle>
               <CardDescription>
-                File-by-file migration changes from Kafka to Azure Service Bus
+                Interactive file-by-file migration changes from Kafka to Azure Service Bus
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-0">
               {reportData.code_diffs.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">
-                  No code migration diffs available.
-                </p>
+                <div className="p-6">
+                  <p className="text-muted-foreground text-center py-8">
+                    No code migration diffs available.
+                  </p>
+                </div>
               ) : (
-                <ScrollArea className="h-[600px]">
-                  <div className="space-y-6">
-                    {reportData.code_diffs.map((diff, index) => (
-                      <Card key={index} className="border-l-4 border-l-green-500">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base font-medium flex items-center gap-2">
-                            <Code className="h-4 w-4" />
-                            {diff.file}
-                          </CardTitle>
-                          <Badge variant="outline" className="w-fit">
-                            {diff.language}
-                          </Badge>
-                        </CardHeader>
-                        <CardContent>
-                          <pre className="bg-muted p-4 rounded-md overflow-x-auto text-sm">
-                            <code className="whitespace-pre-wrap break-words">
-                              {diff.diff_content}
-                            </code>
-                          </pre>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </ScrollArea>
+                <div className="p-6">
+                  <DiffViewer 
+                    diffs={reportData.code_diffs}
+                    data-testid="migration-diff-viewer"
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
