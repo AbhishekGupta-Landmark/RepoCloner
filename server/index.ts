@@ -6,6 +6,29 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Cache busting middleware - prevent browser caching of HTML files
+app.use((req, res, next) => {
+  // For HTML files and API endpoints, prevent caching entirely
+  if (req.path.endsWith('.html') || req.path === '/' || req.path.startsWith('/api')) {
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate, proxy-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      'Surrogate-Control': 'no-store'
+    });
+  }
+  
+  // For static assets (JS, CSS), allow caching but add version header
+  if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg)$/)) {
+    res.set({
+      'Cache-Control': 'public, max-age=0, must-revalidate',
+      'ETag': `"${Date.now()}"` // Dynamic ETag to force revalidation
+    });
+  }
+  
+  next();
+});
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;

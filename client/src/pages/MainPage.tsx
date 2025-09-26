@@ -43,7 +43,7 @@ const getProviderIcon = (provider: string) => {
 export default function MainPage() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("analysis");
+  const [activeTab, setActiveTab] = useState("technology");
   const settingsAppliedRef = useRef(false);
   const { 
     user, 
@@ -62,7 +62,8 @@ export default function MainPage() {
     toggleRepoPanel, 
     lastExpandedWidth, 
     setLastExpandedWidth, 
-    handleToggleRepoPanel 
+    handleToggleRepoPanel,
+    isCodeAnalysisEnabled
   } = useAppContext();
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
@@ -101,7 +102,9 @@ export default function MainPage() {
     if (currentRepository) {
       setActiveTab("technology");
     } else {
-      setActiveTab("analysis");
+      // Keep Technology Stack as default even when no repository is present
+      // Analysis tab should be disabled anyway without a repository
+      setActiveTab("technology");
     }
   }, [currentRepository]);
 
@@ -389,7 +392,7 @@ export default function MainPage() {
               whileHover={{ rotate: 90 }}
               transition={{ duration: 0.3, ease: "easeInOut" }}
             >
-              <Settings className="h-4 w-4" />
+              <Settings className="h-4 w-4 text-white" />
             </motion.div>
           </Button>
         </motion.div>
@@ -506,7 +509,7 @@ export default function MainPage() {
               {/* Main Analysis Panel */}
               <ResizablePanel defaultSize={100} minSize={30}>
                 <div className="h-full flex flex-col">
-                  <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+                  <Tabs defaultValue="technology" value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
                     <motion.div
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -535,7 +538,12 @@ export default function MainPage() {
                         </TabsTrigger>
                         <TabsTrigger 
                           value="analysis" 
-                          className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth hover:bg-blue-500/10 hover:text-blue-500 relative overflow-hidden"
+                          disabled={!isCodeAnalysisEnabled}
+                          className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden ${
+                            !isCodeAnalysisEnabled 
+                              ? 'opacity-50 cursor-not-allowed' 
+                              : 'hover:bg-blue-500/10 hover:text-blue-500'
+                          }`}
                           data-testid="tab-analysis"
                         >
                           <motion.div
@@ -659,7 +667,7 @@ export default function MainPage() {
                       whileHover={{ rotate: 180 }}
                       transition={{ duration: 0.3 }}
                     >
-                      <Settings className="h-5 w-5 text-primary" />
+                      <Settings className="h-5 w-5 text-white" />
                     </motion.div>
                     Settings
                   </DialogTitle>
@@ -672,6 +680,7 @@ export default function MainPage() {
           </Dialog>
         )}
       </AnimatePresence>
+      
     </motion.div>
   );
 }

@@ -1017,7 +1017,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
   });
 
   let repository: any = null; // Declare early
-  // Repository routes
+  // Repository routes - CLONE ONLY (separated from analysis)
   app.post("/api/repositories/clone", async (req, res) => {
     try {
       const { url, options } = req.body;
@@ -1097,16 +1097,14 @@ export async function registerRoutes(app: Application): Promise<Server> {
           return res.status(500).json({ error: pushResult.error });
         }
 
-        // Keep analysis clone for file downloads (don't clean up)
-
-
-        // Create repository record with new URL
+        // Create repository record with new URL - CLONE STATUS = CLONED
         repository = await storage.createRepository({
           name: createResult.repoName!,
           url,
           provider,
           clonedUrl: createResult.repoUrl!, // Use the new personal repo URL
           localPath: analysisCloneResult.localPath!, // Store the analysis clone path
+          cloneStatus: 'cloned', // Set status to cloned
           fileStructure,
           detectedTechnologies
         });
@@ -1189,16 +1187,14 @@ export async function registerRoutes(app: Application): Promise<Server> {
           return res.status(500).json({ error: pushResult.error });
         }
 
-        // Keep analysis clone for file downloads (don't clean up)
-
-
-        // Create repository record with new URL
+        // Create repository record with new URL - CLONE STATUS = CLONED
         repository = await storage.createRepository({
           name: createResult.repoName!,
           url,
           provider,
           clonedUrl: createResult.repoUrl!, // Use the new personal repo URL
           localPath: analysisCloneResult.localPath!, // Store the analysis clone path
+          cloneStatus: 'cloned', // Set status to cloned
           fileStructure,
           detectedTechnologies
         });
@@ -1230,73 +1226,251 @@ export async function registerRoutes(app: Application): Promise<Server> {
       const detectedTechnologies = await enhancedTechnologyDetectionService.detectTechnologies(cloneResult.localPath!);
       broadcastLog('INFO', `Technology detection completed. Found ${detectedTechnologies.length} technologies`);
 
-      // Create repository record
+      // Create repository record - CLONE STATUS = CLONED (no Python script execution)
       repository = await storage.createRepository({
         name: url.split('/').pop()?.replace('.git', '') || 'Unknown',
         url,
         provider,
         clonedUrl: cloneResult.remoteUrl,
         localPath: cloneResult.localPath!, // Store the clone path
+        cloneStatus: 'cloned', // Set status to cloned
         fileStructure,
         detectedTechnologies
       });
 
-      // Execute Python script after successful clone and repository creation
-      console.log("🔄 Starting Python script execution...");
-      broadcastLog('INFO', `Executing post-clone Python script for repository: ${url}`);
+      // Return response to React frontend - NO PYTHON SCRIPT EXECUTION
+      res.json({
+        success: true,
+        repository,
+        fileStructure,
+        detectedTechnologies,
+        message: "Repository cloned successfully. You can now run analysis from the Code Analysis tab."
+      });
+
+    } catch (error) {
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : "Clone operation failed" 
+      });
+    }
+  });
+
+  // NEW: Repository status endpoint
+  app.get("/api/repositories/:id/status", async (req, res) => {
+    try {
+      const repository = await storage.getRepository(req.params.id);
+      if (!repository) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+
+      res.json({
+        repositoryId: repository.id,
+        cloneStatus: repository.cloneStatus || 'pending',
+        localPath: repository.localPath,
+        lastAnalysisAt: repository.lastAnalysisAt,
+        lastReportId: repository.lastReportId
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get repository status" });
+    }
+  });
+
+  // NEW: Analysis run endpoint (PYTHON SCRIPT ONLY)
+  app.post("/api/analysis/run", async (req, res) => {
+    try {
+      const { repositoryId } = req.body;
+      
+      if (!repositoryId) {
+        return res.status(400).json({ error: "Repository ID is required" });
+      }
+
+      const repository = await storage.getRepository(repositoryId);
+      if (!repository) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+
+      // Check if repository is cloned
+      if (repository.cloneStatus !== 'cloned') {
+        return res.status(400).json({ 
+          error: "Repository must be cloned before running analysis. Please clone the repository first." 
+        });
+      }
+
+      // Check if local path exists
+      if (!repository.localPath) {
+        return res.status(400).json({ 
+          error: "Repository local path not found. Please re-clone the repository." 
+        });
+      }
+
+      // Execute Python script for migration analysis
+      console.log("🔄 Starting Python script execution for migration analysis...");
+      broadcastLog('INFO', `Executing Python script for migration analysis: ${repository.name}`);
 
       try {
-        // Fetch AI settings from storage to pass to Python script (with API key for internal use)
-        const aiSettings = await storage.getAISettingsForScript();
+        // Fetch AI settings from storage to pass to Python script
+        let aiSettings = await storage.getAISettingsForScript();
         
-        // Now repository exists and has valid data
+        // CRITICAL FIX: If no AI settings configured, use environment variables
+        if (!aiSettings || !aiSettings.apiKey) {
+          const epamApiKey = process.env.EPAM_AI_API_KEY;
+          if (epamApiKey) {
+            broadcastLog('INFO', 'Using EPAM AI API key from environment variable');
+            aiSettings = {
+              apiKey: epamApiKey,
+              model: 'claude-3-5-haiku@20241022', // Default EPAM model
+              apiEndpointUrl: 'https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions',
+              apiVersion: '2024-02-15-preview'
+            } as any;
+          } else {
+            broadcastLog('WARN', 'No EPAM_AI_API_KEY environment variable found');
+          }
+        }
+        
+        // Execute Python script
         const pythonResult = await pythonScriptService.executePostCloneScript(
-          repository.localPath, //|| cloneResult.localPath!, // Use repository.localPath now
-          repository.url,                                  // Use repository.url now
-          repository.id,                                   // Use repository.id now
-          aiSettings                                       // FIXED: Pass AI settings to Python script!
+          repository.localPath,
+          repository.url,
+          repository.id,
+          aiSettings
         );
 
         console.log("🐍 Python script result:", pythonResult);
 
+        // CRITICAL FIX: Check if Python script actually succeeded
+        if (!pythonResult.success) {
+          console.error("❌ Python script failed:", pythonResult.error);
+          
+          // CRITICAL FIX: Store the failed analysis attempt for error display
+          let failedReportId = undefined;
+          try {
+            const failedReport = await storage.createAnalysisReport({
+              repositoryId: repository.id,
+              analysisType: 'migration' as any,
+              results: {
+                pythonScriptOutput: {
+                  exitCode: pythonResult.exitCode || -1,
+                  error: pythonResult.error || 'Python script execution failed',
+                  stderr: pythonResult.error || 'Migration analysis failed',
+                  generatedFiles: [],
+                  parsedMigrationData: null
+                }
+              }
+            });
+            failedReportId = failedReport.id;
+            console.log(`✅ Failed analysis report stored with ID: ${failedReport.id}`);
+          } catch (reportError) {
+            console.error("❌ Failed to create failure report:", reportError);
+          }
+          
+          // CRITICAL FIX: Update repository with the failed report ID
+          await storage.updateRepositoryAnalysis(repository.id, new Date(), failedReportId);
+          console.log(`✅ Repository updated with failed report ID: ${failedReportId}`);
+
+          return res.status(500).json({
+            success: false,
+            error: pythonResult.error || 'Python script execution failed',
+            repositoryId: repository.id,
+            pythonResult
+          });
+        }
+
         // Create Python script report if migration-report.md was generated
-        if (pythonResult.success && pythonResult.generatedFiles && pythonResult.generatedFiles.length > 0) {
+        let reportId = undefined;
+        if (pythonResult.generatedFiles && pythonResult.generatedFiles.length > 0) {
           console.log("💾 Creating Python script report...");
           
-          await pythonScriptService.createPythonScriptReport(
-            repository.id,
-            repository.url,
-            repository.localPath || '',
-            pythonResult,
-            path.join(__dirname, '../scripts/default.py')
-          );
+          try {
+            await pythonScriptService.createPythonScriptReport(
+              repository.id,
+              repository.url,
+              repository.localPath,
+              pythonResult,
+              path.join(__dirname, '../scripts/default.py')
+            );
+            // Note: createPythonScriptReport doesn't return a report ID
+            // The report is created and stored internally
+          } catch (reportError) {
+            console.warn("Failed to create Python script report:", reportError);
+          }
           console.log("📊 Python script report created - will appear in Reports tab");
         }
 
-        // Return response to React frontend
+        // Update repository with analysis timestamp and report ID
+        await storage.updateRepositoryAnalysis(repository.id, new Date(), reportId);
+
+        // Return structured migration data AND success info
         res.json({
           success: true,
-          repository,
-          fileStructure,
-          detectedTechnologies,
-          pythonResult
+          repositoryId: repository.id,
+          pythonResult,
+          reportId,
+          message: "Migration analysis completed successfully",
+          structuredData: (pythonResult as any).parsedMigrationData // Include parsed structured data
         });
 
       } catch (pythonError) {
         console.error("❌ Python script execution failed:", pythonError);
+        const errorMessage = pythonError instanceof Error ? pythonError.message : 'Migration analysis failed';
         
-        // Still return success for repository clone even if Python fails
-        res.json({
-          success: true,
-          repository,
-          fileStructure,
-          detectedTechnologies,
-          pythonError: pythonError instanceof Error ? pythonError.message : 'Python execution failed'
+        // CRITICAL FIX: Always persist failed analysis attempts
+        try {
+          const failedReport = await storage.createAnalysisReport({
+            repositoryId: repository.id,
+            analysisType: 'migration' as any,
+            results: {
+              pythonScriptOutput: {
+                exitCode: -1,
+                error: errorMessage,
+                stderr: `Python script execution failed: ${errorMessage}`,
+                generatedFiles: [],
+                parsedMigrationData: null
+              }
+            }
+          });
+          
+          // Update repository to point to this failed report
+          await storage.updateRepositoryAnalysis(repository.id, new Date(), failedReport.id);
+          
+          broadcastLog('INFO', `Failed analysis report stored with ID: ${failedReport.id}`);
+        } catch (storageError) {
+          broadcastLog('ERROR', `Failed to store error report: ${storageError instanceof Error ? storageError.message : 'Unknown error'}`);
+        }
+        
+        res.status(500).json({
+          error: errorMessage
         });
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Analysis operation failed";
+      
+      // CRITICAL FIX: Store failed analysis for general route errors too
+      if (req.body.repositoryId) {
+        try {
+          const failedReport = await storage.createAnalysisReport({
+            repositoryId: req.body.repositoryId,
+            analysisType: 'migration' as any,
+            results: {
+              pythonScriptOutput: {
+                exitCode: -1,
+                error: errorMessage,
+                stderr: `Analysis route failed: ${errorMessage}`,
+                generatedFiles: [],
+                parsedMigrationData: null
+              }
+            }
+          });
+          
+          // Update repository to point to this failed report
+          await storage.updateRepositoryAnalysis(req.body.repositoryId, new Date(), failedReport.id);
+          
+          broadcastLog('INFO', `Failed analysis report stored for route error with ID: ${failedReport.id}`);
+        } catch (storageError) {
+          broadcastLog('ERROR', `Failed to store route error report: ${storageError instanceof Error ? storageError.message : 'Unknown error'}`);
+        }
+      }
+      
       res.status(500).json({ 
-        error: error instanceof Error ? error.message : "Clone operation failed" 
+        error: errorMessage
       });
     }
   });
@@ -1448,6 +1622,26 @@ export async function registerRoutes(app: Application): Promise<Server> {
     }
   });
 
+  // Helper function to resolve report file path (shared by download and structured endpoints)
+  async function resolveReportFilePath(repositoryId: string, fileName: string): Promise<string | null> {
+    const fs = await import('fs');
+    const path = await import('path');
+    
+    const repoPath = await storage.getRepositoryPath(repositoryId);
+    if (!repoPath) {
+      return null;
+    }
+    
+    const filePath = path.join(repoPath, fileName);
+    
+    // Ensure file exists and is within the repository directory (security check)
+    if (!filePath.startsWith(repoPath) || !await fs.promises.access(filePath).then(() => true).catch(() => false)) {
+      return null;
+    }
+    
+    return filePath;
+  }
+
   // Download generated migration report endpoint
   app.get("/api/analysis/reports/:repositoryId/download/:fileName", async (req, res) => {
     try {
@@ -1459,19 +1653,12 @@ export async function registerRoutes(app: Application): Promise<Server> {
         return res.status(400).json({ error: "Only markdown files are allowed" });
       }
       
-      const repoPath = await storage.getRepositoryPath(repositoryId);
-      if (!repoPath) {
-        return res.status(404).json({ error: "Repository not found" });
+      const filePath = await resolveReportFilePath(repositoryId, fileName);
+      if (!filePath) {
+        return res.status(404).json({ error: "Report file not found" });
       }
       
       const fs = await import('fs');
-      const path = await import('path');
-      const filePath = path.join(repoPath, fileName);
-      
-      // Ensure file exists and is within the repository directory (security check)
-      if (!filePath.startsWith(repoPath) || !await fs.promises.access(filePath).then(() => true).catch(() => false)) {
-        return res.status(404).json({ error: "Report file not found" });
-      }
       
       // Read file content
       const fileContent = await fs.promises.readFile(filePath, 'utf-8');
@@ -1516,6 +1703,180 @@ export async function registerRoutes(app: Application): Promise<Server> {
       res.status(500).json({ 
         error: error instanceof Error ? error.message : "Report generation failed" 
       });
+    }
+  });
+
+
+  // Get structured migration data for a repository
+  app.get('/api/reports/:repositoryId/structured', async (req, res) => {
+    try {
+      const { repositoryId } = req.params;
+      
+      // CRITICAL FIX: First check repository's lastReportId
+      const repository = await storage.getRepository(repositoryId);
+      
+      if (repository?.lastReportId) {
+        try {
+          const latestReport = await storage.getAnalysisReport(repository.lastReportId);
+          if (latestReport) {
+            broadcastLog('INFO', `Using repository's lastReportId: ${repository.lastReportId}`);
+            
+            // Check if it's a failed report
+            const pythonOutput = (latestReport.results as any)?.pythonScriptOutput;
+            if (pythonOutput?.error || pythonOutput?.exitCode !== 0 || !pythonOutput?.parsedMigrationData) {
+              const errorMessage = pythonOutput?.error || 'Analysis failed to generate migration data';
+              
+              res.json({ 
+                structuredData: null,
+                status: 'failed',
+                error: errorMessage,
+                reportId: latestReport.id,
+                createdAt: latestReport.createdAt
+              });
+              return;
+            }
+            
+            // It's a successful report with structured data
+            if (pythonOutput?.parsedMigrationData) {
+              res.json({
+                structuredData: pythonOutput.parsedMigrationData,
+                status: 'ready',
+                reportId: latestReport.id,
+                createdAt: latestReport.createdAt
+              });
+              return;
+            }
+          }
+        } catch (reportError) {
+          broadcastLog('WARN', `Could not fetch report ${repository.lastReportId}: ${reportError instanceof Error ? reportError.message : 'Unknown error'}`);
+        }
+      }
+      
+      // Fallback: Get all analysis reports for this repository
+      const reports = await storage.getAnalysisReportsByRepository(repositoryId);
+      
+      if (reports.length === 0) {
+        res.json({ structuredData: null, status: 'no_analysis' });
+        return;
+      }
+      
+      // Find the most recent successful report with structured data
+      const successfulReport = reports
+        .filter(report => report.results && (report.results as any).pythonScriptOutput?.generatedFiles && (report.results as any).pythonScriptOutput.parsedMigrationData)
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
+      
+      // Find the most recent report with pythonScriptOutput (successful or failed)
+      const latestReportWithPythonOutput = reports
+        .filter(report => report.results && (report.results as any).pythonScriptOutput)
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
+        
+      // Find the most recent report overall  
+      const latestReport = reports
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
+      
+      // If we have a successful report, return its data
+      if (successfulReport) {
+        const pythonOutput = (successfulReport.results as any).pythonScriptOutput;
+        const markdownFile = pythonOutput.generatedFiles.find((file: any) => file.name.endsWith('.md'));
+        
+        if (markdownFile) {
+          // Use same path resolution as download route
+          const filePath = await resolveReportFilePath(repositoryId, markdownFile.name);
+          if (filePath) {
+            // Get structured data from Python script output (already parsed during analysis)
+            const structuredData = pythonOutput.parsedMigrationData;
+            
+            // CRITICAL FIX: Don't return success if no structured data was parsed
+            if (!structuredData) {
+              broadcastLog('WARN', `Analysis completed but no structured data was parsed for repository ${repositoryId}`);
+              
+              res.json({ 
+                structuredData: null,
+                status: 'failed',
+                error: 'Analysis completed but failed to parse migration data from generated report',
+                reportId: successfulReport.id,
+                createdAt: successfulReport.createdAt
+              });
+              return;
+            }
+            
+            broadcastLog('INFO', `Serving structured migration data for repository ${repositoryId}: Data found`);
+            
+            res.json({ 
+              structuredData,
+              reportId: successfulReport.id,
+              createdAt: successfulReport.createdAt,
+              status: 'success'
+            });
+            return;
+          }
+        }
+        
+        // If we reach here, successful report exists but files are missing - this is a failure
+        broadcastLog('WARN', `Report exists but files are missing for repository ${repositoryId}`);
+        res.json({ 
+          structuredData: null,
+          status: 'failed',
+          error: 'Report files are missing or inaccessible',
+          reportId: successfulReport.id,
+          createdAt: successfulReport.createdAt
+        });
+        return;
+      }
+      
+      // If no successful report, check if we have failed attempts
+      if (!successfulReport) {
+        // Check the latest report with Python output first (most specific failure)
+        if (latestReportWithPythonOutput) {
+          const pythonOutput = (latestReportWithPythonOutput.results as any).pythonScriptOutput;
+          let errorMessage = 'Analysis failed';
+          
+          // Use Python script error if available
+          if (pythonOutput.error) {
+            errorMessage = `Python script execution failed: ${pythonOutput.error}`;
+          }
+          // Check for AI/analysis failure (pythonScriptOutput exists but no parsedMigrationData)
+          else if (!pythonOutput.parsedMigrationData) {
+            errorMessage = 'AI analysis failed to generate migration data';
+          }
+          // Check for file generation failure (no generated files)
+          else if (!pythonOutput.generatedFiles?.length) {
+            errorMessage = 'Failed to generate migration report files';
+          }
+          
+          broadcastLog('WARN', `Analysis failure detected for repository ${repositoryId}: ${errorMessage}`);
+          
+          res.json({ 
+            structuredData: null,
+            status: 'failed',
+            error: errorMessage,
+            reportId: latestReportWithPythonOutput.id,
+            createdAt: latestReportWithPythonOutput.createdAt
+          });
+          return;
+        }
+        
+        // Check if we have any reports at all but no Python output (generic failure)
+        if (latestReport) {
+          broadcastLog('WARN', `Analysis attempt without Python output for repository ${repositoryId}`);
+          
+          res.json({ 
+            structuredData: null,
+            status: 'failed',
+            error: 'Analysis failed - Python script did not execute properly',
+            reportId: latestReport.id,
+            createdAt: latestReport.createdAt
+          });
+          return;
+        }
+      }
+      
+      // No reports at all
+      res.json({ structuredData: null, status: 'no_analysis' });
+      
+    } catch (error) {
+      console.error('Error fetching structured migration data:', error);
+      res.status(500).json({ error: 'Failed to fetch structured migration data' });
     }
   });
 
