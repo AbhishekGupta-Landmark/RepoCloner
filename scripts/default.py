@@ -19,21 +19,11 @@ def parse_args():
     parser.add_argument('repo_url', help='Repository URL to analyze')
     parser.add_argument('repo_path', help='Local path to clone/analyze repository')
     
-    # AI API key with EPAM fallback
+    # AI API key (required - no fallbacks)
     ai_api_key = os.environ.get("AI_API_KEY")
     base_url = os.environ.get("AI_ENDPOINT_URL", "https://api.openai.com/v1/chat/completions")
     model = os.environ.get("AI_MODEL", "gpt-4")
     api_version = os.environ.get("AI_API_VERSION", "2024-02-15-preview")
-    
-    if not ai_api_key:
-        # Fallback to EPAM AI proxy if no app-configured AI key
-        ai_api_key = os.environ.get("EPAM_AI_API_KEY")
-        if ai_api_key:
-            print("🔧 Using EPAM AI proxy credentials from environment")
-            # Set EPAM-specific defaults
-            base_url = "https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions"
-            model = "claude-3-5-haiku@20241022"
-            api_version = "3.5 Haiku"
     
     parser.add_argument('--model', default=model, help='AI model to use')
     parser.add_argument('--api-version', default=api_version, help='API version')
@@ -69,7 +59,7 @@ class ApiKeyOnlyChatModel(BaseChatModel):
     def _generate(self, messages: List[BaseMessage], stop=None, run_manager=None, **kwargs):
         role_map = {"human": "user", "ai": "assistant", "system": "system"}
         
-        # For deployment-based URLs (Azure OpenAI, EPAM proxy), don't include model in payload
+        # Standard OpenAI API payload
         payload = {
             "messages": [
                 {"role": role_map.get(m.type, m.type), "content": m.content}
@@ -82,25 +72,15 @@ class ApiKeyOnlyChatModel(BaseChatModel):
         if 'deployments' not in self.base_url.lower():
             payload["model"] = self.model_name
         
-        # Use EPAM-specific Api-Key header format (not standard OpenAI Bearer token)
-        if 'epam' in self.base_url.lower():
-            headers = {"Content-Type": "application/json", "Api-Key": self.api_key}
-        else:
-            # Standard OpenAI format for other providers
-            headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
+        # Standard OpenAI Authorization header
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
         
-        # Add API version header ONLY for Azure OpenAI (not EPAM proxy - it uses URL params)
+        # Add API version header for Azure OpenAI or EPAM proxy
         api_version = getattr(self, 'api_version', None)
-        if api_version and 'azure' in self.base_url.lower() and 'epam' not in self.base_url.lower():
+        if api_version and ('azure' in self.base_url.lower() or 'epam' in self.base_url.lower()):
             headers["api-version"] = api_version
             
-        # Special handling for EPAM proxy - may need additional headers
-        if 'epam' in self.base_url.lower():
-            # Add any additional headers needed for EPAM proxy
-            headers["User-Agent"] = "RepoCloner-AI-Analysis/1.0"
-            
         try:
-            # For EPAM proxy, use the URL as-is since it already contains properly formatted parameters
             print(f"🌐 Making API request to: {self.base_url}")
             print(f"🔧 Headers: {{'Content-Type': 'application/json', 'Authorization': 'Bearer ***'}}")
             print(f"📋 Payload: {payload}")
@@ -249,7 +229,7 @@ def scan_for_kafka_usage_ai(state: RepoAnalysisState) -> RepoAnalysisState:
     print(f"AI-identified Kafka usage in {len(inventory)} files.")
     return {**state, "kafka_inventory": inventory}
 
-# Static analysis fallback implemented - reports generated even when AI fails
+# AI-powered analysis - requires valid API configuration
 
 def extract_description_and_diff(raw: str) -> tuple[str, str]:
     """
@@ -468,6 +448,11 @@ if __name__ == "__main__":
     analysis_type = "Static Analysis"
     
     # Try AI analysis if we have credentials
+    print(f"🔧 DEBUG: API key present: {bool(args.api_key)}")
+    print(f"🔧 DEBUG: Base URL present: {bool(args.base_url)}")
+    print(f"🔧 DEBUG: API key value check: {args.api_key != 'test'}")
+    print(f"🔧 DEBUG: Base URL value check: {args.base_url != 'test'}")
+    
     if args.api_key and args.base_url and args.api_key != "test" and args.base_url != "test":
         try:
             print("🤖 Attempting AI analysis...")
@@ -493,85 +478,9 @@ if __name__ == "__main__":
         
         except Exception as e:
             print(f"\n❌ AI Analysis failed: {str(e)}")
-            print("🔄 Falling back to static analysis...")
     else:
-        print("⚠️ No AI credentials provided, using static analysis")
+        print("⚠️ No AI credentials provided")
     
-    # Generate static fallback report if AI failed
-    if not report_generated:
-        print("🔄 Generating static analysis fallback report...")
-        try:
-            # Static analysis - scan for Kafka files without AI
-            kafka_files = []
-            code_diffs = []
-            
-            # Find files that likely contain Kafka usage
-            for root, dirs, files in os.walk(args.repo_path):
-                if ".git" in dirs:
-                    dirs.remove(".git")
-                for file in files:
-                    if file.endswith(('.cs', '.java', '.js', '.ts', '.py')):
-                        file_path = os.path.join(root, file)
-                        try:
-                            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                                content = f.read()
-                                if any(keyword.lower() in content.lower() for keyword in ['kafka', 'producer', 'consumer', 'confluent']):
-                                    relative_path = os.path.relpath(file_path, args.repo_path)
-                                    kafka_files.append({
-                                        'file': relative_path,
-                                        'kafka_apis': ['Kafka Producer', 'Kafka Consumer', 'Confluent.Kafka'],
-                                        'summary': 'Kafka usage detected in static analysis'
-                                    })
-                                    code_diffs.append({
-                                        'file': relative_path,
-                                        'diff_content': f'''- // Original Kafka implementation\n+ // Recommended Azure Service Bus migration:\n+ using Azure.Messaging.ServiceBus;\n+ // Replace Kafka producers with ServiceBusClient\n+ // Replace Kafka consumers with ServiceBusReceiver\n+ // Update configuration to use Service Bus connection strings''',
-                                        'description': 'Static analysis detected Kafka usage - recommended Azure Service Bus migration',
-                                        'language': 'diff'
-                                    })
-                        except Exception:
-                            continue
-            
-            # Generate static migration report
-            with open(report_path, "w", encoding="utf-8") as f:
-                f.write("# Kafka → Azure Service Bus Migration Report\n\n")
-                f.write("*Generated by static analysis*\n\n")
-                
-                # Kafka inventory section
-                f.write("## 1. Kafka Usage Inventory\n\n")
-                if kafka_files:
-                    f.write("Files in your repository that use Kafka APIs:\n\n")
-                    f.write("| File | APIs Used | Summary |\n")
-                    f.write("|------|-----------|---------|\n")
-                    for item in kafka_files:
-                        apis = ', '.join(item.get('kafka_apis', []))
-                        f.write(f"| {item['file']} | {apis} | {item['summary']} |\n")
-                else:
-                    f.write("No Kafka usage detected in static analysis.\n")
-                f.write("\n")
-                
-                # Code migrations section
-                f.write("## 2. Code Migration Diffs\n\n")
-                if code_diffs:
-                    for diff in code_diffs:
-                        f.write(f"### {diff['file']}\n")
-                        
-                        # Write description above the code block if it exists
-                        if diff.get('description'):
-                            f.write(f"{diff['description']}\n\n")
-                        
-                        f.write("```diff\n")
-                        f.write(diff.get('diff_content', diff.get('diff', '')))
-                        f.write("\n```\n\n")
-                else:
-                    f.write("No migration recommendations available from static analysis.\n")
-                    f.write("Enable AI analysis for detailed migration guidance.\n\n")
-            
-            print(f"✅ Static analysis report generated: {report_filename}")
-            analysis_type = "Static Analysis Fallback"
-            report_generated = True
-            
-        except Exception as e:
-            print(f"❌ Static analysis fallback failed: {str(e)}")
     
     # Final status
     if report_generated:
@@ -579,5 +488,5 @@ if __name__ == "__main__":
         print(f"📊 Analysis type: {analysis_type}")
         sys.exit(0)
     else:
-        print("❌ Both AI and static analysis failed - no report generated")
+        print("❌ AI analysis failed or not configured - no report generated")
         sys.exit(1)

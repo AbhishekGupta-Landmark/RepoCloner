@@ -29,17 +29,19 @@ interface DiffStats {
   total_changes: number;
 }
 
-interface StructuredDiff {
+interface CodeDiff {
   file: string;
   diff_content: string;
   language: string;
   description?: string;
+  key_changes?: string[];
+  notes?: string[];
   hunks?: DiffHunk[];
   stats?: DiffStats;
 }
 
 interface DiffViewerProps {
-  diffs: StructuredDiff[];
+  diffs: CodeDiff[];
   className?: string;
 }
 
@@ -178,6 +180,30 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
                       <p className="text-sm text-blue-800 dark:text-blue-200 font-medium leading-relaxed">
                         {diff.description}
                       </p>
+                    </div>
+                  )}
+                  
+                  {/* Key Changes section */}
+                  {diff.key_changes && diff.key_changes.length > 0 && (
+                    <div className="px-4 py-3 bg-yellow-50 dark:bg-yellow-950/30 border-b border-yellow-200 dark:border-yellow-800">
+                      <h4 className="text-sm font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Key Changes:</h4>
+                      <ul className="list-disc list-inside space-y-1 text-sm text-yellow-700 dark:text-yellow-300">
+                        {diff.key_changes.map((change, index) => (
+                          <li key={index}>{change}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {/* Notes section */}
+                  {diff.notes && diff.notes.length > 0 && (
+                    <div className="px-4 py-3 bg-purple-50 dark:bg-purple-950/30 border-b border-purple-200 dark:border-purple-800">
+                      <h4 className="text-sm font-semibold text-purple-800 dark:text-purple-200 mb-2">Notes:</h4>
+                      <ul className="list-disc list-inside space-y-1 text-sm text-purple-700 dark:text-purple-300">
+                        {diff.notes.map((note, index) => (
+                          <li key={index}>{note}</li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                   

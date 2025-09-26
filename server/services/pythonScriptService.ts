@@ -174,6 +174,7 @@ class PythonScriptService {
         }
         
         if (aiSettings.apiVersion) {
+          // Handle API versions with spaces by quoting them
           scriptArgs.push('--api-version', aiSettings.apiVersion);
         }
         
@@ -181,8 +182,13 @@ class PythonScriptService {
         const maskedArgs = this.maskSensitiveArgs(scriptArgs);
         broadcastLog('INFO', `Final script command: python ${defaultScriptPath} ${maskedArgs.join(' ')}`);
       } else {
-        broadcastLog('WARN', 'No AI settings provided - Python script may use defaults or fail');
+        broadcastLog('ERROR', 'AI settings are required for migration analysis');
         broadcastLog('DEBUG', `Condition failed: aiSettings=${!!aiSettings}, apiKey=${aiSettings?.apiKey}, model=${aiSettings?.model}`);
+        return {
+          success: false,
+          error: 'AI configuration is required to perform migration analysis. Please configure AI settings first.',
+          exitCode: -1
+        };
       }
       
       broadcastLog('INFO', `🐍 About to execute Python script with ${scriptArgs.length} arguments`);
@@ -258,7 +264,7 @@ class PythonScriptService {
       broadcastLog('INFO', 'default.py not found, using generated script content');
       const scriptContent = this.generatePostCloneScript(repositoryPath, repositoryUrl);
       
-      // Build args with AI settings for fallback case too
+      // AI settings are required for migration analysis
       let scriptArgs = [repositoryUrl, repositoryPath];
       if (aiSettings && aiSettings.apiKey && aiSettings.model) {
         scriptArgs.push(
@@ -269,8 +275,16 @@ class PythonScriptService {
           scriptArgs.push('--base-url', aiSettings.apiEndpointUrl);
         }
         if (aiSettings.apiVersion) {
+          // Handle API versions with spaces by quoting them
           scriptArgs.push('--api-version', aiSettings.apiVersion);
         }
+      } else {
+        broadcastLog('ERROR', 'AI settings are required for migration analysis (fallback case)');
+        return {
+          success: false,
+          error: 'AI configuration is required to perform migration analysis. Please configure AI settings first.',
+          exitCode: -1
+        };
       }
       
       broadcastLog('INFO', `🐍 About to execute generated Python script with ${scriptArgs.length} arguments`);
@@ -543,10 +557,11 @@ if __name__ == "__main__":
       const title = this.extractTitle(reportContent);
       const kafkaInventory = this.parseKafkaInventory(reportContent);
       const codeDiffs = this.parseCodeDiffs(reportContent);
+      const notes = this.extractNotes(reportContent);
       
       // Log parsing results for debugging
       broadcastLog('DEBUG', `MD Parser: Title="${title}"`);
-      broadcastLog('DEBUG', `MD Parser: Found ${kafkaInventory.length} Kafka items, ${codeDiffs.length} diffs`);
+      broadcastLog('DEBUG', `MD Parser: Found ${kafkaInventory.length} Kafka items, ${codeDiffs.length} diffs, ${notes.length} notes`);
       
       // If no structured data found, log first 300 chars for diagnosis
       if (kafkaInventory.length === 0 && codeDiffs.length === 0) {
@@ -558,10 +573,12 @@ if __name__ == "__main__":
         title,
         kafka_inventory: kafkaInventory,
         code_diffs: codeDiffs,
+        notes,
         sections: {},
         stats: {
           total_files_with_kafka: kafkaInventory.length,
           total_files_with_diffs: codeDiffs.length,
+          notes_count: notes.length,
           sections_count: 2
         }
       };
@@ -798,10 +815,12 @@ if __name__ == "__main__":
     let fencesFound = 0;
     let blocksAccepted = 0;
     let keyChanges: string[] = [];
+    let notes: string[] = [];
     let descriptionLines: string[] = []; // Track description text before code blocks
     
-    // Extract key changes section first
+    // Extract key changes and notes sections first
     keyChanges = this.extractKeyChanges(content);
+    notes = this.extractNotes(content);
     
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -861,7 +880,8 @@ if __name__ == "__main__":
       if (!inCodeFence && !headingMatch && line.trim() && !line.startsWith('#') && !line.startsWith('|') && !line.startsWith('```') && !line.startsWith('@@')) {
         // Only collect non-empty, meaningful description lines
         const trimmedLine = line.trim();
-        if (trimmedLine.length > 10 && !trimmedLine.startsWith('-') && !trimmedLine.startsWith('*')) {
+        // Skip "Key changes:" and "Note:" sections as they're handled separately
+        if (trimmedLine.length > 10 && !trimmedLine.startsWith('-') && !trimmedLine.startsWith('*') && !trimmedLine.toLowerCase().includes('key changes:') && !trimmedLine.toLowerCase().startsWith('note:')) {
           descriptionLines.push(trimmedLine);
         }
       }
@@ -873,12 +893,9 @@ if __name__ == "__main__":
       diffs.push(...this.parseFallbackDiffs(content));
     }
     
-    // Add key changes as metadata to the first diff if available
-    if (diffs.length > 0 && keyChanges.length > 0) {
-      diffs[0].key_changes = keyChanges;
-    }
+    // Key changes are handled separately in Migration Summary section
     
-    console.log(`🎯 parseCodeDiffs results: ${fencesFound} fences found, ${blocksAccepted} blocks accepted, ${diffs.length} total diffs, ${keyChanges.length} key changes`);
+    console.log(`🎯 parseCodeDiffs results: ${fencesFound} fences found, ${blocksAccepted} blocks accepted, ${diffs.length} total diffs, ${keyChanges.length} key changes, ${notes.length} notes`);
     return diffs;
   }
   
@@ -1013,6 +1030,29 @@ if __name__ == "__main__":
     
     console.log(`🔑 Extracted ${keyChanges.length} key changes`);
     return keyChanges;
+  }
+
+  /**
+   * Extract note sections from markdown content
+   */
+  private extractNotes(content: string): string[] {
+    const notes: string[] = [];
+    const lines = content.split('\n');
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Detect "Note:" at the start of a line
+      if (line.toLowerCase().startsWith('note:')) {
+        const noteText = line.replace(/^note:\s*/i, '').trim();
+        if (noteText && noteText.length > 0) {
+          notes.push(noteText);
+        }
+      }
+    }
+    
+    console.log(`📝 Extracted ${notes.length} notes`);
+    return notes;
   }
   
   /**

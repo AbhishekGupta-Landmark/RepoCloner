@@ -100,16 +100,21 @@ export interface CodeDiff {
   file: string;
   diff_content: string;
   language: string;
+  description?: string;
+  key_changes?: string[];
+  notes?: string[];
 }
 
 export interface MigrationReportData {
   title: string;
   kafka_inventory: KafkaUsageItem[];
   code_diffs: CodeDiff[];
+  notes: string[];
   sections: Record<string, any>;
   stats: {
     total_files_with_kafka: number;
     total_files_with_diffs: number;
+    notes_count: number;
     sections_count: number;
   };
 }
