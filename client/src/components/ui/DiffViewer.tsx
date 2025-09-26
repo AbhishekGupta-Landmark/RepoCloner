@@ -33,6 +33,7 @@ interface StructuredDiff {
   file: string;
   diff_content: string;
   language: string;
+  description?: string;
   hunks?: DiffHunk[];
   stats?: DiffStats;
 }
@@ -43,7 +44,7 @@ interface DiffViewerProps {
 }
 
 const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
-  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set(diffs.slice(0, 2).map(d => d.file)));
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   const toggleFile = (fileName: string) => {
@@ -90,7 +91,7 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
       case 'deletion':
         return 'bg-red-50 dark:bg-red-950/20 border-l-2 border-red-500';
       case 'context':
-        return 'bg-gray-50 dark:bg-gray-900/50';
+        return 'bg-slate-50 dark:bg-slate-800/50';
       default:
         return '';
     }
@@ -98,7 +99,7 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
 
   if (!diffs || diffs.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-500">
+      <div className="text-center py-8 text-white dark:text-slate-300">
         <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
         <p>No code diffs available</p>
       </div>
@@ -112,25 +113,25 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
         const stats = diff.stats;
         
         return (
-          <Card key={index} className="border border-gray-200 dark:border-gray-700">
+          <Card key={index} className="border border-slate-200 dark:border-slate-600">
             <Collapsible 
               open={isExpanded}
               onOpenChange={() => toggleFile(diff.file)}
             >
               <CollapsibleTrigger asChild>
                 <CardHeader 
-                  className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors py-3"
+                  className="cursor-pointer hover:bg-blue-600/20 dark:hover:bg-blue-700/30 transition-colors py-3"
                   data-testid={`diff-header-${index}`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       {isExpanded ? (
-                        <ChevronDown className="h-4 w-4 text-gray-500" />
+                        <ChevronDown className="h-4 w-4 text-white dark:text-slate-300" />
                       ) : (
-                        <ChevronRight className="h-4 w-4 text-gray-500" />
+                        <ChevronRight className="h-4 w-4 text-white dark:text-slate-300" />
                       )}
-                      <FileText className="h-4 w-4 text-blue-600" />
-                      <span className="font-mono font-medium text-sm">
+                      <FileText className="h-4 w-4 text-blue-400" />
+                      <span className="font-mono font-medium text-sm text-white dark:text-yellow-300 font-semibold">
                         {diff.file}
                       </span>
                     </div>
@@ -152,15 +153,17 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
                       )}
                       
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
                           copyDiff(diff.diff_content, diff.file);
                         }}
+                        className="text-white border-white/30 hover:bg-blue-600 hover:border-blue-500"
                         data-testid={`copy-diff-${index}`}
                       >
-                        <Copy className="h-3 w-3" />
+                        <Copy className="h-3 w-3 mr-1" />
+                        Copy
                       </Button>
                     </div>
                   </div>
@@ -169,7 +172,16 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
 
               <CollapsibleContent>
                 <CardContent className="p-0">
-                  <div className="bg-gray-50 dark:bg-gray-900 border-t">
+                  {/* Description text outside code block */}
+                  {diff.description && (
+                    <div className="px-4 py-3 bg-blue-50 dark:bg-blue-950/30 border-b border-blue-200 dark:border-blue-800">
+                      <p className="text-sm text-blue-800 dark:text-blue-200 font-medium leading-relaxed">
+                        {diff.description}
+                      </p>
+                    </div>
+                  )}
+                  
+                  <div className="bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-600">
                     {diff.hunks && diff.hunks.length > 0 ? (
                       // Structured diff view
                       <div className="font-mono text-sm">
@@ -186,12 +198,12 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
                                 <div
                                   key={lineIndex}
                                   className={cn(
-                                    'flex items-start gap-2 px-4 py-1 hover:bg-gray-100 dark:hover:bg-gray-800',
+                                    'flex items-start gap-2 px-4 py-1 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors',
                                     getLineTypeClass(line.type)
                                   )}
                                   data-testid={`diff-line-${line.type}`}
                                 >
-                                  <div className="flex items-center gap-2 min-w-16 text-xs text-gray-500 select-none">
+                                  <div className="flex items-center gap-2 min-w-16 text-xs text-slate-600 dark:text-slate-200 select-none font-mono">
                                     {getLineTypeIcon(line.type)}
                                     <span className="w-8 text-right">
                                       {line.old_line || ''}
@@ -203,9 +215,9 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
                                   
                                   <div className="flex-1 whitespace-pre-wrap break-words">
                                     <span className={cn(
-                                      line.type === 'addition' && 'text-green-800 dark:text-green-200',
-                                      line.type === 'deletion' && 'text-red-800 dark:text-red-200',
-                                      line.type === 'context' && 'text-gray-700 dark:text-gray-300'
+                                      line.type === 'addition' && 'text-green-900 dark:text-green-50 font-medium',
+                                      line.type === 'deletion' && 'text-red-900 dark:text-red-50 font-medium',
+                                      line.type === 'context' && 'text-slate-800 dark:text-slate-100'
                                     )}>
                                       {line.content}
                                     </span>
@@ -219,7 +231,7 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
                     ) : (
                       // Fallback simple diff view
                       <div className="font-mono text-sm">
-                        <pre className="p-4 whitespace-pre-wrap break-words text-gray-700 dark:text-gray-300">
+                        <pre className="p-4 whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100 font-medium">
                           {diff.diff_content}
                         </pre>
                       </div>

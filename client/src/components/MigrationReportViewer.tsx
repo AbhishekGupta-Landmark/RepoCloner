@@ -4,11 +4,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileText, Code, BarChart3, Loader2, RefreshCw, AlertTriangle, GitBranch } from 'lucide-react';
+import { FileText, Code, BarChart3, Loader2, RefreshCw, AlertTriangle, GitBranch, Code2, CheckCircle, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAnalysis } from '@/hooks/useAnalysis';
 import DiffViewer from '@/components/ui/DiffViewer';
 import KeyChanges from '@/components/ui/KeyChanges';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 interface KafkaUsageItem {
   file: string;
@@ -117,7 +118,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
                     await analyzeCode(repositoryId);
                   }}
                   disabled={isAnalyzing}
-                  className="border-red-200 text-red-600 hover:bg-red-50"
+                  className="text-white border-white/30 hover:bg-red-600 hover:border-red-500 hover:text-white"
                 >
                   <RefreshCw className={`h-4 w-4 mr-2 ${isAnalyzing ? 'animate-spin' : ''}`} />
                   {isAnalyzing ? 'Running Analysis...' : 'Check Again'}
@@ -189,6 +190,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
                 size="sm" 
                 onClick={() => refetch()}
                 disabled={isQueryLoading}
+                className="text-white border-white/30 hover:bg-blue-600 hover:border-blue-500 hover:text-white"
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${isQueryLoading ? 'animate-spin' : ''}`} />
                 Refresh
@@ -278,13 +280,56 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
         </TabsContent>
 
         <TabsContent value="diffs" className="space-y-4">
-          {/* Key Changes Summary */}
+          {/* Key Changes Summary - Collapsible but open by default */}
           {keyChanges.length > 0 && (
-            <KeyChanges 
-              changes={keyChanges}
-              title="Migration Summary"
-              data-testid="migration-key-changes"
-            />
+            <Collapsible defaultOpen={true}>
+              <Card className="border-l-4 border-l-blue-500">
+                <CollapsibleTrigger asChild>
+                  <CardHeader className="cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Code2 className="h-5 w-5 text-blue-600" />
+                        <CardTitle className="text-lg">Migration Summary</CardTitle>
+                      </div>
+                      <ChevronDown className="h-4 w-4 text-gray-500 transition-transform" />
+                    </div>
+                    <CardDescription>
+                      Summary of the main code transformations in this migration
+                    </CardDescription>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="space-y-3">
+                    {keyChanges.map((change, index) => (
+                      <div
+                        key={index}
+                        className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800 transition-colors"
+                        data-testid={`key-change-${index}`}
+                      >
+                        <div className="flex-shrink-0 mt-0.5">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm text-gray-800 dark:text-white leading-relaxed font-medium">
+                            {change}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    <div className="mt-4 pt-3 border-t border-blue-200 dark:border-blue-700">
+                      <div className="flex items-center justify-between text-xs text-blue-600 dark:text-blue-300">
+                        <span>{keyChanges.length} change{keyChanges.length !== 1 ? 's' : ''} identified</span>
+                        <span className="flex items-center gap-1">
+                          <CheckCircle className="h-3 w-3" />
+                          Migration Summary
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
           )}
           
           {/* Interactive Diff Viewer */}

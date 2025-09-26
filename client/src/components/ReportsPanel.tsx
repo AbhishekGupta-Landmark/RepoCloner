@@ -278,6 +278,7 @@ export default function ReportsPanel() {
                           variant="outline"
                           size="sm"
                           disabled={downloadingReports.has(report.id)}
+                          className="!text-white !border-white/30 hover:!bg-blue-600 hover:!border-blue-500 hover:!text-white bg-transparent"
                           onClick={async () => {
                             const generatedFile = results.pythonScriptOutput.generatedFiles[0];
                             const fileName = generatedFile.name;
@@ -340,7 +341,6 @@ export default function ReportsPanel() {
                               });
                             }
                           }}
-                          className="ml-2"
                           data-testid={`download-report-${report.id}`}
                         >
                           {downloadingReports.has(report.id) ? (

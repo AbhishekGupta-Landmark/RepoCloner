@@ -54,7 +54,8 @@ export default function AnalysisPanel() {
             onClick={handleAnalysis}
             disabled={isLoading || !currentRepository || !isCodeAnalysisEnabled}
             data-testid="button-analyze-code"
-            className="hover-lift transition-smooth group relative overflow-hidden gradient-primary"
+            variant="default"
+            className="hover-lift transition-smooth group relative overflow-hidden text-white font-medium"
           >
             <AnimatePresence mode="wait">
               {isLoading ? (
