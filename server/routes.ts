@@ -1320,9 +1320,37 @@ export async function registerRoutes(app: Application): Promise<Server> {
 
         console.log("🐍 Python script result:", pythonResult);
 
+        // CRITICAL FIX: Check if Python script actually succeeded
+        if (!pythonResult.success) {
+          console.error("❌ Python script failed:", pythonResult.error);
+          
+          // Store the failed analysis attempt for error display
+          try {
+            await pythonScriptService.createPythonScriptReport(
+              repository.id,
+              repository.url,
+              repository.localPath,
+              pythonResult, // Store the failed result
+              path.join(__dirname, '../scripts/default.py')
+            );
+          } catch (reportError) {
+            console.warn("Failed to create failure report:", reportError);
+          }
+          
+          // Update repository timestamp even for failures
+          await storage.updateRepositoryAnalysis(repository.id, new Date(), undefined);
+
+          return res.status(500).json({
+            success: false,
+            error: pythonResult.error || 'Python script execution failed',
+            repositoryId: repository.id,
+            pythonResult
+          });
+        }
+
         // Create Python script report if migration-report.md was generated
         let reportId = undefined;
-        if (pythonResult.success && pythonResult.generatedFiles && pythonResult.generatedFiles.length > 0) {
+        if (pythonResult.generatedFiles && pythonResult.generatedFiles.length > 0) {
           console.log("💾 Creating Python script report...");
           
           try {
