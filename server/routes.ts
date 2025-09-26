@@ -1641,10 +1641,15 @@ export async function registerRoutes(app: Application): Promise<Server> {
       
       // Find the most recent successful report with structured data
       const successfulReport = reports
-        .filter(report => report.results && (report.results as any).pythonScriptOutput?.generatedFiles)
+        .filter(report => report.results && (report.results as any).pythonScriptOutput?.generatedFiles && (report.results as any).pythonScriptOutput.parsedMigrationData)
         .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
       
-      // Find the most recent report (successful or failed) to check for failures
+      // Find the most recent report with pythonScriptOutput (successful or failed)
+      const latestReportWithPythonOutput = reports
+        .filter(report => report.results && (report.results as any).pythonScriptOutput)
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
+        
+      // Find the most recent report overall  
       const latestReport = reports
         .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
       
@@ -1698,34 +1703,51 @@ export async function registerRoutes(app: Application): Promise<Server> {
         return;
       }
       
-      // If no successful report but we have reports, check if the latest one failed
-      if (latestReport && !successfulReport) {
-        // Determine failure reason
-        let errorMessage = 'Unknown error occurred during analysis';
-        
-        // Check for Python script failure (no pythonScriptOutput)
-        if (!latestReport.results || !(latestReport.results as any).pythonScriptOutput) {
-          errorMessage = 'Python script execution failed';
+      // If no successful report, check if we have failed attempts
+      if (!successfulReport) {
+        // Check the latest report with Python output first (most specific failure)
+        if (latestReportWithPythonOutput) {
+          const pythonOutput = (latestReportWithPythonOutput.results as any).pythonScriptOutput;
+          let errorMessage = 'Analysis failed';
+          
+          // Use Python script error if available
+          if (pythonOutput.error) {
+            errorMessage = `Python script execution failed: ${pythonOutput.error}`;
+          }
+          // Check for AI/analysis failure (pythonScriptOutput exists but no parsedMigrationData)
+          else if (!pythonOutput.parsedMigrationData) {
+            errorMessage = 'AI analysis failed to generate migration data';
+          }
+          // Check for file generation failure (no generated files)
+          else if (!pythonOutput.generatedFiles?.length) {
+            errorMessage = 'Failed to generate migration report files';
+          }
+          
+          broadcastLog('WARN', `Analysis failure detected for repository ${repositoryId}: ${errorMessage}`);
+          
+          res.json({ 
+            structuredData: null,
+            status: 'failed',
+            error: errorMessage,
+            reportId: latestReportWithPythonOutput.id,
+            createdAt: latestReportWithPythonOutput.createdAt
+          });
+          return;
         }
-        // Check for AI/analysis failure (pythonScriptOutput exists but no parsedMigrationData)
-        else if (!(latestReport.results as any).pythonScriptOutput.parsedMigrationData) {
-          errorMessage = 'AI analysis failed to generate migration data';
-        }
-        // Check for file generation failure (no generated files)
-        else if (!(latestReport.results as any).pythonScriptOutput.generatedFiles?.length) {
-          errorMessage = 'Failed to generate migration report files';
-        }
         
-        broadcastLog('WARN', `Analysis failure detected for repository ${repositoryId}: ${errorMessage}`);
-        
-        res.json({ 
-          structuredData: null,
-          status: 'failed',
-          error: errorMessage,
-          reportId: latestReport.id,
-          createdAt: latestReport.createdAt
-        });
-        return;
+        // Check if we have any reports at all but no Python output (generic failure)
+        if (latestReport) {
+          broadcastLog('WARN', `Analysis attempt without Python output for repository ${repositoryId}`);
+          
+          res.json({ 
+            structuredData: null,
+            status: 'failed',
+            error: 'Analysis failed - Python script did not execute properly',
+            reportId: latestReport.id,
+            createdAt: latestReport.createdAt
+          });
+          return;
+        }
       }
       
       // No reports at all
