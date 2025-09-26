@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, Clock, Loader2, BarChart3 } from "lucide-react";
+import { FileText, Clock, Loader2, Download } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAppContext } from "@/context/AppContext";
 import { AnalysisReport, AnalysisResult } from "@shared/schema";
@@ -14,6 +15,8 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export default function ReportsPanel() {
   const { currentRepository } = useAppContext();
+  const { toast } = useToast();
+  const [downloadingReports, setDownloadingReports] = useState<Set<string>>(new Set());
 
   // Fetch actual reports from the API
   const { data: reports, isLoading } = useQuery<{ reports: AnalysisReport[] }>({
@@ -116,14 +119,10 @@ export default function ReportsPanel() {
       </div>
       
       <Tabs defaultValue="reports" className="h-full flex flex-col">
-        <TabsList className="mb-4 grid w-fit grid-cols-2">
+        <TabsList className="mb-4 grid w-fit grid-cols-1">
           <TabsTrigger value="reports" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
             All Reports
-          </TabsTrigger>
-          <TabsTrigger value="migration" className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4" />
-            Migration Analysis
           </TabsTrigger>
         </TabsList>
 
@@ -270,6 +269,88 @@ export default function ReportsPanel() {
                           </Badge>
                         )}
                       </div>
+                      
+                      {/* Download button for python-script reports with generated files */}
+                      {(report.analysisType === 'python-script' || report.analysisType === 'migration') && 
+                       results?.pythonScriptOutput?.generatedFiles?.length > 0 && 
+                       currentRepository?.id && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={downloadingReports.has(report.id)}
+                          onClick={async () => {
+                            const generatedFile = results.pythonScriptOutput.generatedFiles[0];
+                            const fileName = generatedFile.name;
+                            
+                            setDownloadingReports(prev => new Set(prev).add(report.id));
+                            
+                            try {
+                              const downloadUrl = `/api/analysis/reports/${encodeURIComponent(currentRepository.id)}/download/${encodeURIComponent(fileName)}`;
+                              
+                              // Fetch the file
+                              const response = await fetch(downloadUrl);
+                              
+                              if (!response.ok) {
+                                let errorMessage = 'Download failed';
+                                if (response.status === 404) {
+                                  errorMessage = 'Report file not found';
+                                } else if (response.status === 403) {
+                                  errorMessage = 'Access denied to report file';
+                                } else {
+                                  errorMessage = `Server error: ${response.status}`;
+                                }
+                                
+                                toast({
+                                  title: "Download failed",
+                                  description: errorMessage,
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+                              
+                              // Get the file content as blob
+                              const blob = await response.blob();
+                              
+                              // Create download link
+                              const link = document.createElement('a');
+                              link.href = URL.createObjectURL(blob);
+                              link.download = fileName;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                              
+                              // Clean up blob URL
+                              URL.revokeObjectURL(link.href);
+                              
+                              toast({
+                                title: "Download completed",
+                                description: `Successfully downloaded ${fileName}`,
+                              });
+                            } catch (error) {
+                              toast({
+                                title: "Download failed",
+                                description: error instanceof Error ? error.message : 'Network error occurred',
+                                variant: "destructive",
+                              });
+                            } finally {
+                              setDownloadingReports(prev => {
+                                const newSet = new Set(prev);
+                                newSet.delete(report.id);
+                                return newSet;
+                              });
+                            }
+                          }}
+                          className="ml-2"
+                          data-testid={`download-report-${report.id}`}
+                        >
+                          {downloadingReports.has(report.id) ? (
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          ) : (
+                            <Download className="h-3 w-3 mr-1" />
+                          )}
+                          {downloadingReports.has(report.id) ? 'Downloading...' : 'Download'}
+                        </Button>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -280,17 +361,6 @@ export default function ReportsPanel() {
           </ScrollArea>
         </TabsContent>
 
-        <TabsContent value="migration" className="flex-1 overflow-hidden">
-          <div className="text-center text-muted-foreground p-8">
-            <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <h3 className="text-lg font-medium mb-2">Migration Reports Available in Analysis Tab</h3>
-            <p className="text-sm">
-              To view structured migration analysis, switch to the <strong>Code Analysis</strong> tab.
-              <br />
-              This tab is dedicated to downloading completed analysis reports.
-            </p>
-          </div>
-        </TabsContent>
       </Tabs>
     </div>
   );
