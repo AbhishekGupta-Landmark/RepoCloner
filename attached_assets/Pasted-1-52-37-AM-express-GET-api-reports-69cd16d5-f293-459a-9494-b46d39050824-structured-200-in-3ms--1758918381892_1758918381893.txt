@@ -1,0 +1,541 @@
+1:52:37 AM [express] GET /api/reports/69cd16d5-f293-459a-9494-b46d39050824/structured 200 in 3ms :: …
+1:52:39 AM [express] GET /api/auth/status 200 in 1ms :: {"authenticated":false}
+1:52:39 AM [express] GET /api/admin/oauth-config 200 in 1ms :: {"config":{"github":{"clientId":"","c…
+1:52:39 AM [express] GET /api/admin/oauth-config 200 in 1ms :: {"config":{"github":{"clientId":"","c…
+1:52:39 AM [express] GET /api/repositories 200 in 1ms :: {"repositories":[]}
+1:52:48 AM [express] POST /api/repositories/clone 200 in 1767ms :: {"success":true,"repository":{"na…
+1:52:48 AM [express] GET /api/repositories 200 in 1ms :: {"repositories":[{"name":"dotnetcore-kafka-…
+1:52:48 AM [express] GET /api/repositories/7d1d41e1-d79b-4034-994f-51e6b79a8756/files 200 in 3ms :: …
+1:52:48 AM [express] GET /api/technologies/7d1d41e1-d79b-4034-994f-51e6b79a8756 200 in 2ms :: [{"nam…
+1:52:48 AM [express] GET /api/repositories/7d1d41e1-d79b-4034-994f-51e6b79a8756/status 200 in 1ms ::…
+1:52:48 AM [express] GET /api/repositories/7d1d41e1-d79b-4034-994f-51e6b79a8756/status 200 in 1ms ::…
+1:52:52 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 1ms :: …
+🔄 Starting Python script execution for migration analysis...
+2025-09-26T20:22:54.198Z [INFO] Executing post-clone Python script for repository: https://github.com/srigumm/dotnetcore-kafka-integration.git
+2025-09-26T20:22:54.199Z [INFO] Using Python script from scripts folder: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:22:54.200Z [DEBUG] AI settings debug: exists=false, hasApiKey=false, hasModel=false 
+2025-09-26T20:22:54.200Z [DEBUG] AI settings (masked): {"apiKey":"***"}
+2025-09-26T20:22:54.200Z [DEBUG] AI settings keys: null
+2025-09-26T20:22:54.200Z [ERROR] AI settings are required for migration analysis
+2025-09-26T20:22:54.200Z [DEBUG] Condition failed: aiSettings=false, apiKey=undefined, model=undefined
+🐍 Python script result: {
+  success: false,
+  error: 'AI configuration is required to perform migration analysis. Please configure AI settings first.',
+  exitCode: -1
+}
+❌ Python script failed: AI configuration is required to perform migration analysis. Please configure AI settings first.
+✅ Failed analysis report stored with ID: 60439935-58aa-46e4-870d-d2deefd75d2f
+✅ Repository updated with failed report ID: 60439935-58aa-46e4-870d-d2deefd75d2f
+1:52:54 AM [express] POST /api/analysis/run 500 in 7ms :: {"success":false,"error":"AI configuration…
+1:52:54 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 2ms :: …
+1:52:54 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 0ms :: …
+1:52:56 AM [express] GET /api/admin/oauth-config 200 in 1ms :: {"config":{"github":{"clientId":"","c…
+1:52:56 AM [express] GET /api/admin/ai-settings 200 in 1ms :: {"configured":false,"hasApiKey":false,…
+1:53:20 AM [express] POST /api/admin/ai-settings 200 in 4ms :: {"success":true,"message":"AI setting…
+1:53:20 AM [express] GET /api/admin/ai-settings 200 in 1ms :: {"configured":true,"hasApiKey":true,"s…
+1:53:24 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 1ms :: …
+🔄 Starting Python script execution for migration analysis...
+2025-09-26T20:23:24.656Z [INFO] Executing post-clone Python script for repository: https://github.com/srigumm/dotnetcore-kafka-integration.git
+2025-09-26T20:23:24.657Z [INFO] Using Python script from scripts folder: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:23:24.657Z [DEBUG] AI settings debug: exists=true, hasApiKey=true, hasModel=true    
+2025-09-26T20:23:24.658Z [DEBUG] AI settings (masked): {"apiKey":"***","model":"claude-3-5-haiku@20241022","apiVersion":"3.5 Haiku","apiEndpointUrl":"https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku","id":"90470ef4-6ccb-4686-99c4-0b72833dc3c2","createdAt":"2025-09-26T20:23:20.874Z","updatedAt":"2025-09-26T20:23:20.874Z","isEnabled":true}
+2025-09-26T20:23:24.658Z [DEBUG] AI settings keys: apiKey, model, apiVersion, apiEndpointUrl, id, createdAt, updatedAt, isEnabled
+2025-09-26T20:23:24.659Z [INFO] Passing AI settings to Python script
+2025-09-26T20:23:24.660Z [INFO] Final script command: python C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key *** --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+2025-09-26T20:23:24.660Z [INFO] 🐍 About to execute Python script with 10 arguments
+2025-09-26T20:23:24.660Z [INFO] 🐍 Script path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:23:24.661Z [INFO] Starting Python script execution
+2025-09-26T20:23:24.661Z [INFO] Using Python script from file: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:23:24.662Z [INFO] Executing Python script: python C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key *** --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+2025-09-26T20:23:24.662Z [INFO] Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:23:24.663Z [INFO] Files before execution: 16 files in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:23:24.663Z [INFO] 🐍 Starting Python execution with timeout: 600000ms
+🐍 Starting Python execution with timeout: 600000ms
+2025-09-26T20:23:24.664Z [INFO] 🐍 Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+🐍 Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673  
+2025-09-26T20:23:24.664Z [INFO] 🐍 Command arguments: [C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py, https://github.com/srigumm/dotnetcore-kafka-integration.git, C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673, --api-key, ***, --model, claude-3-5-haiku@20241022, --base-url, https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku, --api-version, 3.5 Haiku]
+🐍 Command arguments: [C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py, https://github.com/srigumm/dotnetcore-kafka-integration.git, C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673, --api-key, ***, --model, claude-3-5-haiku@20241022, --base-url, https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku, --api-version, 3.5 Haiku]
+2025-09-26T20:23:24.664Z [INFO] 🐍 Trying Python command: py
+🐍 Trying Python command: py
+2025-09-26T20:23:26.551Z [ERROR] 🐍 Python command 'py' failed with error code: 1, signal: null
+🐍 Python command 'py' failed with error code: 1, signal: null
+2025-09-26T20:23:26.552Z [ERROR] 🐍 Error message: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+🐍 Error message: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+2025-09-26T20:23:26.552Z [ERROR] 🐍 Script stdout before failure: 🚀 Starting migration analysis...
+📁 Repository URL: https://github.com/srigumm/dotnetcore-kafka-integration.git
+📂 Repository Path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673    
+🤖 Using Model: claude-3-5-haiku@20241022
+🔧 Using API Version: 3.5 Haiku
+🌐 Using Endpoint: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku
+📊 Phase 1: Repository validation and code loading...
+🔧 DEBUG: API key present: True
+🔧 DEBUG: Base URL present: True
+🔧 DEBUG: API key value check: True
+🔧 DEBUG: Base URL value check: True
+🤖 Attempting AI analysis...
+Repository files already exist at C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 (cloned by main application)
+📊 Total chunks loaded: 16
+🔍 Phase 2: Starting AI-powered analysis...
+🌐 Making API request to: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@202410...chat/completions?api-version=3.5 Haiku
+🐍 Script stdout before failure: 🚀 Starting migration analysis...
+📁 Repository URL: https://github.com/srigumm/dotnetcore-kafka-integration.git
+📂 Repository Path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673    
+🤖 Using Model: claude-3-5-haiku@20241022
+🔧 Using API Version: 3.5 Haiku
+🌐 Using Endpoint: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku
+📊 Phase 1: Repository validation and code loading...
+🔧 DEBUG: API key presen...
+2025-09-26T20:23:26.553Z [ERROR] Python script execution failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+2025-09-26T20:23:26.553Z [INFO] 🔍 Using README resolver to find correct README file path
+2025-09-26T20:23:26.553Z [INFO] 🔍 Enhanced README Resolver: Starting comprehensive search in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:23:26.554Z [INFO] ✅ Enhanced README Resolver: Found README.md in root (3613 bytes, priority 1)
+2025-09-26T20:23:26.554Z [INFO] 📍 Enhanced README Resolver: Selected path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md
+2025-09-26T20:23:26.555Z [INFO] ✅ Enhanced README Validation: Valid file found: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md (3613 bytes)
+2025-09-26T20:23:26.555Z [INFO] ✅ README resolver found valid file: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md (3613 bytes)
+2025-09-26T20:23:26.555Z [INFO] 📁 Setting report directory to: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:23:26.556Z [INFO] 🔧 Set REPORT_DIR environment variable: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:23:26.556Z [INFO] 🐍 Expected MD file pattern: migration-report-*.md
+2025-09-26T20:23:26.556Z [INFO] 🐍 Repository working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:23:26.560Z [INFO] 🐍 Found 0 migration report files:
+2025-09-26T20:23:26.561Z [WARN] 🐍 No migration report MD files found in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:23:26.561Z [DEBUG] 🐍 All files in directory: .git, .gitignore, Api, orderhandler.sln, README.md, Test
+2025-09-26T20:23:26.561Z [INFO] 🐍 Python script execution completed - Success: false
+2025-09-26T20:23:26.561Z [ERROR] 🐍 Script execution failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+🐍 Python script result: {
+  success: false,
+  error: 'Command failed: py C:\\Users\\AbhishekGupta12\\source\\repos\\RepoCloner1\\scripts\\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\\Users\\AbhishekGupta12\\source\\repos\\RepoCloner1\\temp\\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku\n',
+  exitCode: 1
+}
+❌ Python script failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+✅ Failed analysis report stored with ID: a79cee25-bb22-43de-8bfa-49c0ae84416d
+✅ Repository updated with failed report ID: a79cee25-bb22-43de-8bfa-49c0ae84416d
+1:53:26 AM [express] POST /api/analysis/run 500 in 1907ms :: {"success":false,"error":"Command faile…
+1:53:26 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 1ms :: …
+1:53:26 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 1ms :: …
+1:53:26 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 1ms :: …
+1:53:55 AM [express] GET /api/admin/oauth-config 200 in 1ms :: {"config":{"github":{"clientId":"","c…
+1:53:55 AM [express] GET /api/admin/ai-settings 200 in 1ms :: {"configured":true,"hasApiKey":true,"s…
+1:53:56 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 0ms :: …
+1:53:58 AM [express] PATCH /api/admin/ai-settings 200 in 2ms :: {"success":true,"message":"AI settin…
+1:53:58 AM [express] GET /api/admin/ai-settings 200 in 1ms :: {"configured":true,"hasApiKey":true,"s…
+1:54:03 AM [express] PATCH /api/admin/ai-settings 200 in 2ms :: {"success":true,"message":"AI settin…
+1:54:03 AM [express] GET /api/admin/ai-settings 200 in 1ms :: {"configured":true,"hasApiKey":true,"s…
+🔄 Starting Python script execution for migration analysis...
+2025-09-26T20:24:05.914Z [INFO] Executing post-clone Python script for repository: https://github.com/srigumm/dotnetcore-kafka-integration.git
+2025-09-26T20:24:05.915Z [INFO] Using Python script from scripts folder: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:24:05.915Z [DEBUG] AI settings debug: exists=true, hasApiKey=true, hasModel=true    
+2025-09-26T20:24:05.915Z [DEBUG] AI settings (masked): {"apiKey":"***","model":"claude-3-5-haiku@20241022","apiVersion":"3.5 Haiku","apiEndpointUrl":"https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku","id":"90470ef4-6ccb-4686-99c4-0b72833dc3c2","createdAt":"2025-09-26T20:23:20.874Z","updatedAt":"2025-09-26T20:24:03.540Z","isEnabled":true}
+2025-09-26T20:24:05.915Z [DEBUG] AI settings keys: apiKey, model, apiVersion, apiEndpointUrl, id, createdAt, updatedAt, isEnabled
+2025-09-26T20:24:05.916Z [INFO] Passing AI settings to Python script
+2025-09-26T20:24:05.916Z [INFO] Final script command: python C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key *** --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+2025-09-26T20:24:05.916Z [INFO] 🐍 About to execute Python script with 10 arguments
+2025-09-26T20:24:05.916Z [INFO] 🐍 Script path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:24:05.916Z [INFO] Starting Python script execution
+2025-09-26T20:24:05.917Z [INFO] Using Python script from file: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:24:05.917Z [INFO] Executing Python script: python C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key *** --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+2025-09-26T20:24:05.918Z [INFO] Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:05.919Z [INFO] Files before execution: 16 files in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:05.919Z [INFO] 🐍 Starting Python execution with timeout: 600000ms
+🐍 Starting Python execution with timeout: 600000ms
+2025-09-26T20:24:05.920Z [INFO] 🐍 Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+🐍 Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673  
+2025-09-26T20:24:05.920Z [INFO] 🐍 Command arguments: [C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py, https://github.com/srigumm/dotnetcore-kafka-integration.git, C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673, --api-key, ***, --model, claude-3-5-haiku@20241022, --base-url, https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku, --api-version, 3.5 Haiku]
+🐍 Command arguments: [C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py, https://github.com/srigumm/dotnetcore-kafka-integration.git, C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673, --api-key, ***, --model, claude-3-5-haiku@20241022, --base-url, https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku, --api-version, 3.5 Haiku]
+2025-09-26T20:24:05.921Z [INFO] 🐍 Trying Python command: py
+🐍 Trying Python command: py
+2025-09-26T20:24:07.718Z [ERROR] 🐍 Python command 'py' failed with error code: 1, signal: null
+🐍 Python command 'py' failed with error code: 1, signal: null
+2025-09-26T20:24:07.719Z [ERROR] 🐍 Error message: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+🐍 Error message: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+2025-09-26T20:24:07.719Z [ERROR] 🐍 Script stdout before failure: 🚀 Starting migration analysis...
+📁 Repository URL: https://github.com/srigumm/dotnetcore-kafka-integration.git
+📂 Repository Path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673    
+🤖 Using Model: claude-3-5-haiku@20241022
+🔧 Using API Version: 3.5 Haiku
+🌐 Using Endpoint: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku
+📊 Phase 1: Repository validation and code loading...
+🔧 DEBUG: API key present: True
+🔧 DEBUG: Base URL present: True
+🔧 DEBUG: API key value check: True
+🔧 DEBUG: Base URL value check: True
+🤖 Attempting AI analysis...
+Repository files already exist at C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 (cloned by main application)
+📊 Total chunks loaded: 16
+🔍 Phase 2: Starting AI-powered analysis...
+🌐 Making API request to: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@202410...chat/completions?api-version=3.5 Haiku
+🐍 Script stdout before failure: 🚀 Starting migration analysis...
+📁 Repository URL: https://github.com/srigumm/dotnetcore-kafka-integration.git
+📂 Repository Path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673    
+🤖 Using Model: claude-3-5-haiku@20241022
+🔧 Using API Version: 3.5 Haiku
+🌐 Using Endpoint: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku
+📊 Phase 1: Repository validation and code loading...
+🔧 DEBUG: API key presen...
+2025-09-26T20:24:07.720Z [ERROR] Python script execution failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+2025-09-26T20:24:07.720Z [INFO] 🔍 Using README resolver to find correct README file path
+2025-09-26T20:24:07.721Z [INFO] 🔍 Enhanced README Resolver: Starting comprehensive search in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:07.721Z [INFO] ✅ Enhanced README Resolver: Found README.md in root (3613 bytes, priority 1)
+2025-09-26T20:24:07.721Z [INFO] 📍 Enhanced README Resolver: Selected path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md
+2025-09-26T20:24:07.722Z [INFO] ✅ Enhanced README Validation: Valid file found: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md (3613 bytes)
+2025-09-26T20:24:07.722Z [INFO] ✅ README resolver found valid file: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md (3613 bytes)
+2025-09-26T20:24:07.722Z [INFO] 📁 Setting report directory to: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:07.722Z [INFO] 🐍 Expected MD file pattern: migration-report-*.md
+2025-09-26T20:24:07.722Z [INFO] 🐍 Repository working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:07.726Z [INFO] 🐍 Found 0 migration report files:
+2025-09-26T20:24:07.726Z [WARN] 🐍 No migration report MD files found in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:07.726Z [DEBUG] 🐍 All files in directory: .git, .gitignore, Api, orderhandler.sln, README.md, Test
+2025-09-26T20:24:07.726Z [INFO] 🐍 Python script execution completed - Success: false
+2025-09-26T20:24:07.727Z [ERROR] 🐍 Script execution failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+🐍 Python script result: {
+  success: false,
+  error: 'Command failed: py C:\\Users\\AbhishekGupta12\\source\\repos\\RepoCloner1\\scripts\\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\\Users\\AbhishekGupta12\\source\\repos\\RepoCloner1\\temp\\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku\n',
+  exitCode: 1
+}
+❌ Python script failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+✅ Failed analysis report stored with ID: f053e67b-8f5e-4368-a163-9848345f70d0
+✅ Repository updated with failed report ID: f053e67b-8f5e-4368-a163-9848345f70d0
+1:54:07 AM [express] POST /api/analysis/run 500 in 1814ms :: {"success":false,"error":"Command faile…
+1:54:07 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 1ms :: …
+1:54:07 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 1ms :: …
+🔄 Starting Python script execution for migration analysis...
+2025-09-26T20:24:09.097Z [INFO] Executing post-clone Python script for repository: https://github.com/srigumm/dotnetcore-kafka-integration.git
+2025-09-26T20:24:09.098Z [INFO] Using Python script from scripts folder: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:24:09.098Z [DEBUG] AI settings debug: exists=true, hasApiKey=true, hasModel=true    
+2025-09-26T20:24:09.099Z [DEBUG] AI settings (masked): {"apiKey":"***","model":"claude-3-5-haiku@20241022","apiVersion":"3.5 Haiku","apiEndpointUrl":"https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku","id":"90470ef4-6ccb-4686-99c4-0b72833dc3c2","createdAt":"2025-09-26T20:23:20.874Z","updatedAt":"2025-09-26T20:24:03.540Z","isEnabled":true}
+2025-09-26T20:24:09.099Z [DEBUG] AI settings keys: apiKey, model, apiVersion, apiEndpointUrl, id, createdAt, updatedAt, isEnabled
+2025-09-26T20:24:09.099Z [INFO] Passing AI settings to Python script
+2025-09-26T20:24:09.099Z [INFO] Final script command: python C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key *** --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+2025-09-26T20:24:09.099Z [INFO] 🐍 About to execute Python script with 10 arguments
+2025-09-26T20:24:09.099Z [INFO] 🐍 Script path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:24:09.100Z [INFO] Starting Python script execution
+2025-09-26T20:24:09.100Z [INFO] Using Python script from file: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:24:09.100Z [INFO] Executing Python script: python C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key *** --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+2025-09-26T20:24:09.101Z [INFO] Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:09.103Z [INFO] Files before execution: 16 files in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:09.103Z [INFO] 🐍 Starting Python execution with timeout: 600000ms
+🐍 Starting Python execution with timeout: 600000ms
+2025-09-26T20:24:09.103Z [INFO] 🐍 Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+🐍 Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673  
+2025-09-26T20:24:09.104Z [INFO] 🐍 Command arguments: [C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py, https://github.com/srigumm/dotnetcore-kafka-integration.git, C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673, --api-key, ***, --model, claude-3-5-haiku@20241022, --base-url, https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku, --api-version, 3.5 Haiku]
+🐍 Command arguments: [C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py, https://github.com/srigumm/dotnetcore-kafka-integration.git, C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673, --api-key, ***, --model, claude-3-5-haiku@20241022, --base-url, https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku, --api-version, 3.5 Haiku]
+2025-09-26T20:24:09.104Z [INFO] 🐍 Trying Python command: py
+🐍 Trying Python command: py
+2025-09-26T20:24:10.901Z [ERROR] 🐍 Python command 'py' failed with error code: 1, signal: null
+🐍 Python command 'py' failed with error code: 1, signal: null
+2025-09-26T20:24:10.902Z [ERROR] 🐍 Error message: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+🐍 Error message: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+2025-09-26T20:24:10.902Z [ERROR] 🐍 Script stdout before failure: 🚀 Starting migration analysis...
+📁 Repository URL: https://github.com/srigumm/dotnetcore-kafka-integration.git
+📂 Repository Path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673    
+🤖 Using Model: claude-3-5-haiku@20241022
+🔧 Using API Version: 3.5 Haiku
+🌐 Using Endpoint: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku
+📊 Phase 1: Repository validation and code loading...
+🔧 DEBUG: API key present: True
+🔧 DEBUG: Base URL present: True
+🔧 DEBUG: API key value check: True
+🔧 DEBUG: Base URL value check: True
+🤖 Attempting AI analysis...
+Repository files already exist at C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 (cloned by main application)
+📊 Total chunks loaded: 16
+🔍 Phase 2: Starting AI-powered analysis...
+🌐 Making API request to: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@202410...chat/completions?api-version=3.5 Haiku
+🐍 Script stdout before failure: 🚀 Starting migration analysis...
+📁 Repository URL: https://github.com/srigumm/dotnetcore-kafka-integration.git
+📂 Repository Path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673    
+🤖 Using Model: claude-3-5-haiku@20241022
+🔧 Using API Version: 3.5 Haiku
+🌐 Using Endpoint: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku
+📊 Phase 1: Repository validation and code loading...
+🔧 DEBUG: API key presen...
+2025-09-26T20:24:10.902Z [ERROR] Python script execution failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+2025-09-26T20:24:10.903Z [INFO] 🔍 Using README resolver to find correct README file path
+2025-09-26T20:24:10.903Z [INFO] 🔍 Enhanced README Resolver: Starting comprehensive search in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:10.903Z [INFO] ✅ Enhanced README Resolver: Found README.md in root (3613 bytes, priority 1)
+2025-09-26T20:24:10.903Z [INFO] 📍 Enhanced README Resolver: Selected path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md
+2025-09-26T20:24:10.903Z [INFO] ✅ Enhanced README Validation: Valid file found: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md (3613 bytes)
+2025-09-26T20:24:10.904Z [INFO] ✅ README resolver found valid file: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md (3613 bytes)
+2025-09-26T20:24:10.904Z [INFO] 📁 Setting report directory to: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:10.904Z [INFO] 🐍 Expected MD file pattern: migration-report-*.md
+2025-09-26T20:24:10.904Z [INFO] 🐍 Repository working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:10.908Z [INFO] 🐍 Found 0 migration report files:
+2025-09-26T20:24:10.908Z [WARN] 🐍 No migration report MD files found in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:10.908Z [DEBUG] 🐍 All files in directory: .git, .gitignore, Api, orderhandler.sln, README.md, Test
+2025-09-26T20:24:10.908Z [INFO] 🐍 Python script execution completed - Success: false
+2025-09-26T20:24:10.909Z [ERROR] 🐍 Script execution failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+🐍 Python script result: {
+  success: false,
+  error: 'Command failed: py C:\\Users\\AbhishekGupta12\\source\\repos\\RepoCloner1\\scripts\\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\\Users\\AbhishekGupta12\\source\\repos\\RepoCloner1\\temp\\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku\n',
+  exitCode: 1
+}
+❌ Python script failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+✅ Failed analysis report stored with ID: 4779b9a6-3d1d-48fe-bf2e-cb95928f7927
+✅ Repository updated with failed report ID: 4779b9a6-3d1d-48fe-bf2e-cb95928f7927
+1:54:10 AM [express] POST /api/analysis/run 500 in 1815ms :: {"success":false,"error":"Command faile…
+1:54:10 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 1ms :: …
+1:54:10 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 1ms :: …
+🔄 Starting Python script execution for migration analysis...
+2025-09-26T20:24:11.926Z [INFO] Executing post-clone Python script for repository: https://github.com/srigumm/dotnetcore-kafka-integration.git
+2025-09-26T20:24:11.926Z [INFO] Using Python script from scripts folder: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:24:11.927Z [DEBUG] AI settings debug: exists=true, hasApiKey=true, hasModel=true    
+2025-09-26T20:24:11.927Z [DEBUG] AI settings (masked): {"apiKey":"***","model":"claude-3-5-haiku@20241022","apiVersion":"3.5 Haiku","apiEndpointUrl":"https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku","id":"90470ef4-6ccb-4686-99c4-0b72833dc3c2","createdAt":"2025-09-26T20:23:20.874Z","updatedAt":"2025-09-26T20:24:03.540Z","isEnabled":true}
+2025-09-26T20:24:11.927Z [DEBUG] AI settings keys: apiKey, model, apiVersion, apiEndpointUrl, id, createdAt, updatedAt, isEnabled
+2025-09-26T20:24:11.927Z [INFO] Passing AI settings to Python script
+2025-09-26T20:24:11.927Z [INFO] Final script command: python C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key *** --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+2025-09-26T20:24:11.927Z [INFO] 🐍 About to execute Python script with 10 arguments
+2025-09-26T20:24:11.927Z [INFO] 🐍 Script path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:24:11.928Z [INFO] Starting Python script execution
+2025-09-26T20:24:11.928Z [INFO] Using Python script from file: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:24:11.928Z [INFO] Executing Python script: python C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key *** --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+2025-09-26T20:24:11.928Z [INFO] Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:11.930Z [INFO] Files before execution: 16 files in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:11.930Z [INFO] 🐍 Starting Python execution with timeout: 600000ms
+🐍 Starting Python execution with timeout: 600000ms
+2025-09-26T20:24:11.930Z [INFO] 🐍 Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+🐍 Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673  
+2025-09-26T20:24:11.931Z [INFO] 🐍 Command arguments: [C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py, https://github.com/srigumm/dotnetcore-kafka-integration.git, C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673, --api-key, ***, --model, claude-3-5-haiku@20241022, --base-url, https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku, --api-version, 3.5 Haiku]
+🐍 Command arguments: [C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py, https://github.com/srigumm/dotnetcore-kafka-integration.git, C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673, --api-key, ***, --model, claude-3-5-haiku@20241022, --base-url, https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku, --api-version, 3.5 Haiku]
+2025-09-26T20:24:11.931Z [INFO] 🐍 Trying Python command: py
+🐍 Trying Python command: py
+2025-09-26T20:24:13.699Z [ERROR] 🐍 Python command 'py' failed with error code: 1, signal: null
+🐍 Python command 'py' failed with error code: 1, signal: null
+2025-09-26T20:24:13.700Z [ERROR] 🐍 Error message: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+🐍 Error message: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+2025-09-26T20:24:13.700Z [ERROR] 🐍 Script stdout before failure: 🚀 Starting migration analysis...
+📁 Repository URL: https://github.com/srigumm/dotnetcore-kafka-integration.git
+📂 Repository Path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673    
+🤖 Using Model: claude-3-5-haiku@20241022
+🔧 Using API Version: 3.5 Haiku
+🌐 Using Endpoint: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku
+📊 Phase 1: Repository validation and code loading...
+🔧 DEBUG: API key present: True
+🔧 DEBUG: Base URL present: True
+🔧 DEBUG: API key value check: True
+🔧 DEBUG: Base URL value check: True
+🤖 Attempting AI analysis...
+Repository files already exist at C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 (cloned by main application)
+📊 Total chunks loaded: 16
+🔍 Phase 2: Starting AI-powered analysis...
+🌐 Making API request to: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@202410...chat/completions?api-version=3.5 Haiku
+🐍 Script stdout before failure: 🚀 Starting migration analysis...
+📁 Repository URL: https://github.com/srigumm/dotnetcore-kafka-integration.git
+📂 Repository Path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673    
+🤖 Using Model: claude-3-5-haiku@20241022
+🔧 Using API Version: 3.5 Haiku
+🌐 Using Endpoint: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku
+📊 Phase 1: Repository validation and code loading...
+🔧 DEBUG: API key presen...
+2025-09-26T20:24:13.700Z [ERROR] Python script execution failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+2025-09-26T20:24:13.700Z [INFO] 🔍 Using README resolver to find correct README file path
+2025-09-26T20:24:13.701Z [INFO] 🔍 Enhanced README Resolver: Starting comprehensive search in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:13.701Z [INFO] ✅ Enhanced README Resolver: Found README.md in root (3613 bytes, priority 1)
+2025-09-26T20:24:13.701Z [INFO] 📍 Enhanced README Resolver: Selected path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md
+2025-09-26T20:24:13.701Z [INFO] ✅ Enhanced README Validation: Valid file found: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md (3613 bytes)
+2025-09-26T20:24:13.702Z [INFO] ✅ README resolver found valid file: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md (3613 bytes)
+2025-09-26T20:24:13.702Z [INFO] 📁 Setting report directory to: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:13.702Z [INFO] 🐍 Expected MD file pattern: migration-report-*.md
+2025-09-26T20:24:13.702Z [INFO] 🐍 Repository working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:13.705Z [INFO] 🐍 Found 0 migration report files:
+2025-09-26T20:24:13.705Z [WARN] 🐍 No migration report MD files found in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:13.705Z [DEBUG] 🐍 All files in directory: .git, .gitignore, Api, orderhandler.sln, README.md, Test
+2025-09-26T20:24:13.706Z [INFO] 🐍 Python script execution completed - Success: false
+2025-09-26T20:24:13.706Z [ERROR] 🐍 Script execution failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+🐍 Python script result: {
+  success: false,
+  error: 'Command failed: py C:\\Users\\AbhishekGupta12\\source\\repos\\RepoCloner1\\scripts\\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\\Users\\AbhishekGupta12\\source\\repos\\RepoCloner1\\temp\\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku\n',
+  exitCode: 1
+}
+❌ Python script failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+✅ Failed analysis report stored with ID: e9cff600-edc2-49df-a0d6-8f6cd4f0670e
+✅ Repository updated with failed report ID: e9cff600-edc2-49df-a0d6-8f6cd4f0670e
+1:54:13 AM [express] POST /api/analysis/run 500 in 1783ms :: {"success":false,"error":"Command faile…
+1:54:13 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 1ms :: …
+1:54:13 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 0ms :: …
+1:54:13 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 1ms :: …
+1:54:39 AM [express] GET /api/admin/oauth-config 200 in 1ms :: {"config":{"github":{"clientId":"","c…
+🔄 Starting Python script execution for migration analysis...
+2025-09-26T20:24:41.666Z [INFO] Executing post-clone Python script for repository: https://github.com/srigumm/dotnetcore-kafka-integration.git
+2025-09-26T20:24:41.667Z [INFO] Using Python script from scripts folder: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:24:41.667Z [DEBUG] AI settings debug: exists=true, hasApiKey=true, hasModel=true    
+2025-09-26T20:24:41.667Z [DEBUG] AI settings (masked): {"apiKey":"***","model":"claude-3-5-haiku@20241022","apiVersion":"3.5 Haiku","apiEndpointUrl":"https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku","id":"90470ef4-6ccb-4686-99c4-0b72833dc3c2","createdAt":"2025-09-26T20:23:20.874Z","updatedAt":"2025-09-26T20:24:03.540Z","isEnabled":true}
+2025-09-26T20:24:41.668Z [DEBUG] AI settings keys: apiKey, model, apiVersion, apiEndpointUrl, id, createdAt, updatedAt, isEnabled
+2025-09-26T20:24:41.668Z [INFO] Passing AI settings to Python script
+2025-09-26T20:24:41.669Z [INFO] Final script command: python C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key *** --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+2025-09-26T20:24:41.669Z [INFO] 🐍 About to execute Python script with 10 arguments
+2025-09-26T20:24:41.670Z [INFO] 🐍 Script path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:24:41.671Z [INFO] Starting Python script execution
+2025-09-26T20:24:41.671Z [INFO] Using Python script from file: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:24:41.671Z [INFO] Executing Python script: python C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key *** --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+2025-09-26T20:24:41.672Z [INFO] Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:41.675Z [INFO] Files before execution: 16 files in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:41.675Z [INFO] 🐍 Starting Python execution with timeout: 600000ms
+🐍 Starting Python execution with timeout: 600000ms
+2025-09-26T20:24:41.676Z [INFO] 🐍 Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+🐍 Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673  
+2025-09-26T20:24:41.676Z [INFO] 🐍 Command arguments: [C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py, https://github.com/srigumm/dotnetcore-kafka-integration.git, C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673, --api-key, ***, --model, claude-3-5-haiku@20241022, --base-url, https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku, --api-version, 3.5 Haiku]
+🐍 Command arguments: [C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py, https://github.com/srigumm/dotnetcore-kafka-integration.git, C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673, --api-key, ***, --model, claude-3-5-haiku@20241022, --base-url, https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku, --api-version, 3.5 Haiku]
+2025-09-26T20:24:41.676Z [INFO] 🐍 Trying Python command: py
+🐍 Trying Python command: py
+2025-09-26T20:24:43.472Z [ERROR] 🐍 Python command 'py' failed with error code: 1, signal: null
+🐍 Python command 'py' failed with error code: 1, signal: null
+2025-09-26T20:24:43.473Z [ERROR] 🐍 Error message: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+🐍 Error message: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+2025-09-26T20:24:43.474Z [ERROR] 🐍 Script stdout before failure: 🚀 Starting migration analysis...
+📁 Repository URL: https://github.com/srigumm/dotnetcore-kafka-integration.git
+📂 Repository Path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673    
+🤖 Using Model: claude-3-5-haiku@20241022
+🔧 Using API Version: 3.5 Haiku
+🌐 Using Endpoint: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku
+📊 Phase 1: Repository validation and code loading...
+🔧 DEBUG: API key present: True
+🔧 DEBUG: Base URL present: True
+🔧 DEBUG: API key value check: True
+🔧 DEBUG: Base URL value check: True
+🤖 Attempting AI analysis...
+Repository files already exist at C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 (cloned by main application)
+📊 Total chunks loaded: 16
+🔍 Phase 2: Starting AI-powered analysis...
+🌐 Making API request to: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@202410...chat/completions?api-version=3.5 Haiku
+🐍 Script stdout before failure: 🚀 Starting migration analysis...
+📁 Repository URL: https://github.com/srigumm/dotnetcore-kafka-integration.git
+📂 Repository Path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673    
+🤖 Using Model: claude-3-5-haiku@20241022
+🔧 Using API Version: 3.5 Haiku
+🌐 Using Endpoint: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku
+📊 Phase 1: Repository validation and code loading...
+🔧 DEBUG: API key presen...
+2025-09-26T20:24:43.475Z [ERROR] Python script execution failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+2025-09-26T20:24:43.475Z [INFO] 🔍 Using README resolver to find correct README file path
+2025-09-26T20:24:43.476Z [INFO] 🔍 Enhanced README Resolver: Starting comprehensive search in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:43.476Z [INFO] ✅ Enhanced README Resolver: Found README.md in root (3613 bytes, priority 1)
+2025-09-26T20:24:43.476Z [INFO] 📍 Enhanced README Resolver: Selected path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md
+2025-09-26T20:24:43.476Z [INFO] ✅ Enhanced README Validation: Valid file found: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md (3613 bytes)
+2025-09-26T20:24:43.477Z [INFO] ✅ README resolver found valid file: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md (3613 bytes)
+2025-09-26T20:24:43.477Z [INFO] 📁 Setting report directory to: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:43.477Z [INFO] 🐍 Expected MD file pattern: migration-report-*.md
+2025-09-26T20:24:43.477Z [INFO] 🐍 Repository working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:43.479Z [INFO] 🐍 Found 0 migration report files:
+2025-09-26T20:24:43.479Z [WARN] 🐍 No migration report MD files found in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:24:43.479Z [DEBUG] 🐍 All files in directory: .git, .gitignore, Api, orderhandler.sln, README.md, Test
+2025-09-26T20:24:43.480Z [INFO] 🐍 Python script execution completed - Success: false
+2025-09-26T20:24:43.480Z [ERROR] 🐍 Script execution failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+🐍 Python script result: {
+  success: false,
+  error: 'Command failed: py C:\\Users\\AbhishekGupta12\\source\\repos\\RepoCloner1\\scripts\\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\\Users\\AbhishekGupta12\\source\\repos\\RepoCloner1\\temp\\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku\n',
+  exitCode: 1
+}
+❌ Python script failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+✅ Failed analysis report stored with ID: 8710d9c6-f276-481f-8b92-0f9154655716
+✅ Repository updated with failed report ID: 8710d9c6-f276-481f-8b92-0f9154655716
+1:54:43 AM [express] POST /api/analysis/run 500 in 1817ms :: {"success":false,"error":"Command faile…
+1:54:43 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 2ms :: …
+1:54:43 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 2ms :: …
+1:54:45 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 1ms :: …
+1:55:13 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 2ms :: …
+🔄 Starting Python script execution for migration analysis...
+2025-09-26T20:25:24.930Z [INFO] Executing post-clone Python script for repository: https://github.com/srigumm/dotnetcore-kafka-integration.git
+2025-09-26T20:25:24.930Z [INFO] Using Python script from scripts folder: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:25:24.930Z [DEBUG] AI settings debug: exists=true, hasApiKey=true, hasModel=true    
+2025-09-26T20:25:24.930Z [DEBUG] AI settings (masked): {"apiKey":"***","model":"claude-3-5-haiku@20241022","apiVersion":"3.5 Haiku","apiEndpointUrl":"https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku","id":"90470ef4-6ccb-4686-99c4-0b72833dc3c2","createdAt":"2025-09-26T20:23:20.874Z","updatedAt":"2025-09-26T20:24:03.540Z","isEnabled":true}
+2025-09-26T20:25:24.931Z [DEBUG] AI settings keys: apiKey, model, apiVersion, apiEndpointUrl, id, createdAt, updatedAt, isEnabled
+2025-09-26T20:25:24.931Z [INFO] Passing AI settings to Python script
+2025-09-26T20:25:24.931Z [INFO] Final script command: python C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key *** --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+2025-09-26T20:25:24.931Z [INFO] 🐍 About to execute Python script with 10 arguments
+2025-09-26T20:25:24.932Z [INFO] 🐍 Script path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:25:24.932Z [INFO] Starting Python script execution
+2025-09-26T20:25:24.932Z [INFO] Using Python script from file: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py
+2025-09-26T20:25:24.933Z [INFO] Executing Python script: python C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key *** --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+2025-09-26T20:25:24.933Z [INFO] Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:25:24.935Z [INFO] Files before execution: 16 files in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:25:24.936Z [INFO] 🐍 Starting Python execution with timeout: 600000ms
+🐍 Starting Python execution with timeout: 600000ms
+2025-09-26T20:25:24.936Z [INFO] 🐍 Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+🐍 Working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673  
+2025-09-26T20:25:24.936Z [INFO] 🐍 Command arguments: [C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py, https://github.com/srigumm/dotnetcore-kafka-integration.git, C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673, --api-key, ***, --model, claude-3-5-haiku@20241022, --base-url, https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku, --api-version, 3.5 Haiku]
+🐍 Command arguments: [C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py, https://github.com/srigumm/dotnetcore-kafka-integration.git, C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673, --api-key, ***, --model, claude-3-5-haiku@20241022, --base-url, https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku, --api-version, 3.5 Haiku]
+2025-09-26T20:25:24.936Z [INFO] 🐍 Trying Python command: py
+🐍 Trying Python command: py
+2025-09-26T20:25:26.734Z [ERROR] 🐍 Python command 'py' failed with error code: 1, signal: null
+🐍 Python command 'py' failed with error code: 1, signal: null
+2025-09-26T20:25:26.735Z [ERROR] 🐍 Error message: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+🐍 Error message: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+2025-09-26T20:25:26.735Z [ERROR] 🐍 Script stdout before failure: 🚀 Starting migration analysis...
+📁 Repository URL: https://github.com/srigumm/dotnetcore-kafka-integration.git
+📂 Repository Path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673    
+🤖 Using Model: claude-3-5-haiku@20241022
+🔧 Using API Version: 3.5 Haiku
+🌐 Using Endpoint: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku
+📊 Phase 1: Repository validation and code loading...
+🔧 DEBUG: API key present: True
+🔧 DEBUG: Base URL present: True
+🔧 DEBUG: API key value check: True
+🔧 DEBUG: Base URL value check: True
+🤖 Attempting AI analysis...
+Repository files already exist at C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 (cloned by main application)
+📊 Total chunks loaded: 16
+🔍 Phase 2: Starting AI-powered analysis...
+🌐 Making API request to: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@202410...chat/completions?api-version=3.5 Haiku
+🐍 Script stdout before failure: 🚀 Starting migration analysis...
+📁 Repository URL: https://github.com/srigumm/dotnetcore-kafka-integration.git
+📂 Repository Path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673    
+🤖 Using Model: claude-3-5-haiku@20241022
+🔧 Using API Version: 3.5 Haiku
+🌐 Using Endpoint: https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku
+📊 Phase 1: Repository validation and code loading...
+🔧 DEBUG: API key presen...
+2025-09-26T20:25:26.737Z [ERROR] Python script execution failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+2025-09-26T20:25:26.737Z [INFO] 🔍 Using README resolver to find correct README file path
+2025-09-26T20:25:26.737Z [INFO] 🔍 Enhanced README Resolver: Starting comprehensive search in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:25:26.738Z [INFO] ✅ Enhanced README Resolver: Found README.md in root (3613 bytes, priority 1)
+2025-09-26T20:25:26.738Z [INFO] 📍 Enhanced README Resolver: Selected path: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md
+2025-09-26T20:25:26.738Z [INFO] ✅ Enhanced README Validation: Valid file found: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md (3613 bytes)
+2025-09-26T20:25:26.739Z [INFO] ✅ README resolver found valid file: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673\README.md (3613 bytes)
+2025-09-26T20:25:26.739Z [INFO] 📁 Setting report directory to: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:25:26.739Z [INFO] 🐍 Expected MD file pattern: migration-report-*.md
+2025-09-26T20:25:26.739Z [INFO] 🐍 Repository working directory: C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:25:26.742Z [INFO] 🐍 Found 0 migration report files:
+2025-09-26T20:25:26.742Z [WARN] 🐍 No migration report MD files found in C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673
+2025-09-26T20:25:26.742Z [DEBUG] 🐍 All files in directory: .git, .gitignore, Api, orderhandler.sln, README.md, Test
+2025-09-26T20:25:26.742Z [INFO] 🐍 Python script execution completed - Success: false
+2025-09-26T20:25:26.742Z [ERROR] 🐍 Script execution failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+🐍 Python script result: {
+  success: false,
+  error: 'Command failed: py C:\\Users\\AbhishekGupta12\\source\\repos\\RepoCloner1\\scripts\\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\\Users\\AbhishekGupta12\\source\\repos\\RepoCloner1\\temp\\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku\n',
+  exitCode: 1
+}
+❌ Python script failed: Command failed: py C:\Users\AbhishekGupta12\source\repos\RepoCloner1\scripts\default.py https://github.com/srigumm/dotnetcore-kafka-integration.git C:\Users\AbhishekGupta12\source\repos\RepoCloner1\temp\clone_1758918166673 --api-key dial-qux0bkmzf5twpslx680o4gk0fqf --model claude-3-5-haiku@20241022 --base-url https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions?api-version=3.5 Haiku --api-version 3.5 Haiku
+
+✅ Failed analysis report stored with ID: 281312ec-4f2e-42a3-9b28-4a35eb94f7d8
+✅ Repository updated with failed report ID: 281312ec-4f2e-42a3-9b28-4a35eb94f7d8
+1:55:26 AM [express] POST /api/analysis/run 500 in 1815ms :: {"success":false,"error":"Command faile…
+1:55:26 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 1ms :: …
+1:55:26 AM [express] GET /api/reports/7d1d41e1-d79b-4034-994f-51e6b79a8756/structured 200 in 1ms :: …
