@@ -104,6 +104,32 @@ class GitHubPusher {
     return result.data.repository.ref.target.oid;
   }
 
+  private async getBranchOid(branchName: string): Promise<string> {
+    const query = `
+      query($owner: String!, $repo: String!, $branchName: String!) {
+        repository(owner: $owner, name: $repo) {
+          ref(qualifiedName: $branchName) {
+            target {
+              oid
+            }
+          }
+        }
+      }
+    `;
+
+    const result = await this.graphqlRequest(query, {
+      owner: this.owner,
+      repo: this.repo,
+      branchName: `refs/heads/${branchName}`,
+    });
+
+    if (result.errors) {
+      throw new Error(`Failed to get branch ${branchName}: ${result.errors[0].message}`);
+    }
+
+    return result.data.repository.ref.target.oid;
+  }
+
   private async createBranch(branchName: string, fromOid: string): Promise<string> {
     const mutation = `
       mutation($input: CreateRefInput!) {
@@ -254,12 +280,13 @@ class GitHubPusher {
       const mainOid = await this.getMainBranchOid();
       console.log('📍 Got main branch OID:', mainOid.substring(0, 8));
 
-      // Create new branch
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const branchName = `agent-sync-${timestamp}`;
+      // Use existing branch specified by user
+      const branchName = 'feature-workflow-separation-2025-09-25T13-22-56';
+      console.log('🎯 Pushing to existing branch:', branchName);
       
-      let currentOid = await this.createBranch(branchName, mainOid);
-      console.log('🌿 Created branch:', branchName);
+      // Get current branch OID instead of creating new branch
+      let currentOid = await this.getBranchOid(branchName);
+      console.log('📍 Got branch OID:', currentOid.substring(0, 8));
 
       // Commit files in batches
       const batchSize = 20; // Files per commit (smaller to stay under 45MB limit)
@@ -274,44 +301,15 @@ class GitHubPusher {
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i];
         const commitMessage = batches.length > 1 
-          ? `Test infrastructure improvements (batch ${i + 1}/${batches.length})`
-          : 'Test infrastructure improvements: Fixed 8+ failing tests, enhanced component testing, improved useAuth hook stability';
+          ? `UI fixes and enhancements (batch ${i + 1}/${batches.length})`
+          : 'UI fixes: Dark theme colors, Migration Summary collapsible, descriptive text extraction';
         
         currentOid = await this.commitFiles(branchName, batch, currentOid, commitMessage);
         console.log(`✅ Committed batch ${i + 1}/${batches.length} (${batch.length} files)`);
       }
 
-      // Create pull request
-      const prTitle = 'Test Infrastructure Improvements from Replit Agent';
-      const prBody = `## 🎉 Test Infrastructure Improvements
-
-### What's Included:
-✅ **Fixed SettingsPanel tests** (8/8 passing)
-✅ **Fixed useAuth hook** (null safety improvements)  
-✅ **Enhanced TechnologyShowcase/Display tests**
-✅ **Improved test infrastructure** with proper mocking
-✅ **All UI layout improvements** (equal height grid, responsive design)
-✅ **Working authentication system**
-
-### Test Coverage Achievement:
-- Significantly improved from 71/79 passing tests (92% success rate)
-- Fixed multiple critical test failures
-- Standardized test patterns across all components
-- Proper React Query and component mocking
-
-### Technical Details:
-- Fixed "Cannot read properties of undefined" errors in useAuth hook
-- Resolved duplicate text element issues in SettingsPanel tests
-- Updated component assertions to match actual UI implementation
-- Enhanced test stability with proper async handling
-
-Ready for merge! 🚀`;
-
-      const prUrl = await this.createPullRequest(branchName, prTitle, prBody);
-      
       console.log('🎉 SUCCESS! Code pushed to GitHub');
-      console.log('📋 Pull Request created:', prUrl);
-      console.log('🔀 You can review and merge the PR at:', prUrl);
+      console.log(`📋 Pushed ${batches.length} batch(es) to branch: ${branchName}`);
 
     } catch (error) {
       console.error('❌ Failed to push code:', error);

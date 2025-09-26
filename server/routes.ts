@@ -1706,6 +1706,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
     }
   });
 
+
   // Get structured migration data for a repository
   app.get('/api/reports/:repositoryId/structured', async (req, res) => {
     try {
