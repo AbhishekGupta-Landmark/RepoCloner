@@ -571,7 +571,7 @@ export class PythonScriptService {
 
       // Extract structured data from report
       const reportContent = await fs.promises.readFile(reportPath, 'utf8');
-      const structuredData = await this.extractStructuredData(reportContent);
+      const structuredData = await this.extractStructuredData(reportContent, reportPath);
 
       return {
         success: true,
@@ -621,11 +621,90 @@ export class PythonScriptService {
   }
 
   /**
-   * Extract structured data from migration report content
+   * Convert JSON report data to our internal MigrationReportData format
    */
-  private async extractStructuredData(reportContent: string): Promise<MigrationReportData | null> {
+  private convertJsonToMigrationData(jsonData: any): MigrationReportData {
+    // Pure JSON deserialization - no regex cleanup needed
+    // Python script already extracts key changes/notes into separate arrays
+    const codeDiffs = jsonData.diffs.map((diff: any) => {
+      return {
+        file: diff.path,
+        diff_content: diff.diff,
+        description: diff.description,
+        diffContent: diff.diff,
+        language: 'diff',
+        key_changes: []  // Key changes are in the top-level keyChanges array
+      };
+    });
+    
+    const sections = codeDiffs.map((diff: any, idx: number) => ({
+      id: `section-${idx + 1}`,
+      title: diff.file,
+      description: diff.description,
+      diffBlock: diff.diff_content,
+      keyChanges: [], // Will be populated from global keyChanges array
+      notes: [], // Will be populated from global notes array
+      evidence: []
+    }));
+    
+    return {
+      title: 'Kafka → Azure Service Bus Migration Analysis',
+      kafka_inventory: jsonData.inventory.map((item: any) => ({
+        file: item.file,
+        apis_used: item.kafka_apis?.join(', ') || '',
+        summary: item.summary || ''
+      })),
+      code_diffs: codeDiffs,
+      sections: sections,
+      keyChanges: jsonData.keyChanges || [],
+      notes: jsonData.notes || [],
+      stats: {
+        total_files_with_kafka: jsonData.inventory.length,
+        total_files_with_diffs: jsonData.diffs.length,
+        notes_count: (jsonData.notes || []).length,
+        sections_count: sections.length
+      }
+    };
+  }
+
+  /**
+   * Extract structured data from migration report content
+   * @param reportPath Optional path to the report file for standalone JSON lookup
+   */
+  private async extractStructuredData(reportContent: string, reportPath?: string): Promise<MigrationReportData | null> {
     try {
-      // Parse migration report sections using regex patterns
+      // First, try to extract JSON data embedded in markdown (<!--BEGIN:REPORT_JSON-->...<!--END:REPORT_JSON-->)
+      const jsonMarkerMatch = reportContent.match(/<!--BEGIN:REPORT_JSON-->\s*([\s\S]*?)\s*<!--END:REPORT_JSON-->/);
+      
+      if (jsonMarkerMatch) {
+        try {
+          const jsonData = JSON.parse(jsonMarkerMatch[1]);
+          broadcastLog('INFO', '✅ Found and parsed embedded JSON data from report');
+          
+          // Convert JSON format to our internal MigrationReportData format
+          return this.convertJsonToMigrationData(jsonData);
+        } catch (jsonError) {
+          broadcastLog('WARN', `⚠️  Failed to parse embedded JSON, falling back to standalone JSON file: ${jsonError}`);
+        }
+      }
+      
+      // Second, try to read standalone JSON file (migration-report-*.json)
+      if (reportPath) {
+        const jsonPath = reportPath.replace(/\.md$/, '.json');
+        if (await this.fileExists(jsonPath)) {
+          try {
+            const jsonContent = await fs.promises.readFile(jsonPath, 'utf-8');
+            const jsonData = JSON.parse(jsonContent);
+            broadcastLog('INFO', `✅ Found and parsed standalone JSON file: ${jsonPath}`);
+            
+            return this.convertJsonToMigrationData(jsonData);
+          } catch (jsonError) {
+            broadcastLog('WARN', `⚠️  Failed to parse standalone JSON file, falling back to markdown parsing: ${jsonError}`);
+          }
+        }
+      }
+      
+      // Fallback: Parse migration report sections using regex patterns
       const titleMatch = reportContent.match(/^#\s+(.+)$/m);
       const title = titleMatch ? titleMatch[1] : 'Kafka to Azure Service Bus Migration Analysis';
 
@@ -666,16 +745,38 @@ export class PythonScriptService {
         let sectionContent = fileMatch[2].trim();
         
         // Extract diff block (handle both Unix \n and Windows \r\n line endings)
-        const diffMatch = /```diff[\r\n]+([\s\S]*?)[\r\n]+```/.exec(sectionContent);
-        let diffContent = diffMatch ? diffMatch[1] : '';
+        // AI sometimes duplicates ```diff markers, so find the LAST one to get actual diff
+        const allDiffMarkers = Array.from(sectionContent.matchAll(/```diff/g));
+        let diffContent = '';
+        let description = sectionContent;
+        let afterDiffText = '';
+        let actualDiffEndIndex = 0;
         
-        // Get description (everything before the diff block)
-        let description = diffMatch ? sectionContent.substring(0, diffMatch.index).trim() : sectionContent;
+        if (allDiffMarkers.length > 0) {
+          // Use the LAST ```diff marker as the start of actual diff content
+          const lastMarker = allDiffMarkers[allDiffMarkers.length - 1];
+          const actualDiffStartIndex = (lastMarker.index || 0) + lastMarker[0].length;
+          
+          // Find the FIRST ``` after this point (this closes the actual diff)
+          const afterLastDiff = sectionContent.substring(actualDiffStartIndex);
+          const closingMatch = /[\r\n]+([\s\S]*?)[\r\n]+```/.exec(afterLastDiff);
+          
+          if (closingMatch) {
+            diffContent = closingMatch[1];
+            actualDiffEndIndex = actualDiffStartIndex + (closingMatch.index || 0) + closingMatch[0].length;
+            
+            // Get description (everything before the LAST ```diff marker)
+            description = sectionContent.substring(0, lastMarker.index || 0).trim();
+            
+            // Get text after the FIRST closing ``` (where AI often puts "Key changes:" summary)
+            afterDiffText = sectionContent.substring(actualDiffEndIndex).trim();
+          }
+        }
         
-        // Extract key changes - check multiple locations
+        // Extract key changes from multiple locations
         let keyChanges: string[] = [];
         
-        // 1. First check for explicit "Key Changes:" header in description
+        // 1. Check for explicit "Key Changes:" header in description
         const explicitKeyChangesMatch = /(?:^|[\r\n])\s*(?:\*\*|##?)?\s*Key\s+Changes\s*:?\s*[\r\n]+((?:[\s]*[-*•]\s+.+[\r\n]+)+)/i.exec(description);
         
         if (explicitKeyChangesMatch) {
@@ -706,37 +807,74 @@ export class PythonScriptService {
           }
         }
         
-        // 3. CRITICAL: Check for summary lines INSIDE the diff content (at the beginning, before actual diff syntax)
-        // These look like: "- Replaced Kafka..." "- Added message..." but appear before @@ or --- markers
-        if (keyChanges.length === 0 && diffContent) {
-          const diffLines = diffContent.split(/\r?\n/);
-          const summaryLines: string[] = [];
-          let foundActualDiff = false;
+        // 3. Check for "Key changes:" section AFTER the diff block (common AI pattern)
+        if (keyChanges.length === 0 && afterDiffText) {
+          const afterDiffKeyChangesMatch = /(?:^|[\r\n])\s*(?:\*\*|##?)?\s*Key\s+[Cc]hanges\s*:?\s*[\r\n]+((?:[\s]*[-*•]\s+.+(?:[\r\n]+|$))+)/i.exec(afterDiffText);
           
-          for (const line of diffLines) {
+          if (afterDiffKeyChangesMatch) {
+            keyChanges = afterDiffKeyChangesMatch[1]
+              .split(/\r?\n/)
+              .map(line => line.trim())
+              .filter(line => line.startsWith('-') || line.startsWith('*') || line.startsWith('•'))
+              .map(line => line.replace(/^[-*•]\s*/, '').trim())
+              .filter(line => line.length > 0);
+          }
+        }
+        
+        // 4. CRITICAL FIX: Extract summary deletion lines from BETWEEN file headers (---/+++) and first hunk header (@@)
+        // AI embeds descriptive lines like "- Replaced Kafka..." as deletion lines before actual code diffs
+        if (diffContent) {
+          const diffLines = diffContent.split(/\r?\n/);
+          const extractedSummaryLines: string[] = [];
+          const cleanedDiffLines: string[] = [];
+          let foundFirstHunkHeader = false;
+          let pastFileHeaders = false;
+          
+          for (let i = 0; i < diffLines.length; i++) {
+            const line = diffLines[i];
             const trimmed = line.trim();
             
-            // Check if we've hit actual diff syntax
-            if (trimmed.startsWith('@@') || trimmed.startsWith('---') || trimmed.startsWith('+++') || trimmed.match(/^diff\s+/)) {
-              foundActualDiff = true;
-              break;
+            // Skip file headers (--- and +++)
+            if (trimmed.startsWith('---') || trimmed.startsWith('+++')) {
+              cleanedDiffLines.push(line);
+              pastFileHeaders = true;
+              continue;
             }
             
-            // Collect lines that look like summary bullets (but not empty lines)
-            if (trimmed && (trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('•'))) {
-              // Check if it's a descriptive summary (contains words like "Replaced", "Added", "Used", "Implemented", "Updated", "Removed", "Changed", "Fixed")
-              if (/^[-*•]\s*(Replaced|Added|Used|Implemented|Updated|Removed|Changed|Fixed|Created|Modified|Introduced|Migrated|Converted)/i.test(trimmed)) {
-                summaryLines.push(trimmed);
+            // Found first hunk header - from here on, keep everything as-is
+            if (trimmed.match(/^@@\s+.*\s+@@/)) {
+              foundFirstHunkHeader = true;
+              cleanedDiffLines.push(line);
+              continue;
+            }
+            
+            // If we're past file headers but before first hunk, check for summary deletion lines
+            if (pastFileHeaders && !foundFirstHunkHeader && trimmed.startsWith('-')) {
+              // Check if it's a descriptive summary (action verb pattern)
+              const summaryMatch = trimmed.match(/^-\s+(Replaced|Added|Implemented|Updated|Removed|Changed|Fixed|Created|Modified|Introduced|Migrated|Configured|Refactored|Used|Simplified|Kept)\b/i);
+              if (summaryMatch) {
+                // This is a summary line - extract it and don't include in cleaned diff
+                extractedSummaryLines.push(trimmed.replace(/^-\s*/, '').trim());
+                continue;
               }
             }
+            
+            // Keep all other lines (including actual code deletions inside hunks)
+            cleanedDiffLines.push(line);
           }
           
-          if (summaryLines.length > 0) {
-            keyChanges = summaryLines.map(line => line.replace(/^[-*•]\s*/, '').trim());
+          // Add extracted summaries to key changes (de-duplicate)
+          if (extractedSummaryLines.length > 0) {
+            const existingSet = new Set(keyChanges.map(k => k.toLowerCase()));
+            for (const summary of extractedSummaryLines) {
+              if (!existingSet.has(summary.toLowerCase())) {
+                keyChanges.push(summary);
+                existingSet.add(summary.toLowerCase());
+              }
+            }
             
-            // Remove these summary lines from diff content
-            const summaryBlock = summaryLines.join('\n');
-            diffContent = diffContent.replace(new RegExp(summaryLines.map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\r\\n]+'), 'g'), '').trim();
+            // Update diff content with cleaned lines
+            diffContent = cleanedDiffLines.join('\n').trim();
           }
         }
         
@@ -755,13 +893,14 @@ export class PythonScriptService {
         title,
         kafka_inventory: kafkaInventory,
         code_diffs: codeDiffs,
-        sections: {},
+        keyChanges: [],
+        sections: [],
         notes: [],
         stats: {
           total_files_with_kafka: kafkaInventory.length,
           total_files_with_diffs: codeDiffs.length,
           notes_count: 0,
-          sections_count: Object.keys({}).length
+          sections_count: 0
         }
       };
 
@@ -1011,7 +1150,7 @@ export class PythonScriptService {
       
       try {
         const fileContent = await fs.promises.readFile(migrationReportFile.path, 'utf-8');
-        const parsedMigrationData = await this.extractStructuredData(fileContent);
+        const parsedMigrationData = await this.extractStructuredData(fileContent, migrationReportFile.path);
         
         if (!parsedMigrationData) {
           throw new Error('Failed to extract structured data from migration report');
