@@ -269,8 +269,31 @@ def extract_description_and_diff(raw: str) -> tuple[str, str]:
         # Check if this is a diff block by language or content
         if (language.lower() in ["diff", "patch"] or 
             re.search(r"^(diff --git|---\s|\+\+\+\s|@@)", content, re.M)):
-            description = s[:match.start()].strip()
-            return description, content
+            
+            # Extract description from BEFORE the fenced block
+            description_before = s[:match.start()].strip()
+            
+            # ALSO check for description INSIDE the fenced block but BEFORE diff headers
+            content_lines = content.splitlines()
+            diff_start_in_block = None
+            
+            for i, line in enumerate(content_lines):
+                # Find where actual diff starts
+                if re.match(r"^(diff --git|index\s|---\s[^\-]|\+\+\+\s[^\+]|@@\s)", line):
+                    diff_start_in_block = i
+                    break
+            
+            if diff_start_in_block is not None and diff_start_in_block > 0:
+                # There's text before the diff in the code block
+                description_inside = "\n".join(content_lines[:diff_start_in_block]).strip()
+                clean_diff = "\n".join(content_lines[diff_start_in_block:]).strip()
+                
+                # Combine descriptions
+                full_description = f"{description_before}\n{description_inside}".strip() if description_before else description_inside
+                return full_description, clean_diff
+            else:
+                # No text before diff
+                return description_before, content
     
     # If no suitable fenced block, look for diff markers with stronger validation
     lines = s.splitlines()
