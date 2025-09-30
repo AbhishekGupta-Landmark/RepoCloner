@@ -410,6 +410,11 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
         file_diff = diff.get("diff_content", "") or diff.get("diff", "")
         description = diff.get("description", "")
         
+        print(f"🔍 Processing {file_name}:")
+        print(f"   Description length: {len(description)}")
+        print(f"   Diff length: {len(file_diff)}")
+        print(f"   Description preview: {description[:100] if description else 'NONE'}")
+        
         # Extract key changes from BOTH description and diff
         key_changes_for_file = []
         
@@ -466,7 +471,11 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
         
         # Fallback: If no key changes detected but we have a diff, add a generic one
         if not key_changes_for_file and file_diff and len(file_diff.strip()) > 20:
-            all_key_changes.add(f"Code migration changes in {file_name}")
+            fallback_change = f"Code migration changes in {file_name}"
+            all_key_changes.add(fallback_change)
+            print(f"   ⚠️  Using fallback key change: {fallback_change}")
+        
+        print(f"   ✅ Key changes extracted: {len(key_changes_for_file)}")
         
         structured_diffs.append({
             "path": file_name,
@@ -476,12 +485,18 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
     
     import json
     import time
+    
+    key_changes_list = list(all_key_changes)
+    print(f"\n📊 FINAL KEY CHANGES COUNT: {len(key_changes_list)}")
+    for kc in key_changes_list:
+        print(f"   - {kc}")
+    
     json_data = {
         "meta": {
             "repoUrl": state.get("repo_url", ""),
             "generatedAt": str(int(time.time() * 1000))
         },
-        "keyChanges": list(all_key_changes),
+        "keyChanges": key_changes_list,
         "notes": list(all_notes),
         "diffs": structured_diffs,
         "inventory": inventory
