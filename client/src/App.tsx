@@ -33,8 +33,6 @@ function CacheBuster() {
         const lastVersion = sessionStorage.getItem('ui-version');
         
         if (lastVersion !== requiredVersion) {
-          console.log('🔄 FORCING COMPLETE CACHE CLEAR - NEW UI VERSION REQUIRED');
-          
           // Clear ALL storage
           sessionStorage.clear();
           localStorage.clear();
@@ -44,7 +42,6 @@ function CacheBuster() {
             try {
               const cacheNames = await caches.keys();
               await Promise.all(cacheNames.map(name => caches.delete(name)));
-              console.log('🗑️  Cleared all caches:', cacheNames);
             } catch (e) {
               console.warn('Cache clearing failed:', e);
             }
@@ -64,7 +61,6 @@ function CacheBuster() {
             newUrl.searchParams.set('fresh', freshTimestamp);
             newUrl.searchParams.set('v', requiredVersion);
             
-            console.log('🔄 FORCING PAGE RELOAD WITH FRESH TIMESTAMP');
             window.location.replace(newUrl.toString());
             return;
           }
@@ -76,12 +72,7 @@ function CacheBuster() {
           const bodyText = document.body.textContent || '';
           const hasOldKafkaText = bodyText.includes('Kafka → Azure Service Bus');
           
-          console.log('🔍 UI Verification:');
-          console.log('  Setup UI found:', !!setupText);
-          console.log('  Old Kafka UI found:', hasOldKafkaText);
-          
           if (!setupText && hasOldKafkaText && window.location.search.includes('fresh=')) {
-            console.log('🚨 OLD UI DETECTED - TRYING HARD REFRESH');
             window.location.reload();
           }
         }, 3000);
@@ -94,20 +85,14 @@ function CacheBuster() {
               cache: 'no-cache',
               headers: { 'Cache-Control': 'no-cache, no-store' }
             });
-            
-            // If server is unreachable or returns different response, might be updated
-            if (!healthCheck.ok) {
-              console.log('🔄 Server response changed, considering refresh...');
-            }
           } catch (error) {
             // Silently handle network errors
-            console.debug('Health check failed:', error);
           }
         }, 120000); // 2 minutes
         
         return () => clearInterval(checkInterval);
       } catch (error) {
-        console.debug('Cache busting failed:', error);
+        // Cache busting failed silently
       }
     };
     

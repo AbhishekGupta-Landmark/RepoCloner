@@ -162,7 +162,6 @@ export class PythonScriptService {
    */
   async executePostCloneScript(repositoryPath: string, repositoryUrl: string, repositoryId?: string, aiSettings?: any): Promise<PythonExecutionResult> {
     broadcastLog('INFO', `🔄 Starting Python script execution for migration analysis...`);
-    console.log(`🔄 Starting Python script execution for migration analysis...`);
     broadcastLog('INFO', `Executing post-clone Python script for repository: ${repositoryUrl}`);
     
     // First try to use the default.py script from scripts folder
@@ -175,10 +174,6 @@ export class PythonScriptService {
       let scriptArgs = [repositoryUrl, repositoryPath];
       
       // Add AI settings as command-line arguments if available
-      broadcastLog('DEBUG', `AI settings debug: exists=${!!aiSettings}, hasApiKey=${!!aiSettings?.apiKey}, hasModel=${!!aiSettings?.model}`);
-      broadcastLog('DEBUG', `AI settings (masked): ${JSON.stringify({ ...aiSettings, apiKey: '***' })}`);
-      broadcastLog('DEBUG', `AI settings keys: ${aiSettings ? Object.keys(aiSettings).join(', ') : 'null'}`);
-      
       if (aiSettings && aiSettings.apiKey && aiSettings.model) {
         broadcastLog('INFO', 'Passing AI settings to Python script');
         scriptArgs.push(
@@ -204,7 +199,6 @@ export class PythonScriptService {
         broadcastLog('INFO', `Final script command: python ${defaultScriptPath} ${maskedArgs.join(' ')}`);
       } else {
         broadcastLog('ERROR', 'AI settings are required for migration analysis');
-        broadcastLog('DEBUG', `Condition failed: aiSettings=${!!aiSettings}, apiKey=${aiSettings?.apiKey}, model=${aiSettings?.model}`);
         return {
           success: false,
           error: 'AI configuration is required to perform migration analysis. Please configure AI settings first.',
@@ -260,8 +254,6 @@ export class PythonScriptService {
           });
         } else {
           broadcastLog('WARN', `🐍 No migration report MD files found in ${repositoryPath}`);
-          // List all files for debugging
-          broadcastLog('DEBUG', `🐍 All files in directory: ${files.join(', ')}`);
         }
       } catch (error) {
         broadcastLog('ERROR', `🐍 Error checking for MD files: ${error}`);
@@ -358,15 +350,11 @@ export class PythonScriptService {
    */
   private async runPythonCommand(pythonCommand: string, args: string[], workingDir: string, timeout: number): Promise<PythonExecutionResult> {
     broadcastLog('INFO', `🐍 Starting Python execution with timeout: ${timeout}ms`);
-    console.log(`🐍 Starting Python execution with timeout: ${timeout}ms`);
     broadcastLog('INFO', `🐍 Working directory: ${workingDir}`);
-    console.log(`🐍 Working directory: ${workingDir}`);
     // SECURITY: Mask sensitive arguments in logs
     const maskedArgs = this.maskSensitiveArgs(args);
     broadcastLog('INFO', `🐍 Command arguments: [${maskedArgs.join(', ')}]`);
-    console.log(`🐍 Command arguments: [${maskedArgs.join(', ')}]`);
     broadcastLog('INFO', `🐍 Using Python interpreter: ${pythonCommand}`);
-    console.log(`🐍 Using Python interpreter: ${pythonCommand}`);
     
     try {
       const { stdout, stderr } = await execFileAsync(pythonCommand, args, {
@@ -377,14 +365,11 @@ export class PythonScriptService {
       });
       
       broadcastLog('INFO', `🐍 Python script executed successfully using '${pythonCommand}' command`);
-      console.log(`🐍 Python script executed successfully using '${pythonCommand}' command`);
       broadcastLog('INFO', `🐍 Script stdout length: ${stdout.length} characters`);
-      console.log(`🐍 Script stdout length: ${stdout.length} characters`);
       
       if (stdout.length > 0) {
-        // Log first 1000 characters of output for debugging
+        // Log first 1000 characters of output
         broadcastLog('INFO', `🐍 Script output preview: ${stdout.substring(0, 1000)}${stdout.length > 1000 ? '...' : ''}`);
-        console.log(`🐍 Script output preview: ${stdout.substring(0, 500)}${stdout.length > 500 ? '...' : ''}`);
       }
       
       if (stderr && stderr.length > 0) {
@@ -402,20 +387,17 @@ export class PythonScriptService {
       let exitCode = error.code || -1;
       
       broadcastLog('ERROR', `🐍 Python command '${pythonCommand}' failed with error code: ${error.code}, signal: ${error.signal}`);
-      console.error(`🐍 Python command '${pythonCommand}' failed with error code: ${error.code}, signal: ${error.signal}`);
       
       if (error.signal === 'SIGTERM') {
         errorMessage = `Python script timed out after ${timeout}ms`;
         broadcastLog('ERROR', `🐍 TIMEOUT: Script execution exceeded ${timeout}ms limit`);
-        console.error(`🐍 TIMEOUT: Script execution exceeded ${timeout}ms limit`);
       } else if (error.stderr) {
         errorMessage = error.stderr;
         broadcastLog('ERROR', `🐍 Script stderr: ${error.stderr.substring(0, 1000)}${error.stderr.length > 1000 ? '...' : ''}`);
-        console.error(`🐍 Script stderr: ${error.stderr.substring(0, 500)}${error.stderr.length > 500 ? '...' : ''}`);
+
       } else if (error.message) {
         errorMessage = error.message;
         broadcastLog('ERROR', `🐍 Error message: ${error.message}`);
-        console.error(`🐍 Error message: ${error.message}`);
       }
       
       if (error.stdout) {

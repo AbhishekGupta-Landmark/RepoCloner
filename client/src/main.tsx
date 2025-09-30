@@ -40,8 +40,6 @@ import "./index.css";
     // Do nothing to prevent overlay
   };
 
-  console.log('All error overlays completely disabled');
-
   // More targeted CSS to only block Vite error overlays  
   const style = document.createElement('style');
   style.textContent = `

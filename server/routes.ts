@@ -1303,7 +1303,6 @@ export async function registerRoutes(app: Application): Promise<Server> {
       }
 
       // Execute Python script for migration analysis
-      console.log("🔄 Starting Python script execution for migration analysis...");
       broadcastLog('INFO', `Executing Python script for migration analysis: ${repository.name}`);
 
       try {
@@ -1334,11 +1333,9 @@ export async function registerRoutes(app: Application): Promise<Server> {
           aiSettings
         );
 
-        console.log("🐍 Python script result:", pythonResult);
-
         // CRITICAL FIX: Check if Python script actually succeeded
         if (!pythonResult.success) {
-          console.error("❌ Python script failed:", pythonResult.error);
+          broadcastLog('ERROR', `Python script failed: ${pythonResult.error}`);
           
           // CRITICAL FIX: Store the failed analysis attempt for error display
           let failedReportId = undefined;
@@ -1357,14 +1354,14 @@ export async function registerRoutes(app: Application): Promise<Server> {
               }
             });
             failedReportId = failedReport.id;
-            console.log(`✅ Failed analysis report stored with ID: ${failedReport.id}`);
+            broadcastLog('INFO', `Failed analysis report stored with ID: ${failedReport.id}`);
           } catch (reportError) {
-            console.error("❌ Failed to create failure report:", reportError);
+            broadcastLog('ERROR', `Failed to create failure report: ${reportError}`);
           }
           
           // CRITICAL FIX: Update repository with the failed report ID
           await storage.updateRepositoryAnalysis(repository.id, new Date(), failedReportId);
-          console.log(`✅ Repository updated with failed report ID: ${failedReportId}`);
+          broadcastLog('INFO', `Repository updated with failed report ID: ${failedReportId}`);
 
           return res.status(500).json({
             success: false,
@@ -1377,7 +1374,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
         // Create Python script report if migration-report.md was generated
         let reportId: string | undefined = undefined;
         if (pythonResult.generatedFiles && pythonResult.generatedFiles.length > 0) {
-          console.log("💾 Creating Python script report...");
+          broadcastLog('INFO', "Creating Python script report...");
           
           try {
             reportId = await pythonScriptService.createPythonScriptReport(
@@ -1388,9 +1385,9 @@ export async function registerRoutes(app: Application): Promise<Server> {
               path.join(__dirname, '../scripts/default.py'),
               storage
             );
-            console.log(`📊 Python script report created with ID: ${reportId}`);
+            broadcastLog('INFO', `Python script report created with ID: ${reportId}`);
           } catch (reportError) {
-            console.warn("Failed to create Python script report:", reportError);
+            broadcastLog('WARN', `Failed to create Python script report: ${reportError}`);
           }
         }
 
@@ -1408,7 +1405,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
         });
 
       } catch (pythonError) {
-        console.error("❌ Python script execution failed:", pythonError);
+        broadcastLog('ERROR', `Python script execution failed: ${pythonError}`);
         const errorMessage = pythonError instanceof Error ? pythonError.message : 'Migration analysis failed';
         
         // CRITICAL FIX: Always persist failed analysis attempts
@@ -1608,7 +1605,6 @@ export async function registerRoutes(app: Application): Promise<Server> {
           }
         } catch (error) {
           // Silent fail - if we can't read directory, just return database reports
-          console.log('Could not scan for generated reports:', error);
         }
       }
       
