@@ -464,6 +464,10 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
         for change in key_changes_for_file:
             all_key_changes.add(change)
         
+        # Fallback: If no key changes detected but we have a diff, add a generic one
+        if not key_changes_for_file and file_diff and len(file_diff.strip()) > 20:
+            all_key_changes.add(f"Code migration changes in {file_name}")
+        
         structured_diffs.append({
             "path": file_name,
             "diff": file_diff,
