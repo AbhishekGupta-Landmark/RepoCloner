@@ -269,31 +269,8 @@ def extract_description_and_diff(raw: str) -> tuple[str, str]:
         # Check if this is a diff block by language or content
         if (language.lower() in ["diff", "patch"] or 
             re.search(r"^(diff --git|---\s|\+\+\+\s|@@)", content, re.M)):
-            
-            # Extract description from BEFORE the fenced block
-            description_before = s[:match.start()].strip()
-            
-            # ALSO check for description INSIDE the fenced block but BEFORE diff headers
-            content_lines = content.splitlines()
-            diff_start_in_block = None
-            
-            for i, line in enumerate(content_lines):
-                # Find where actual diff starts
-                if re.match(r"^(diff --git|index\s|---\s[^\-]|\+\+\+\s[^\+]|@@\s)", line):
-                    diff_start_in_block = i
-                    break
-            
-            if diff_start_in_block is not None and diff_start_in_block > 0:
-                # There's text before the diff in the code block
-                description_inside = "\n".join(content_lines[:diff_start_in_block]).strip()
-                clean_diff = "\n".join(content_lines[diff_start_in_block:]).strip()
-                
-                # Combine descriptions
-                full_description = f"{description_before}\n{description_inside}".strip() if description_before else description_inside
-                return full_description, clean_diff
-            else:
-                # No text before diff
-                return description_before, content
+            description = s[:match.start()].strip()
+            return description, content
     
     # If no suitable fenced block, look for diff markers with stronger validation
     lines = s.splitlines()
@@ -351,19 +328,12 @@ def generate_code_diffs(state: RepoAnalysisState) -> RepoAnalysisState:
         Original code:
         {file_content}
 
+
         Task:
-        Generate a unified diff patch that replaces Kafka usage with Azure.Messaging.ServiceBus.
-        
-        IMPORTANT FORMATTING RULES:
-        1. First, write a brief description of what changes are needed (1-2 sentences)
-        2. Then write ONLY the diff block starting with --- or @@ headers
-        3. Do NOT include any explanation text inside the diff block
-        4. The diff must contain only diff syntax: ---, +++, @@, -, +, and unchanged lines
-        
-        Requirements:
-        - Cover producers, consumers, config, and error handling
-        - Keep namespaces, classes, and non-Kafka code intact
-        - If no Kafka usage is present, return an empty diff
+        - Show a unified diff patch (`diff` style) that replaces Kafka usage with Azure.Messaging.ServiceBus.
+        - Cover producers, consumers, config, and error handling.
+        - Keep namespaces, classes, and non-Kafka code intact.
+        - If no Kafka usage is present, return an empty diff.
         """
         resp = llm.invoke([HumanMessage(content=prompt)])
         
@@ -394,51 +364,37 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
         api_key=state.get('api_key')
     )
     
-    # Prepare structured JSON data
+    # Prepare structured JSON data for backend deserialization
+    import json
+    import time
+    
     inventory = state.get("kafka_inventory", [])
     diffs = state.get("code_diffs", [])
     
+    # Build structured diffs array
     structured_diffs = []
-    all_key_changes = set()  # Use set to avoid duplicates
-    all_notes = set()
-    
     for diff in diffs:
         file_name = diff.get("file", "")
-        if file_name.lower() == "readme.md":
-            continue
-            
-        file_diff = diff.get("diff_content", "") or diff.get("diff", "")
-        description = diff.get("description", "")
-        
-        # SIMPLE: Just use the description as a key change
-        if description and len(description.strip()) > 10:
-            all_key_changes.add(f"{file_name}: {description.strip()}")
-        elif file_diff and len(file_diff.strip()) > 20:
-            # If no description, create one from the file name
-            all_key_changes.add(f"{file_name}: Migrated Kafka code to Azure Service Bus")
-        
-        structured_diffs.append({
-            "path": file_name,
-            "diff": file_diff,
-            "description": description
-        })
-    
-    import json
-    import time
+        if file_name.lower() != "readme.md":
+            structured_diffs.append({
+                "path": file_name,
+                "diff": diff.get("diff_content", "") or diff.get("diff", ""),
+                "description": diff.get("description", "")
+            })
     
     json_data = {
         "meta": {
             "repoUrl": state.get("repo_url", ""),
             "generatedAt": str(int(time.time() * 1000))
         },
-        "keyChanges": list(all_key_changes),
-        "notes": list(all_notes),
+        "keyChanges": [],  # Backend will populate this
+        "notes": [],
         "diffs": structured_diffs,
         "inventory": inventory
     }
 
     with open(report_path, "w", encoding="utf-8") as f:
-        # Embed JSON for backend to extract
+        # Embed JSON for backend pure deserialization
         f.write("<!--BEGIN:REPORT_JSON-->\n")
         f.write(json.dumps(json_data, indent=2, ensure_ascii=False))
         f.write("\n<!--END:REPORT_JSON-->\n\n")
@@ -447,6 +403,7 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
         f.write("# Kafka → Azure Service Bus Migration Report\n\n")
 
         # 1. Kafka Usage Inventory
+        inventory = state.get("kafka_inventory", [])
         f.write("## 1. Kafka Usage Inventory\n\n")
         f.write("| File | APIs Used | Summary |\n")
         f.write("|------|-----------|---------|\n")
