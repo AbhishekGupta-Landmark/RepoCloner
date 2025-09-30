@@ -10,52 +10,14 @@ An interactive web-based application that allows users to clone Git repositories
 - C#-compatible backend architecture with extensible provider pattern
 
 ## Recent Changes
-- 2025-09-30: **PURE JSON DESERIALIZATION + KEY CHANGES UI** - Final implementation of JSON-first architecture
-  - **Backend**: Removed ALL regex cleanup patterns - now pure JSON deserialization in `convertJsonToMigrationData()`
-  - **UI Enhancement**: Added dedicated Key Changes section (yellow, collapsible, positioned before Notes)
-  - **UI Layout**: Key Changes (CheckCircle icon) → Notes (AlertTriangle icon) → Code Diffs
-  - **Data Flow**: Python outputs clean JSON → Backend deserializes directly → UI displays three separate sections
-  - **JSON Schema**: `{meta, keyChanges[], notes[], diffs[{path, diff, description}], inventory[]}`
-  - **Impact**: Simplified parsing, deterministic data extraction, professional UI presentation
-  - **Commits**: bfbd6372 (pure JSON backend), 17344068 (Key Changes UI) on fix/check-again-and-url branch
-- 2025-09-30: **JSON-FIRST PARSING ARCHITECTURE** - Initial implementation of structured JSON parsing
-  - **Previous Issue**: Complex regex patterns failed to reliably extract Key Changes and Notes from AI-generated markdown
-  - **User Request**: User wanted pure JSON deserialization without regex safety nets
-  - **Solution**: Implemented structured JSON output alongside markdown for deterministic parsing
-  - **Python Changes**: Script now outputs `migration-report-{timestamp}.json` with clean schema
-  - **Backend Changes**: Three-tier parsing priority - (1) Embedded JSON in markdown, (2) Standalone .json file, (3) Regex fallback
-  - **Type System**: Created MigrationSection interface, changed sections from Record to MigrationSection[], added top-level keyChanges/notes arrays
-- 2025-09-30: **CRITICAL URL STRIPPING BUG FIX** - Fixed EPAM proxy authentication failure
-  - **Root Cause**: Backend was stripping `?api-version=` query parameter from configured URL
-  - **Issue**: EPAM proxy requires api-version in URL for routing/authentication, removal caused 401 errors
-  - **Fix**: Removed URL modification logic - now uses URL exactly as user configured it
-  - **Impact**: EPAM proxy authentication works correctly, AI analysis restored to working state
-- 2025-09-30: **PYTHON ERROR LOGGING FIX** - Fixed missing error messages when AI API calls fail
-  - **Root Cause**: Python script errors were printed to stdout only, but stdout was truncated in logs
-  - **Issue**: When API calls failed, error details weren't visible - only "exit code 1" shown
-  - **Fix**: Added stderr output for all exception handlers so errors are properly captured by backend
-  - **Impact**: Error messages now visible in logs, making debugging much easier
-- 2025-09-30: **WINDOWS LINE ENDING BUG FIX** - Fixed code diff parsing on Windows systems
-  - **Root Cause**: Regex patterns only matched Unix `\n` line endings, failed on Windows `\r\n` line endings
-  - **Issue**: Diff blocks weren't extracted, entire content dumped into description field causing garbled display
-  - **Fix**: Updated regex to match both `[\r\n]+` for cross-platform compatibility
-  - **Impact**: Code diffs now parse correctly on Windows, proper separation of description and code blocks
-- 2025-09-30: **FALLBACK REPORT BUG FIX** - Deleted old fallback migration reports to prevent stale data
-  - **Root Cause**: Old "static analysis" fallback reports from previous runs were persisting in temp directory
-  - **Issue**: Python script generated new AI report, but backend picked up old fallback file instead
-  - **Fix**: Added cleanup logic to delete ALL old `migration-report-*.md` files before generating new one
-  - **Impact**: Only fresh AI-generated reports are displayed, no more fallback data pollution
-- 2025-09-30: **CRITICAL UI CACHE BUG FIX** - Fixed "Check Again" not updating UI after successful analysis
-  - **Root Cause**: Cache invalidation only happened on error, not success - UI showed old failed report even when new analysis succeeded
-  - **Fix**: Moved `queryClient.invalidateQueries()` to run ALWAYS (both success and failure paths) in `analyzeCode()`
-  - **Impact**: "Check Again" button now properly refreshes UI with new analysis results
-- 2025-09-30: **MIGRATION ANALYSIS UI FIXES** - Completed critical bug fixes for migration report display
-  - **Fixed Report ID Propagation**: `createPythonScriptReport` now returns report ID, fixing issue where successful analysis showed error screen
-  - **Removed Fallback Logic**: Verified Python script correctly exits with error when AI not configured (no unwanted fallback reports)
-  - **Fixed Key Changes Duplication**: Enhanced markdown parsing to extract "Key Changes" from descriptions into separate array, preventing duplicate display
-  - **Optimized UI Caching**: Added `staleTime: 0` and smart polling that stops when analysis complete
-  - **Fixed Parser Bug**: Changed from `parseMarkdownToMigrationData` to `extractStructuredData` to match expected data structure
-  - **Notes Display**: Verified Notes are displayed separately in "Important Notes" section (already implemented)
+- 2025-09-30: **KEY CHANGES JSON DESERIALIZATION** - Completed clean implementation of Key Changes display functionality
+  - **Reverted to commit 1b2aa1ac**: Started with clean state to avoid regression issues
+  - **Python Script Updates**: Enhanced AI response parsing to extract key_changes from bullet points without modifying prompt
+  - **Backend JSON Deserialization**: Replaced regex-based text parsing with clean JSON deserialization from embedded JSON block
+  - **Type System Consolidation**: Fixed duplicate interfaces and aligned snake_case (backend/JSON) with TypeScript types
+  - **UI Key Changes Section**: Updated MigrationReportViewer to aggregate and display key_changes from report and diffs in yellow collapsible section
+  - **Data Flow**: Clean end-to-end flow: Python AI response → JSON → Backend deserialization → Frontend display
+  - **No Regex**: Completely removed fragile regex-based key changes extraction and diff cleaning logic
 - 2025-09-23: **UI/UX OPTIMIZATION & TESTING MILESTONE** - Completed grid layout fixes and comprehensive test updates
   - **Equal Height Grid Layout**: Implemented uniform card heights across all view modes (Simple & Details) with scrollable content areas
   - **Responsive Grid System**: Unified responsive layout with grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5

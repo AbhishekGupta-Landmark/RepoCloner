@@ -99,34 +99,19 @@ export interface KafkaUsageItem {
 export interface CodeDiff {
   file: string;
   diff_content: string;
-  diffContent: string;
   language: string;
-  description?: string;
   key_changes?: string[];
-  notes?: string[];
-}
-
-export interface MigrationSection {
-  id: string;
-  title: string;
-  description?: string;
-  diffBlock?: string;
-  keyChanges: string[];
-  notes: string[];
-  evidence: any[];
 }
 
 export interface MigrationReportData {
   title: string;
   kafka_inventory: KafkaUsageItem[];
   code_diffs: CodeDiff[];
-  keyChanges: string[];
-  notes: string[];
-  sections: MigrationSection[];
+  sections: Record<string, any>;
+  key_changes?: string[];
   stats: {
     total_files_with_kafka: number;
     total_files_with_diffs: number;
-    notes_count: number;
     sections_count: number;
   };
 }
@@ -316,25 +301,26 @@ export interface PythonScriptResult {
   parsedMigrationData?: ParsedMigrationReport; // For migration analysis type
 }
 
-// Migration report parsing types
+// Migration report parsing types (for frontend consumption - uses snake_case to match backend/JSON)
 export interface ParsedMigrationReport {
   title: string;
-  kafkaInventory: KafkaUsageItem[];
-  codeDiffs: CodeDiff[];
+  kafkaInventory: {
+    file: string;
+    apisUsed: string;
+    summary: string;
+  }[];
+  codeDiffs: {
+    file: string;
+    diff_content: string;
+    diffContent: string;
+    language: string;
+    key_changes?: string[];
+  }[];
   sections: Record<string, any>;
-  keyChanges: string[];
-  notes: string[];
+  key_changes?: string[];
   stats: {
     totalFilesWithKafka: number;
     totalFilesWithDiffs: number;
     sectionsCount: number;
   };
 }
-
-
-export interface CodeDiff {
-  file: string;
-  diffContent: string;
-  language: string;
-}
-

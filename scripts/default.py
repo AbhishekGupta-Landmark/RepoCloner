@@ -251,12 +251,27 @@ def scan_for_kafka_usage_ai(state: RepoAnalysisState) -> RepoAnalysisState:
 
 # Static analysis fallback implemented - reports generated even when AI fails
 
-def extract_description_and_diff(raw: str) -> tuple[str, str]:
+def extract_key_changes_and_diff(raw: str) -> tuple[list[str], str, str]:
     """
-    Extract description and diff content from AI response.
-    Returns (description, diff_content) tuple.
+    Extract key changes, description and diff content from AI response.
+    Returns (key_changes, description, diff_content) tuple.
     """
     s = raw.strip()
+    key_changes = []
+    
+    # Extract key changes section
+    key_changes_match = re.search(r"Key Changes?:\s*\n((?:[-•*]\s+.+\n?)+)", s, re.I | re.M)
+    if key_changes_match:
+        # Extract individual bullet points
+        changes_text = key_changes_match.group(1)
+        key_changes = [
+            line.strip().lstrip('-•*').strip() 
+            for line in changes_text.split('\n') 
+            if line.strip() and line.strip()[0] in '-•*'
+        ]
+        # Remove key changes section from content for further processing
+        s = s[:key_changes_match.start()] + s[key_changes_match.end():]
+        s = s.strip()
     
     # Find all fenced code blocks
     fenced_blocks = list(re.finditer(r"```(\w+)?\s*\n([\s\S]*?)\n```", s, re.I))
@@ -270,7 +285,7 @@ def extract_description_and_diff(raw: str) -> tuple[str, str]:
         if (language.lower() in ["diff", "patch"] or 
             re.search(r"^(diff --git|---\s|\+\+\+\s|@@)", content, re.M)):
             description = s[:match.start()].strip()
-            return description, content
+            return key_changes, description, content
     
     # If no suitable fenced block, look for diff markers with stronger validation
     lines = s.splitlines()
@@ -290,10 +305,10 @@ def extract_description_and_diff(raw: str) -> tuple[str, str]:
     if diff_start is not None:
         description = "\n".join(lines[:diff_start]).strip()
         diff_content = "\n".join(lines[diff_start:]).strip()
-        return description, diff_content
+        return key_changes, description, diff_content
     
     # If no diff markers found, treat entire response as description
-    return s, ""
+    return key_changes, s, ""
 
 def generate_code_diffs(state: RepoAnalysisState) -> RepoAnalysisState:
     llm = ApiKeyOnlyChatModel(
@@ -337,16 +352,20 @@ def generate_code_diffs(state: RepoAnalysisState) -> RepoAnalysisState:
         """
         resp = llm.invoke([HumanMessage(content=prompt)])
         
-        # Extract description and diff content separately
+        # Extract key changes, description and diff content separately
         content = resp.content if isinstance(resp.content, str) else str(resp.content)
-        description, diff_content = extract_description_and_diff(content)
+        key_changes, description, diff_content = extract_key_changes_and_diff(content)
         
-        diffs.append({
+        diff_obj = {
             "file": file_rel,
             "diff_content": diff_content,
             "description": description,
             "language": "diff"
-        })
+        }
+        if key_changes:
+            diff_obj["key_changes"] = key_changes
+        
+        diffs.append(diff_obj)
     
     print(f"Generated diffs for {len(diffs)} files.")
 
@@ -376,11 +395,14 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
     for diff in diffs:
         file_name = diff.get("file", "")
         if file_name.lower() != "readme.md":
-            structured_diffs.append({
+            diff_obj = {
                 "path": file_name,
                 "diff": diff.get("diff_content", "") or diff.get("diff", ""),
                 "description": diff.get("description", "")
-            })
+            }
+            if diff.get("key_changes"):
+                diff_obj["key_changes"] = diff.get("key_changes")
+            structured_diffs.append(diff_obj)
     
     json_data = {
         "meta": {
