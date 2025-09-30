@@ -363,13 +363,52 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
         base_url=state.get('base_url', DEFAULT_BASE_URL), 
         api_key=state.get('api_key')
     )
+    
+    # Prepare structured JSON data
+    inventory = state.get("kafka_inventory", [])
+    diffs = state.get("code_diffs", [])
+    
+    structured_diffs = []
+    all_key_changes = []
+    all_notes = []
+    
+    for diff in diffs:
+        file_name = diff.get("file", "")
+        if file_name.lower() == "readme.md":
+            continue
+            
+        file_diff = diff.get("diff_content", "") or diff.get("diff", "")
+        description = diff.get("description", "")
+        
+        structured_diffs.append({
+            "path": file_name,
+            "diff": file_diff,
+            "description": description
+        })
+    
+    import json
+    import time
+    json_data = {
+        "meta": {
+            "repoUrl": state.get("repo_url", ""),
+            "generatedAt": str(int(time.time() * 1000))
+        },
+        "keyChanges": all_key_changes,
+        "notes": all_notes,
+        "diffs": structured_diffs,
+        "inventory": inventory
+    }
 
     with open(report_path, "w", encoding="utf-8") as f:
+        # Embed JSON for backend to extract
+        f.write("<!--BEGIN:REPORT_JSON-->\n")
+        f.write(json.dumps(json_data, indent=2, ensure_ascii=False))
+        f.write("\n<!--END:REPORT_JSON-->\n\n")
+        
         # Header
         f.write("# Kafka → Azure Service Bus Migration Report\n\n")
 
         # 1. Kafka Usage Inventory
-        inventory = state.get("kafka_inventory", [])
         f.write("## 1. Kafka Usage Inventory\n\n")
         f.write("| File | APIs Used | Summary |\n")
         f.write("|------|-----------|---------|\n")
