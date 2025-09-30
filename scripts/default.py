@@ -410,72 +410,12 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
         file_diff = diff.get("diff_content", "") or diff.get("diff", "")
         description = diff.get("description", "")
         
-        print(f"🔍 Processing {file_name}:")
-        print(f"   Description length: {len(description)}")
-        print(f"   Diff length: {len(file_diff)}")
-        print(f"   Description preview: {description[:100] if description else 'NONE'}")
-        
-        # Extract key changes from BOTH description and diff
-        key_changes_for_file = []
-        
-        # Method 1: Extract from description (more reliable)
-        if description:
-            desc_lower = description.lower()
-            if 'replace' in desc_lower or 'replac' in desc_lower:
-                if 'kafka' in desc_lower and ('azure' in desc_lower or 'service bus' in desc_lower):
-                    key_changes_for_file.append(f"Migrated from Kafka to Azure Service Bus in {file_name}")
-            if 'consumer' in desc_lower and 'servicebus' in desc_lower.replace(' ', ''):
-                key_changes_for_file.append(f"Replaced Kafka Consumer with Azure Service Bus receiver in {file_name}")
-            if 'producer' in desc_lower and 'servicebus' in desc_lower.replace(' ', ''):
-                key_changes_for_file.append(f"Replaced Kafka Producer with Azure Service Bus sender in {file_name}")
-        
-        # Method 2: Analyze diff for specific changes
-        if file_diff:
-            has_azure_import = False
-            has_kafka_removal = False
-            has_servicebus_client = False
-            has_servicebus_sender = False
-            has_servicebus_receiver = False
-            
-            lines = file_diff.split('\n')
-            for line in lines:
-                stripped = line.strip()
-                # Check added lines
-                if stripped.startswith('+') and not stripped.startswith('+++'):
-                    if 'Azure.Messaging.ServiceBus' in stripped:
-                        has_azure_import = True
-                    if 'ServiceBusClient' in stripped:
-                        has_servicebus_client = True
-                    if 'ServiceBusSender' in stripped:
-                        has_servicebus_sender = True
-                    if 'ServiceBusReceiver' in stripped or 'ServiceBusProcessor' in stripped:
-                        has_servicebus_receiver = True
-                # Check removed lines
-                elif stripped.startswith('-') and not stripped.startswith('---'):
-                    if 'Confluent.Kafka' in stripped or 'kafka' in stripped.lower():
-                        has_kafka_removal = True
-            
-            # Generate key changes based on what we found
-            if has_azure_import and has_kafka_removal:
-                key_changes_for_file.append(f"Replaced Kafka library with Azure.Messaging.ServiceBus in {file_name}")
-            if has_servicebus_sender:
-                key_changes_for_file.append(f"Introduced ServiceBusSender for message publishing in {file_name}")
-            if has_servicebus_receiver:
-                key_changes_for_file.append(f"Introduced ServiceBus receiver/processor for message consumption in {file_name}")
-            if has_servicebus_client:
-                key_changes_for_file.append(f"Added ServiceBusClient for connection management in {file_name}")
-        
-        # Add unique key changes to the global set
-        for change in key_changes_for_file:
-            all_key_changes.add(change)
-        
-        # Fallback: If no key changes detected but we have a diff, add a generic one
-        if not key_changes_for_file and file_diff and len(file_diff.strip()) > 20:
-            fallback_change = f"Code migration changes in {file_name}"
-            all_key_changes.add(fallback_change)
-            print(f"   ⚠️  Using fallback key change: {fallback_change}")
-        
-        print(f"   ✅ Key changes extracted: {len(key_changes_for_file)}")
+        # SIMPLE: Just use the description as a key change
+        if description and len(description.strip()) > 10:
+            all_key_changes.add(f"{file_name}: {description.strip()}")
+        elif file_diff and len(file_diff.strip()) > 20:
+            # If no description, create one from the file name
+            all_key_changes.add(f"{file_name}: Migrated Kafka code to Azure Service Bus")
         
         structured_diffs.append({
             "path": file_name,
@@ -486,17 +426,12 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
     import json
     import time
     
-    key_changes_list = list(all_key_changes)
-    print(f"\n📊 FINAL KEY CHANGES COUNT: {len(key_changes_list)}")
-    for kc in key_changes_list:
-        print(f"   - {kc}")
-    
     json_data = {
         "meta": {
             "repoUrl": state.get("repo_url", ""),
             "generatedAt": str(int(time.time() * 1000))
         },
-        "keyChanges": key_changes_list,
+        "keyChanges": list(all_key_changes),
         "notes": list(all_notes),
         "diffs": structured_diffs,
         "inventory": inventory
