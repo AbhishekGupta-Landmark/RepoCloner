@@ -10,6 +10,48 @@ An interactive web-based application that allows users to clone Git repositories
 - C#-compatible backend architecture with extensible provider pattern
 
 ## Recent Changes
+- 2025-09-30: **JSON-FIRST PARSING ARCHITECTURE** - Completely redesigned report parsing system
+  - **Previous Issue**: Complex regex patterns failed to reliably extract Key Changes and Notes from AI-generated markdown
+  - **User Frustration**: Complex regex approach was difficult to maintain and prone to parsing errors
+  - **Solution**: Implemented structured JSON output alongside markdown for deterministic parsing
+  - **Python Changes**: Script now outputs `migration-report-{timestamp}.json` with clean schema: `{meta, keyChanges[], notes[], diffs[{path, diff, description}], inventory[]}`
+  - **Backend Changes**: Three-tier parsing priority - (1) Embedded JSON in markdown, (2) Standalone .json file, (3) Regex fallback
+  - **Type System**: Created MigrationSection interface, changed sections from Record to MigrationSection[], added top-level keyChanges/notes arrays
+  - **Robust Diff Cleaning**: Strengthened regex patterns to handle Key Changes/Notes with optional diff prefixes (+/-/space) and heading markers (#)
+  - **Critical Regex Fix**: Fixed escape sequence bug (`\+\+\+` instead of `\\+\\+\\+`) ensuring proper termination of Key Changes sections
+  - **Impact**: Reliable extraction of Key Changes into separate yellow collapsible section, no more red deletion lines in diffs
+  - **Commits**: b529b8cc (types fix), c71583f3 (regex fix) on fix/check-again-and-url branch
+- 2025-09-30: **CRITICAL URL STRIPPING BUG FIX** - Fixed EPAM proxy authentication failure
+  - **Root Cause**: Backend was stripping `?api-version=` query parameter from configured URL
+  - **Issue**: EPAM proxy requires api-version in URL for routing/authentication, removal caused 401 errors
+  - **Fix**: Removed URL modification logic - now uses URL exactly as user configured it
+  - **Impact**: EPAM proxy authentication works correctly, AI analysis restored to working state
+- 2025-09-30: **PYTHON ERROR LOGGING FIX** - Fixed missing error messages when AI API calls fail
+  - **Root Cause**: Python script errors were printed to stdout only, but stdout was truncated in logs
+  - **Issue**: When API calls failed, error details weren't visible - only "exit code 1" shown
+  - **Fix**: Added stderr output for all exception handlers so errors are properly captured by backend
+  - **Impact**: Error messages now visible in logs, making debugging much easier
+- 2025-09-30: **WINDOWS LINE ENDING BUG FIX** - Fixed code diff parsing on Windows systems
+  - **Root Cause**: Regex patterns only matched Unix `\n` line endings, failed on Windows `\r\n` line endings
+  - **Issue**: Diff blocks weren't extracted, entire content dumped into description field causing garbled display
+  - **Fix**: Updated regex to match both `[\r\n]+` for cross-platform compatibility
+  - **Impact**: Code diffs now parse correctly on Windows, proper separation of description and code blocks
+- 2025-09-30: **FALLBACK REPORT BUG FIX** - Deleted old fallback migration reports to prevent stale data
+  - **Root Cause**: Old "static analysis" fallback reports from previous runs were persisting in temp directory
+  - **Issue**: Python script generated new AI report, but backend picked up old fallback file instead
+  - **Fix**: Added cleanup logic to delete ALL old `migration-report-*.md` files before generating new one
+  - **Impact**: Only fresh AI-generated reports are displayed, no more fallback data pollution
+- 2025-09-30: **CRITICAL UI CACHE BUG FIX** - Fixed "Check Again" not updating UI after successful analysis
+  - **Root Cause**: Cache invalidation only happened on error, not success - UI showed old failed report even when new analysis succeeded
+  - **Fix**: Moved `queryClient.invalidateQueries()` to run ALWAYS (both success and failure paths) in `analyzeCode()`
+  - **Impact**: "Check Again" button now properly refreshes UI with new analysis results
+- 2025-09-30: **MIGRATION ANALYSIS UI FIXES** - Completed critical bug fixes for migration report display
+  - **Fixed Report ID Propagation**: `createPythonScriptReport` now returns report ID, fixing issue where successful analysis showed error screen
+  - **Removed Fallback Logic**: Verified Python script correctly exits with error when AI not configured (no unwanted fallback reports)
+  - **Fixed Key Changes Duplication**: Enhanced markdown parsing to extract "Key Changes" from descriptions into separate array, preventing duplicate display
+  - **Optimized UI Caching**: Added `staleTime: 0` and smart polling that stops when analysis complete
+  - **Fixed Parser Bug**: Changed from `parseMarkdownToMigrationData` to `extractStructuredData` to match expected data structure
+  - **Notes Display**: Verified Notes are displayed separately in "Important Notes" section (already implemented)
 - 2025-09-23: **UI/UX OPTIMIZATION & TESTING MILESTONE** - Completed grid layout fixes and comprehensive test updates
   - **Equal Height Grid Layout**: Implemented uniform card heights across all view modes (Simple & Details) with scrollable content areas
   - **Responsive Grid System**: Unified responsive layout with grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5
