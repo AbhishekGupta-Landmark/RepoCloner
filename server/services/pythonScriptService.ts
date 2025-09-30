@@ -672,10 +672,10 @@ export class PythonScriptService {
         // Get description (everything before the diff block)
         let description = diffMatch ? sectionContent.substring(0, diffMatch.index).trim() : sectionContent;
         
-        // Extract key changes - check multiple locations
+        // Extract key changes from multiple locations
         let keyChanges: string[] = [];
         
-        // 1. First check for explicit "Key Changes:" header in description
+        // 1. Check for explicit "Key Changes:" header in description
         const explicitKeyChangesMatch = /(?:^|[\r\n])\s*(?:\*\*|##?)?\s*Key\s+Changes\s*:?\s*[\r\n]+((?:[\s]*[-*•]\s+.+[\r\n]+)+)/i.exec(description);
         
         if (explicitKeyChangesMatch) {
@@ -706,37 +706,60 @@ export class PythonScriptService {
           }
         }
         
-        // 3. CRITICAL: Check for summary lines INSIDE the diff content (at the beginning, before actual diff syntax)
-        // These look like: "- Replaced Kafka..." "- Added message..." but appear before @@ or --- markers
-        if (keyChanges.length === 0 && diffContent) {
+        // 3. CRITICAL FIX: Extract summary deletion lines from BETWEEN file headers (---/+++) and first hunk header (@@)
+        // AI embeds descriptive lines like "- Replaced Kafka..." as deletion lines before actual code diffs
+        if (diffContent) {
           const diffLines = diffContent.split(/\r?\n/);
-          const summaryLines: string[] = [];
-          let foundActualDiff = false;
+          const extractedSummaryLines: string[] = [];
+          const cleanedDiffLines: string[] = [];
+          let foundFirstHunkHeader = false;
+          let pastFileHeaders = false;
           
-          for (const line of diffLines) {
+          for (let i = 0; i < diffLines.length; i++) {
+            const line = diffLines[i];
             const trimmed = line.trim();
             
-            // Check if we've hit actual diff syntax
-            if (trimmed.startsWith('@@') || trimmed.startsWith('---') || trimmed.startsWith('+++') || trimmed.match(/^diff\s+/)) {
-              foundActualDiff = true;
-              break;
+            // Skip file headers (--- and +++)
+            if (trimmed.startsWith('---') || trimmed.startsWith('+++')) {
+              cleanedDiffLines.push(line);
+              pastFileHeaders = true;
+              continue;
             }
             
-            // Collect lines that look like summary bullets (but not empty lines)
-            if (trimmed && (trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('•'))) {
-              // Check if it's a descriptive summary (contains words like "Replaced", "Added", "Used", "Implemented", "Updated", "Removed", "Changed", "Fixed")
-              if (/^[-*•]\s*(Replaced|Added|Used|Implemented|Updated|Removed|Changed|Fixed|Created|Modified|Introduced|Migrated|Converted)/i.test(trimmed)) {
-                summaryLines.push(trimmed);
+            // Found first hunk header - from here on, keep everything as-is
+            if (trimmed.match(/^@@\s+.*\s+@@/)) {
+              foundFirstHunkHeader = true;
+              cleanedDiffLines.push(line);
+              continue;
+            }
+            
+            // If we're past file headers but before first hunk, check for summary deletion lines
+            if (pastFileHeaders && !foundFirstHunkHeader && trimmed.startsWith('-')) {
+              // Check if it's a descriptive summary (action verb pattern)
+              const summaryMatch = trimmed.match(/^-\s+(Replaced|Added|Implemented|Updated|Removed|Changed|Fixed|Created|Modified|Introduced|Migrated|Configured|Refactored|Used|Simplified|Kept)\b/i);
+              if (summaryMatch) {
+                // This is a summary line - extract it and don't include in cleaned diff
+                extractedSummaryLines.push(trimmed.replace(/^-\s*/, '').trim());
+                continue;
               }
             }
+            
+            // Keep all other lines (including actual code deletions inside hunks)
+            cleanedDiffLines.push(line);
           }
           
-          if (summaryLines.length > 0) {
-            keyChanges = summaryLines.map(line => line.replace(/^[-*•]\s*/, '').trim());
+          // Add extracted summaries to key changes (de-duplicate)
+          if (extractedSummaryLines.length > 0) {
+            const existingSet = new Set(keyChanges.map(k => k.toLowerCase()));
+            for (const summary of extractedSummaryLines) {
+              if (!existingSet.has(summary.toLowerCase())) {
+                keyChanges.push(summary);
+                existingSet.add(summary.toLowerCase());
+              }
+            }
             
-            // Remove these summary lines from diff content
-            const summaryBlock = summaryLines.join('\n');
-            diffContent = diffContent.replace(new RegExp(summaryLines.map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\r\\n]+'), 'g'), '').trim();
+            // Update diff content with cleaned lines
+            diffContent = cleanedDiffLines.join('\n').trim();
           }
         }
         
