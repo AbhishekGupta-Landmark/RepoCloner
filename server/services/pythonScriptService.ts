@@ -579,6 +579,13 @@ export class PythonScriptService {
       if (jsonMatch) {
         try {
           const jsonData = JSON.parse(jsonMatch[1]);
+          
+          // Extract key changes from diffs if not provided by Python
+          let keyChanges = jsonData.keyChanges || [];
+          if (keyChanges.length === 0 && jsonData.diffs && jsonData.diffs.length > 0) {
+            keyChanges = this.extractKeyChangesFromDiffs(jsonData.diffs);
+          }
+          
           // Pure JSON deserialization
           structuredData = {
             title: 'Kafka to Azure Service Bus Migration Analysis',
@@ -593,7 +600,7 @@ export class PythonScriptService {
               hunks: [],
               stats: {}
             })),
-            keyChanges: jsonData.keyChanges || [],
+            keyChanges: keyChanges,
             notes: jsonData.notes || [],
             sections: [],
             stats: {
@@ -819,6 +826,41 @@ export class PythonScriptService {
       broadcastLog('ERROR', `Failed to extract structured data: ${error}`);
       return null;
     }
+  }
+
+  private extractKeyChangesFromDiffs(diffs: any[]): string[] {
+    const keyChanges: Set<string> = new Set();
+    
+    for (const diff of diffs) {
+      const diffContent = diff.diff || '';
+      
+      // Check for namespace changes
+      if (/[-\s].*Confluent\.Kafka/i.test(diffContent) && /[\+\s].*Azure\.Messaging\.ServiceBus/i.test(diffContent)) {
+        keyChanges.add('Replaced Confluent.Kafka namespace with Azure.Messaging.ServiceBus');
+      }
+      
+      // Check for Producer changes
+      if (/(Producer|ProduceAsync)/i.test(diffContent) && /(ServiceBusSender|SendMessageAsync)/i.test(diffContent)) {
+        keyChanges.add('Migrated Kafka Producer to Azure Service Bus Sender');
+      }
+      
+      // Check for Consumer changes
+      if (/(Consumer|Consume)/i.test(diffContent) && /(ServiceBusProcessor|ServiceBusReceiver|ProcessMessageAsync)/i.test(diffContent)) {
+        keyChanges.add('Migrated Kafka Consumer to Azure Service Bus Receiver/Processor');
+      }
+      
+      // Check for configuration changes
+      if (/(bootstrap\.servers|ProducerConfig|ConsumerConfig)/i.test(diffContent) && /(ConnectionString|ServiceBus)/i.test(diffContent)) {
+        keyChanges.add('Updated configuration from Kafka bootstrap servers to Service Bus connection string');
+      }
+      
+      // Check for package changes
+      if (/[-\s].*confluent\.kafka/i.test(diffContent) && /[\+\s].*Azure\.Messaging\.ServiceBus/i.test(diffContent)) {
+        keyChanges.add('Updated package from Confluent.Kafka to Azure.Messaging.ServiceBus');
+      }
+    }
+    
+    return Array.from(keyChanges);
   }
 
   private inferLanguageFromFile(fileName: string): string {
