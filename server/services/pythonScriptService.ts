@@ -672,6 +672,13 @@ export class PythonScriptService {
         // Get description (everything before the diff block)
         let description = diffMatch ? sectionContent.substring(0, diffMatch.index).trim() : sectionContent;
         
+        // Get text after the diff block (where AI often puts "Key changes:" summary)
+        let afterDiffText = '';
+        if (diffMatch) {
+          const afterDiffIndex = diffMatch.index + diffMatch[0].length;
+          afterDiffText = sectionContent.substring(afterDiffIndex).trim();
+        }
+        
         // Extract key changes from multiple locations
         let keyChanges: string[] = [];
         
@@ -706,7 +713,21 @@ export class PythonScriptService {
           }
         }
         
-        // 3. CRITICAL FIX: Extract summary deletion lines from BETWEEN file headers (---/+++) and first hunk header (@@)
+        // 3. Check for "Key changes:" section AFTER the diff block (common AI pattern)
+        if (keyChanges.length === 0 && afterDiffText) {
+          const afterDiffKeyChangesMatch = /(?:^|[\r\n])\s*(?:\*\*|##?)?\s*Key\s+[Cc]hanges\s*:?\s*[\r\n]+((?:[\s]*[-*•]\s+.+(?:[\r\n]+|$))+)/i.exec(afterDiffText);
+          
+          if (afterDiffKeyChangesMatch) {
+            keyChanges = afterDiffKeyChangesMatch[1]
+              .split(/\r?\n/)
+              .map(line => line.trim())
+              .filter(line => line.startsWith('-') || line.startsWith('*') || line.startsWith('•'))
+              .map(line => line.replace(/^[-*•]\s*/, '').trim())
+              .filter(line => line.length > 0);
+          }
+        }
+        
+        // 4. CRITICAL FIX: Extract summary deletion lines from BETWEEN file headers (---/+++) and first hunk header (@@)
         // AI embeds descriptive lines like "- Replaced Kafka..." as deletion lines before actual code diffs
         if (diffContent) {
           const diffLines = diffContent.split(/\r?\n/);
