@@ -8,7 +8,6 @@ import { FileText, Code, BarChart3, Loader2, RefreshCw, AlertTriangle, GitBranch
 import { Button } from '@/components/ui/button';
 import { useAnalysis } from '@/hooks/useAnalysis';
 import DiffViewer from '@/components/ui/DiffViewer';
-import KeyChanges from '@/components/ui/KeyChanges';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 interface KafkaUsageItem {
@@ -24,6 +23,8 @@ interface CodeDiff {
   hunks?: any[];
   stats?: any;
   key_changes?: string[];
+  notes?: string[];
+  description?: string;
 }
 
 interface MigrationReportData {
@@ -31,6 +32,7 @@ interface MigrationReportData {
   kafka_inventory: KafkaUsageItem[];
   code_diffs: CodeDiff[];
   sections: Record<string, any>;
+  notes?: string[];
   stats: {
     total_files_with_kafka: number;
     total_files_with_diffs: number;
@@ -56,16 +58,21 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
       return response.json();
     },
     enabled: !!repositoryId,
-    refetchInterval: 30000 // Auto-refresh every 30 seconds
+    // Only poll when analysis might be in progress, stop when completed
+    refetchInterval: (query) => {
+      const currentData = query.state.data as any;
+      return currentData?.status === 'ready' || currentData?.status === 'completed' ? false : 5000;
+    },
+    staleTime: 0 // Always consider data stale to ensure fresh fetches
   });
   
-  // Only show loading card when initially loading data (not during analysis)
-  if (isQueryLoading && !data) {
+  // Show loading state when initially loading OR when analysis is running
+  if ((isQueryLoading && !data) || isAnalyzing) {
     return (
       <Card>
         <CardContent className="flex items-center justify-center py-8">
           <Loader2 className="h-6 w-6 animate-spin mr-2" />
-          Loading migration report...
+          {isAnalyzing ? 'Running migration analysis...' : 'Loading migration report...'}
         </CardContent>
       </Card>
     );
@@ -116,6 +123,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
                   size="sm" 
                   onClick={async () => {
                     await analyzeCode(repositoryId);
+                    refetch(); // Force refresh the query immediately after analysis
                   }}
                   disabled={isAnalyzing}
                   className="text-white border-white/30 hover:bg-red-600 hover:border-red-500 hover:text-white"
@@ -167,7 +175,23 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
   }
 
   const reportData: MigrationReportData = data.structuredData;
-  const keyChanges = reportData.code_diffs.length > 0 && reportData.code_diffs[0].key_changes ? reportData.code_diffs[0].key_changes : [];
+
+  // Extract all notes from code diffs and report level
+  const allNotes: string[] = [];
+  
+  // Add report-level notes if they exist
+  if (reportData.notes) {
+    allNotes.push(...reportData.notes);
+  }
+  
+  // Extract notes from code diffs
+  if (reportData.code_diffs && Array.isArray(reportData.code_diffs)) {
+    reportData.code_diffs.forEach(diff => {
+      if (diff.notes) {
+        allNotes.push(...diff.notes);
+      }
+    });
+  }
 
   return (
     <div className="space-y-6" data-testid="migration-report-viewer">
@@ -178,7 +202,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
             <div>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5" />
-                {reportData.title}
+                {reportData.title || 'Migration Analysis Report'}
               </CardTitle>
               <CardDescription>
                 Generated on {new Date(data.createdAt).toLocaleDateString()}
@@ -202,25 +226,52 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="text-center">
               <div className="text-2xl font-bold text-primary">
-                {reportData.stats.total_files_with_kafka}
+                {reportData.stats?.total_files_with_kafka || 0}
               </div>
               <p className="text-sm text-muted-foreground">Files with Kafka</p>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-primary">
-                {reportData.stats.total_files_with_diffs}
+                {reportData.stats?.total_files_with_diffs || 0}
               </div>
               <p className="text-sm text-muted-foreground">Code Migrations</p>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-primary">
-                {reportData.stats.sections_count}
+                {reportData.stats?.sections_count || 0}
               </div>
               <p className="text-sm text-muted-foreground">Report Sections</p>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Notes Section */}
+      {allNotes.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Important Notes
+            </CardTitle>
+            <CardDescription>
+              Key observations and recommendations from the migration analysis
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {allNotes.map((note, index) => (
+                <div key={index} className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <div className="w-2 h-2 bg-amber-500 rounded-full mt-2 flex-shrink-0"></div>
+                  <p className="text-sm text-amber-800 dark:text-amber-200 leading-relaxed">
+                    {note}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Main Content */}
       <Tabs defaultValue="inventory" className="w-full">
@@ -244,7 +295,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {reportData.kafka_inventory.length === 0 ? (
+              {!reportData.kafka_inventory || reportData.kafka_inventory.length === 0 ? (
                 <p className="text-muted-foreground text-center py-8">
                   No Kafka usage detected in this repository.
                 </p>
@@ -258,7 +309,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
                             {item.file}
                           </CardTitle>
                           <div className="flex flex-wrap gap-1">
-                            {item.apis_used.split(',').map((api, apiIndex) => (
+                            {(item.apis_used || '').split(',').filter(api => api.trim()).map((api, apiIndex) => (
                               <Badge key={apiIndex} variant="secondary" className="text-xs">
                                 {api.trim()}
                               </Badge>
@@ -280,86 +331,18 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
         </TabsContent>
 
         <TabsContent value="diffs" className="space-y-4">
-          {/* Key Changes Summary - Collapsible but open by default */}
-          {keyChanges.length > 0 && (
-            <Collapsible defaultOpen={true}>
-              <Card className="border-l-4 border-l-blue-500">
-                <CollapsibleTrigger asChild>
-                  <CardHeader className="cursor-pointer hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Code2 className="h-5 w-5 text-blue-600" />
-                        <CardTitle className="text-lg">Migration Summary</CardTitle>
-                      </div>
-                      <ChevronDown className="h-4 w-4 text-gray-500 transition-transform" />
-                    </div>
-                    <CardDescription>
-                      Summary of the main code transformations in this migration
-                    </CardDescription>
-                  </CardHeader>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent className="space-y-3">
-                    {keyChanges.map((change, index) => (
-                      <div
-                        key={index}
-                        className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800 transition-colors"
-                        data-testid={`key-change-${index}`}
-                      >
-                        <div className="flex-shrink-0 mt-0.5">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm text-gray-800 dark:text-white leading-relaxed font-medium">
-                            {change}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                    
-                    <div className="mt-4 pt-3 border-t border-blue-200 dark:border-blue-700">
-                      <div className="flex items-center justify-between text-xs text-blue-600 dark:text-blue-300">
-                        <span>{keyChanges.length} change{keyChanges.length !== 1 ? 's' : ''} identified</span>
-                        <span className="flex items-center gap-1">
-                          <CheckCircle className="h-3 w-3" />
-                          Migration Summary
-                        </span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
+          {/* Code Diffs */}
+          {reportData.code_diffs && reportData.code_diffs.length > 0 ? (
+            <DiffViewer diffs={reportData.code_diffs} />
+          ) : (
+            <Card>
+              <CardContent className="py-8">
+                <p className="text-muted-foreground text-center">
+                  No code migrations found in this analysis.
+                </p>
+              </CardContent>
+            </Card>
           )}
-          
-          {/* Interactive Diff Viewer */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <GitBranch className="h-5 w-5" />
-                Code Migration Diffs
-              </CardTitle>
-              <CardDescription>
-                Interactive file-by-file migration changes from Kafka to Azure Service Bus
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              {reportData.code_diffs.length === 0 ? (
-                <div className="p-6">
-                  <p className="text-muted-foreground text-center py-8">
-                    No code migration diffs available.
-                  </p>
-                </div>
-              ) : (
-                <div className="p-6">
-                  <DiffViewer 
-                    diffs={reportData.code_diffs}
-                    data-testid="migration-diff-viewer"
-                  />
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </TabsContent>
       </Tabs>
     </div>
