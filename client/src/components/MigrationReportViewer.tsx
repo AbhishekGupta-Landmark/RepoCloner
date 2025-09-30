@@ -32,6 +32,7 @@ interface MigrationReportData {
   kafka_inventory: KafkaUsageItem[];
   code_diffs: CodeDiff[];
   sections: Record<string, any>;
+  keyChanges?: string[];
   notes?: string[];
   stats: {
     total_files_with_kafka: number;
@@ -180,6 +181,12 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
 
   const reportData: MigrationReportData = data.structuredData;
 
+  // Extract all key changes from report level
+  const allKeyChanges: string[] = [];
+  if (reportData.keyChanges) {
+    allKeyChanges.push(...reportData.keyChanges);
+  }
+  
   // Extract all notes from code diffs and report level
   const allNotes: string[] = [];
   
@@ -235,6 +242,45 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
           </div>
         </CardContent>
       </Card>
+
+      {/* Key Changes Section */}
+      {allKeyChanges.length > 0 && (
+        <Collapsible defaultOpen={true}>
+          <Card className="border-yellow-200 dark:border-yellow-800">
+            <CardHeader>
+              <CollapsibleTrigger asChild>
+                <div className="flex items-center justify-between cursor-pointer">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
+                      <CheckCircle className="h-5 w-5" />
+                      Key Changes
+                      <Badge variant="secondary" className="ml-2">{allKeyChanges.length}</Badge>
+                    </CardTitle>
+                    <CardDescription>
+                      Critical modifications required for Kafka to Azure Service Bus migration
+                    </CardDescription>
+                  </div>
+                  <ChevronDown className="h-5 w-5 text-yellow-600 dark:text-yellow-400 transition-transform" />
+                </div>
+              </CollapsibleTrigger>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent>
+                <div className="space-y-3">
+                  {allKeyChanges.map((change, index) => (
+                    <div key={index} className="flex items-start gap-3 p-3 bg-yellow-50 dark:bg-yellow-950/30 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                      <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2 flex-shrink-0"></div>
+                      <p className="text-sm text-yellow-800 dark:text-yellow-200 leading-relaxed">
+                        {change}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+      )}
 
       {/* Notes Section */}
       {allNotes.length > 0 && (
