@@ -634,14 +634,14 @@ export class PythonScriptService {
         let insideKeyChangesSection = false;
         
         for (const line of lines) {
-          // Skip Key Changes section headers and bullets
-          if (/^#+?\s*Key\s+[Cc]hanges?:?\s*$/i.test(line.trim())) {
+          // Skip Key Changes section headers (with or without heading markers, with optional diff prefix)
+          if (/^[+\- ]?\s*(?:#+\s*)?Key\s+[Cc]hanges?:?\s*$/i.test(line)) {
             insideKeyChangesSection = true;
             continue;
           }
           
-          // Skip bullet points in Key Changes section
-          if (insideKeyChangesSection && /^[-*]\s+/.test(line.trim())) {
+          // Skip bullet points in Key Changes section (with optional diff prefix)
+          if (insideKeyChangesSection && /^[+\- ]?\s*[-*]\s+/.test(line)) {
             continue;
           }
           
@@ -650,8 +650,8 @@ export class PythonScriptService {
             insideKeyChangesSection = false;
           }
           
-          // Skip Note: lines
-          if (/^Note:\s*/i.test(line.trim())) {
+          // Skip Note: lines (with optional diff prefix)
+          if (/^[+\- ]?\s*Note:\s*/i.test(line)) {
             continue;
           }
           
@@ -928,13 +928,13 @@ export class PythonScriptService {
         kafka_inventory: kafkaInventory,
         code_diffs: codeDiffs,
         keyChanges: [],
-        sections: {},
+        sections: [],
         notes: [],
         stats: {
           total_files_with_kafka: kafkaInventory.length,
           total_files_with_diffs: codeDiffs.length,
           notes_count: 0,
-          sections_count: Object.keys({}).length
+          sections_count: 0
         }
       };
 

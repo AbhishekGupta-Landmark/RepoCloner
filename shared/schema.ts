@@ -106,13 +106,23 @@ export interface CodeDiff {
   notes?: string[];
 }
 
+export interface MigrationSection {
+  id: string;
+  title: string;
+  description?: string;
+  diffBlock?: string;
+  keyChanges: string[];
+  notes: string[];
+  evidence: any[];
+}
+
 export interface MigrationReportData {
   title: string;
   kafka_inventory: KafkaUsageItem[];
   code_diffs: CodeDiff[];
   keyChanges: string[];
   notes: string[];
-  sections: Record<string, any>;
+  sections: MigrationSection[];
   stats: {
     total_files_with_kafka: number;
     total_files_with_diffs: number;
@@ -326,17 +336,3 @@ export interface CodeDiff {
   language: string;
 }
 
-// Add MigrationReportData interface
-export interface MigrationReportData {
-  title: string;
-  kafka_inventory: KafkaUsageItem[];
-  code_diffs: CodeDiff[];
-  sections: Record<string, any>;
-  notes: string[];
-  stats: {
-    total_files_with_kafka: number;
-    total_files_with_diffs: number;
-    notes_count: number;
-    sections_count: number;
-  };
-}
