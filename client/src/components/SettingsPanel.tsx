@@ -38,7 +38,7 @@ const MODEL_API_MAPPING = {
     endpoint: "https://api.openai.com/v1/chat/completions"
   },
   "claude-3-5-haiku@20241022": {
-    apiVersion: "", 
+    apiVersion: "3.5 Haiku", 
     endpoint: "https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions"
   },
   "claude-3-opus": {

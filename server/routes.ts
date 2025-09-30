@@ -606,18 +606,6 @@ export async function registerRoutes(app: Application): Promise<Server> {
       
       const settings = await storage.getAISettings();
       
-      // AUTO-MIGRATION: Fix corrupted apiVersion with spaces
-      if (settings && settings.apiVersion && /\s/.test(settings.apiVersion)) {
-        console.log(`[AUTO-FIX] Detected corrupted apiVersion with spaces: "${settings.apiVersion}"`);
-        const fixedApiVersion = settings.model?.includes('claude-3-5-haiku') 
-          ? '2024-02-15-preview'
-          : settings.apiVersion.replace(/\s+/g, '-');
-        console.log(`[AUTO-FIX] Migrating to: "${fixedApiVersion}"`);
-        
-        await storage.updateAISettings({ apiVersion: fixedApiVersion });
-        settings.apiVersion = fixedApiVersion;
-      }
-      
       const response = {
         configured: !!settings,
         hasApiKey: !!(settings?.apiKey),
