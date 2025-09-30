@@ -757,38 +757,127 @@ export class PythonScriptService {
 
   private parseDiffHunks(diffContent: string): any[] {
     const hunks: any[] = [];
-    const hunkRegex = /@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@/g;
-    let hunkMatch;
+    const lines = diffContent.split(/\r?\n/);
     
-    while ((hunkMatch = hunkRegex.exec(diffContent)) !== null) {
-      hunks.push({
-        oldStart: parseInt(hunkMatch[1]),
-        oldLines: parseInt(hunkMatch[2] || '1'),
-        newStart: parseInt(hunkMatch[3]),
-        newLines: parseInt(hunkMatch[4] || '1')
-      });
+    let currentHunk: any = null;
+    let oldPtr = 0;
+    let newPtr = 0;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      // Skip code fence markers
+      if (line === '```' || line === '```diff') {
+        continue;
+      }
+      
+      // Check for hunk header: @@ -a,b +c,d @@
+      const hunkHeaderMatch = line.match(/^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@(.*)$/);
+      if (hunkHeaderMatch) {
+        // Save previous hunk if exists
+        if (currentHunk) {
+          hunks.push(currentHunk);
+        }
+        
+        // Create new hunk
+        const oldStart = parseInt(hunkHeaderMatch[1]);
+        const oldCount = parseInt(hunkHeaderMatch[2] || '1');
+        const newStart = parseInt(hunkHeaderMatch[3]);
+        const newCount = parseInt(hunkHeaderMatch[4] || '1');
+        
+        currentHunk = {
+          header: line,
+          old_start: oldStart,
+          old_count: oldCount,
+          new_start: newStart,
+          new_count: newCount,
+          lines: []
+        };
+        
+        oldPtr = oldStart;
+        newPtr = newStart;
+        continue;
+      }
+      
+      // If we're inside a hunk, parse diff lines
+      if (currentHunk) {
+        // Addition line
+        if (line.startsWith('+') && !line.startsWith('+++')) {
+          currentHunk.lines.push({
+            type: 'addition',
+            content: line.substring(1),
+            old_line: null,
+            new_line: newPtr++
+          });
+        }
+        // Deletion line
+        else if (line.startsWith('-') && !line.startsWith('---')) {
+          currentHunk.lines.push({
+            type: 'deletion',
+            content: line.substring(1),
+            old_line: oldPtr++,
+            new_line: null
+          });
+        }
+        // Context line (starts with space)
+        else if (line.startsWith(' ')) {
+          currentHunk.lines.push({
+            type: 'context',
+            content: line.substring(1),
+            old_line: oldPtr++,
+            new_line: newPtr++
+          });
+        }
+        // Special marker (e.g., "\ No newline at end of file")
+        else if (line.startsWith('\\')) {
+          currentHunk.lines.push({
+            type: 'context',
+            content: line,
+            old_line: null,
+            new_line: null
+          });
+        }
+        // Empty line within hunk - treat as context
+        else if (line === '' && currentHunk.lines.length > 0) {
+          currentHunk.lines.push({
+            type: 'context',
+            content: '',
+            old_line: oldPtr++,
+            new_line: newPtr++
+          });
+        }
+      }
+    }
+    
+    // Push last hunk if exists
+    if (currentHunk) {
+      hunks.push(currentHunk);
     }
     
     return hunks;
   }
 
   private calculateDiffStats(diffContent: string): any {
-    const lines = diffContent.split('\n');
+    const lines = diffContent.split(/\r?\n/);
     let additions = 0;
     let deletions = 0;
+    let context = 0;
     
     for (const line of lines) {
       if (line.startsWith('+') && !line.startsWith('+++')) {
         additions++;
       } else if (line.startsWith('-') && !line.startsWith('---')) {
         deletions++;
+      } else if (line.startsWith(' ')) {
+        context++;
       }
     }
     
     return {
       additions,
       deletions,
-      changes: additions + deletions
+      context,
+      total_changes: additions + deletions
     };
   }
 
