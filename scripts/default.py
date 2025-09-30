@@ -351,12 +351,19 @@ def generate_code_diffs(state: RepoAnalysisState) -> RepoAnalysisState:
         Original code:
         {file_content}
 
-
         Task:
-        - Show a unified diff patch (`diff` style) that replaces Kafka usage with Azure.Messaging.ServiceBus.
-        - Cover producers, consumers, config, and error handling.
-        - Keep namespaces, classes, and non-Kafka code intact.
-        - If no Kafka usage is present, return an empty diff.
+        Generate a unified diff patch that replaces Kafka usage with Azure.Messaging.ServiceBus.
+        
+        IMPORTANT FORMATTING RULES:
+        1. First, write a brief description of what changes are needed (1-2 sentences)
+        2. Then write ONLY the diff block starting with --- or @@ headers
+        3. Do NOT include any explanation text inside the diff block
+        4. The diff must contain only diff syntax: ---, +++, @@, -, +, and unchanged lines
+        
+        Requirements:
+        - Cover producers, consumers, config, and error handling
+        - Keep namespaces, classes, and non-Kafka code intact
+        - If no Kafka usage is present, return an empty diff
         """
         resp = llm.invoke([HumanMessage(content=prompt)])
         
