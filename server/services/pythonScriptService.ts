@@ -637,6 +637,8 @@ export class PythonScriptService {
             language: diff.language
           })),
           sections: structuredData.sections,
+          keyChanges: structuredData.keyChanges || [],
+          notes: structuredData.notes || [],
           stats: {
             totalFilesWithKafka: structuredData.stats.total_files_with_kafka,
             totalFilesWithDiffs: structuredData.stats.total_files_with_diffs,
