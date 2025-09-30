@@ -647,17 +647,29 @@ export class PythonScriptService {
       const titleMatch = reportContent.match(/^#\s+(.+)$/m);
       const title = titleMatch ? titleMatch[1] : 'Kafka to Azure Service Bus Migration Analysis';
 
-      // Extract Kafka inventory
+      // Extract Kafka inventory from markdown table
       const kafkaInventory: any[] = [];
-      const inventoryRegex = /\*\*File:\*\* `([^`]+)`\s*\n\*\*APIs Used:\*\* `([^`]+)`\s*\n\*\*Summary:\*\* (.+?)(?=\n\n|\n\*\*File:\*\*|$)/g;
-      let inventoryMatch;
-      while ((inventoryMatch = inventoryRegex.exec(reportContent)) !== null) {
-        kafkaInventory.push({
-          file: inventoryMatch[1],
-          line: 0,
-          type: inventoryMatch[2],
-          description: inventoryMatch[3].trim()
-        });
+      
+      // Find the Kafka Usage Inventory section
+      const inventorySection = reportContent.match(/##\s+\d+\.\s*Kafka Usage Inventory([\s\S]*?)(?=##|$)/i);
+      
+      if (inventorySection) {
+        // Parse markdown table rows (skip header and separator rows)
+        const tableRowRegex = /^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|$/gm;
+        let rowMatch;
+        let rowCount = 0;
+        
+        while ((rowMatch = tableRowRegex.exec(inventorySection[1])) !== null) {
+          rowCount++;
+          // Skip header row (File | APIs Used | Summary) and separator row (---|---|---)
+          if (rowCount <= 2) continue;
+          
+          kafkaInventory.push({
+            file: rowMatch[1].trim(),
+            apis_used: rowMatch[2].trim(),
+            summary: rowMatch[3].trim()
+          });
+        }
       }
 
       // Extract code diffs with descriptions and key changes
