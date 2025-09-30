@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useIsMutating } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileText, Code, BarChart3, Loader2, RefreshCw, AlertTriangle, GitBranch, Code2, CheckCircle, ChevronDown } from 'lucide-react';
+import { FileText, Code, BarChart3, Loader2, AlertTriangle, GitBranch, Code2, CheckCircle, ChevronDown, RotateCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAnalysis } from '@/hooks/useAnalysis';
 import DiffViewer from '@/components/ui/DiffViewer';
@@ -46,7 +46,11 @@ interface MigrationReportViewerProps {
 
 export function MigrationReportViewer({ repositoryId }: MigrationReportViewerProps) {
   // Get analysis functions and loading state
-  const { analyzeCode, isLoading: isAnalyzing } = useAnalysis();
+  const { analyzeCode, isLoading } = useAnalysis();
+  
+  // Track global analysis mutations (works across all components)
+  const isMutating = useIsMutating({ mutationKey: ['analysis'] });
+  const isAnalyzing = isLoading || isMutating > 0;
   
   const { data, isLoading: isQueryLoading, error, refetch } = useQuery({
     queryKey: ['structured-report', repositoryId],
@@ -128,7 +132,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
                   disabled={isAnalyzing}
                   className="text-white border-white/30 hover:bg-red-600 hover:border-red-500 hover:text-white"
                 >
-                  <RefreshCw className={`h-4 w-4 mr-2 ${isAnalyzing ? 'animate-spin' : ''}`} />
+                  <RotateCw className={`h-4 w-4 mr-2 ${isAnalyzing ? 'animate-spin' : ''}`} />
                   {isAnalyzing ? 'Running Analysis...' : 'Check Again'}
                 </Button>
               </div>
@@ -198,28 +202,14 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
       {/* Header */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                {reportData.title || 'Migration Analysis Report'}
-              </CardTitle>
-              <CardDescription>
-                Generated on {new Date(data.createdAt).toLocaleDateString()}
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => refetch()}
-                disabled={isQueryLoading}
-                className="text-white border-white/30 hover:bg-blue-600 hover:border-blue-500 hover:text-white"
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isQueryLoading ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-            </div>
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              {reportData.title || 'Migration Analysis Report'}
+            </CardTitle>
+            <CardDescription>
+              Generated on {new Date(data.createdAt).toLocaleDateString()}
+            </CardDescription>
           </div>
         </CardHeader>
         <CardContent>
@@ -238,7 +228,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-primary">
-                {reportData.stats?.sections_count || 0}
+                {(reportData.kafka_inventory?.length > 0 ? 1 : 0) + (reportData.code_diffs?.length > 0 ? 1 : 0)}
               </div>
               <p className="text-sm text-muted-foreground">Report Sections</p>
             </div>

@@ -672,21 +672,41 @@ export class PythonScriptService {
         // Get description (everything before the diff block)
         let description = diffMatch ? sectionContent.substring(0, diffMatch.index).trim() : sectionContent;
         
-        // Extract "Key Changes" from description (handle Windows/Unix line endings)
-        const keyChangesMatch = /(?:^|[\r\n])\s*(?:\*\*|##?)?\s*Key\s+Changes\s*:?\s*[\r\n]+((?:[\s]*[-*•]\s+.+[\r\n]+)+)/i.exec(description);
+        // Extract bullet lists as "Key Changes" (handle both explicit headers and implicit bullet lists)
         let keyChanges: string[] = [];
         
-        if (keyChangesMatch) {
-          // Parse bullet points (handle both \r\n and \n)
-          keyChanges = keyChangesMatch[1]
+        // First try explicit "Key Changes:" header
+        const explicitKeyChangesMatch = /(?:^|[\r\n])\s*(?:\*\*|##?)?\s*Key\s+Changes\s*:?\s*[\r\n]+((?:[\s]*[-*•]\s+.+[\r\n]+)+)/i.exec(description);
+        
+        if (explicitKeyChangesMatch) {
+          // Parse bullet points from explicit section
+          keyChanges = explicitKeyChangesMatch[1]
             .split(/\r?\n/)
             .map(line => line.trim())
             .filter(line => line.startsWith('-') || line.startsWith('*') || line.startsWith('•'))
             .map(line => line.replace(/^[-*•]\s*/, '').trim())
             .filter(line => line.length > 0);
           
-          // Remove key changes section from description
-          description = description.replace(keyChangesMatch[0], '').trim();
+          // Remove explicit key changes section from description
+          description = description.replace(explicitKeyChangesMatch[0], '').trim();
+        } else {
+          // If no explicit header, extract ALL bullet lists from description as key changes
+          const bulletListMatch = description.match(/(?:^|[\r\n])((?:[\s]*[-*•]\s+.+[\r\n]+)+)/);
+          
+          if (bulletListMatch) {
+            // Parse bullet points
+            keyChanges = bulletListMatch[1]
+              .split(/\r?\n/)
+              .map(line => line.trim())
+              .filter(line => line.startsWith('-') || line.startsWith('*') || line.startsWith('•'))
+              .map(line => line.replace(/^[-*•]\s*/, '').trim())
+              .filter(line => line.length > 0);
+            
+            // Remove bullet list from description if we found key changes
+            if (keyChanges.length > 0) {
+              description = description.replace(bulletListMatch[0], '').trim();
+            }
+          }
         }
         
         codeDiffs.push({

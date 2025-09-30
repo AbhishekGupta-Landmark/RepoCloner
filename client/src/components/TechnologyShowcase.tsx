@@ -769,22 +769,30 @@ export default function TechnologyShowcase({ repositoryName }: TechnologyShowcas
           
           {/* View Toggle */}
           <div className="flex items-center justify-center gap-2">
-            <span className="text-xs text-muted-foreground">View:</span>
-            <div className="flex border border-border rounded-md overflow-hidden">
+            <span className="text-xs font-medium text-foreground">View:</span>
+            <div className="flex border-2 border-primary/20 rounded-md overflow-hidden bg-background">
               <Button
-                variant={viewMode === 'simple' ? 'default' : 'ghost'}
+                variant={viewMode === 'simple' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setViewMode('simple')}
-                className="h-7 px-3 text-xs rounded-none border-0"
+                className={`h-7 px-3 text-xs rounded-none border-0 font-medium transition-all ${
+                  viewMode === 'simple' 
+                    ? 'bg-primary text-primary-foreground shadow-sm' 
+                    : 'bg-transparent text-foreground hover:bg-primary/10 hover:text-primary'
+                }`}
                 data-testid="view-toggle-simple"
               >
                 Simple
               </Button>
               <Button
-                variant={viewMode === 'details' ? 'default' : 'ghost'}
+                variant={viewMode === 'details' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setViewMode('details')}
-                className="h-7 px-3 text-xs rounded-none border-0"
+                className={`h-7 px-3 text-xs rounded-none border-0 font-medium transition-all ${
+                  viewMode === 'details' 
+                    ? 'bg-primary text-primary-foreground shadow-sm' 
+                    : 'bg-transparent text-foreground hover:bg-primary/10 hover:text-primary'
+                }`}
                 data-testid="view-toggle-details"
               >
                 Details
