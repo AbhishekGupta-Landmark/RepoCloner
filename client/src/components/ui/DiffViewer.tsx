@@ -244,11 +244,27 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
                         ))}
                       </div>
                     ) : (
-                      // Fallback simple diff view
+                      // Fallback simple diff view with syntax highlighting
                       <div className="font-mono text-sm">
-                        <pre className="p-4 whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100 font-medium">
-                          {diff.diff_content}
-                        </pre>
+                        {diff.diff_content.split(/\r?\n/).map((line, lineIndex) => {
+                          const isAddition = line.startsWith('+') && !line.startsWith('+++');
+                          const isDeletion = line.startsWith('-') && !line.startsWith('---');
+                          const isContext = line.startsWith(' ') || (!isAddition && !isDeletion && line.trim() !== '');
+                          
+                          return (
+                            <div
+                              key={lineIndex}
+                              className={cn(
+                                'px-4 py-1',
+                                isAddition && 'bg-green-50 dark:bg-green-950/20 text-green-900 dark:text-green-50',
+                                isDeletion && 'bg-red-50 dark:bg-red-950/20 text-red-900 dark:text-red-50',
+                                isContext && 'text-slate-800 dark:text-slate-100'
+                              )}
+                            >
+                              {line || ' '}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

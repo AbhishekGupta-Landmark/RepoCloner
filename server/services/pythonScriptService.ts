@@ -854,6 +854,70 @@ export class PythonScriptService {
       hunks.push(currentHunk);
     }
     
+    // If no hunks were created but there are diff lines, create a synthetic hunk
+    if (hunks.length === 0 && diffContent.trim()) {
+      const hasDiffLines = lines.some(line => 
+        (line.startsWith('+') && !line.startsWith('+++')) ||
+        (line.startsWith('-') && !line.startsWith('---'))
+      );
+      
+      if (hasDiffLines) {
+        // Create a single synthetic hunk containing all lines
+        const syntheticHunk: any = {
+          header: '@@ File changes @@',
+          old_start: 1,
+          old_count: 0,
+          new_start: 1,
+          new_count: 0,
+          lines: []
+        };
+        
+        let oldLine = 1;
+        let newLine = 1;
+        
+        for (const line of lines) {
+          if (line === '```' || line === '```diff') {
+            continue;
+          }
+          
+          if (line.startsWith('+') && !line.startsWith('+++')) {
+            syntheticHunk.lines.push({
+              type: 'addition',
+              content: line.substring(1),
+              old_line: null,
+              new_line: newLine++
+            });
+          } else if (line.startsWith('-') && !line.startsWith('---')) {
+            syntheticHunk.lines.push({
+              type: 'deletion',
+              content: line.substring(1),
+              old_line: oldLine++,
+              new_line: null
+            });
+          } else if (line.startsWith(' ')) {
+            syntheticHunk.lines.push({
+              type: 'context',
+              content: line.substring(1),
+              old_line: oldLine++,
+              new_line: newLine++
+            });
+          } else if (line.trim() !== '' && !line.startsWith('diff ') && !line.startsWith('index ')) {
+            // Treat other non-empty lines as context
+            syntheticHunk.lines.push({
+              type: 'context',
+              content: line,
+              old_line: oldLine++,
+              new_line: newLine++
+            });
+          }
+        }
+        
+        if (syntheticHunk.lines.length > 0) {
+          hunks.push(syntheticHunk);
+        }
+      }
+    }
+    
     return hunks;
   }
 
