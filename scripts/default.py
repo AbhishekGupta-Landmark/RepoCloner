@@ -369,8 +369,8 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
     diffs = state.get("code_diffs", [])
     
     structured_diffs = []
-    all_key_changes = []
-    all_notes = []
+    all_key_changes = set()  # Use set to avoid duplicates
+    all_notes = set()
     
     for diff in diffs:
         file_name = diff.get("file", "")
@@ -379,6 +379,24 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
             
         file_diff = diff.get("diff_content", "") or diff.get("diff", "")
         description = diff.get("description", "")
+        
+        # Extract key changes from the diff by analyzing what changed
+        if file_diff:
+            # Look for added lines that indicate key changes
+            lines = file_diff.split('\n')
+            for line in lines:
+                stripped = line.strip()
+                # Look for added lines (starting with +) that show key replacements
+                if stripped.startswith('+') and not stripped.startswith('+++'):
+                    # Extract meaningful changes
+                    if 'Azure.Messaging.ServiceBus' in stripped and 'using' in stripped:
+                        all_key_changes.add(f"Replaced Kafka client library with Azure.Messaging.ServiceBus in {file_name}")
+                    elif 'ServiceBusClient' in stripped:
+                        all_key_changes.add(f"Introduced ServiceBusClient for messaging in {file_name}")
+                    elif 'ServiceBusSender' in stripped:
+                        all_key_changes.add(f"Replaced Kafka Producer with ServiceBusSender in {file_name}")
+                    elif 'ServiceBusReceiver' in stripped:
+                        all_key_changes.add(f"Replaced Kafka Consumer with ServiceBusReceiver in {file_name}")
         
         structured_diffs.append({
             "path": file_name,
@@ -393,8 +411,8 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
             "repoUrl": state.get("repo_url", ""),
             "generatedAt": str(int(time.time() * 1000))
         },
-        "keyChanges": all_key_changes,
-        "notes": all_notes,
+        "keyChanges": list(all_key_changes),
+        "notes": list(all_notes),
         "diffs": structured_diffs,
         "inventory": inventory
     }
