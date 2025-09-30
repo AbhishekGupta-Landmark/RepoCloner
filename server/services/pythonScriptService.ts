@@ -706,37 +706,43 @@ export class PythonScriptService {
           }
         }
         
-        // 3. CRITICAL: Check for summary lines INSIDE the diff content (at the beginning, before actual diff syntax)
-        // These look like: "- Replaced Kafka..." "- Added message..." but appear before @@ or --- markers
-        if (keyChanges.length === 0 && diffContent) {
+        // 3. CRITICAL: Clean diff content by removing description lines before actual diff markers
+        // Find the first actual diff marker and keep only content from that point
+        if (diffContent) {
           const diffLines = diffContent.split(/\r?\n/);
-          const summaryLines: string[] = [];
-          let foundActualDiff = false;
+          let firstDiffLineIndex = -1;
           
-          for (const line of diffLines) {
-            const trimmed = line.trim();
-            
-            // Check if we've hit actual diff syntax
-            if (trimmed.startsWith('@@') || trimmed.startsWith('---') || trimmed.startsWith('+++') || trimmed.match(/^diff\s+/)) {
-              foundActualDiff = true;
+          // Find where the actual diff starts
+          for (let i = 0; i < diffLines.length; i++) {
+            const trimmed = diffLines[i].trim();
+            // Check for diff markers: ---, +++, @@, or diff --git
+            if (trimmed.startsWith('---') || trimmed.startsWith('+++') || 
+                trimmed.startsWith('@@') || trimmed.match(/^diff\s+--git/)) {
+              firstDiffLineIndex = i;
               break;
-            }
-            
-            // Collect lines that look like summary bullets (but not empty lines)
-            if (trimmed && (trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('•'))) {
-              // Check if it's a descriptive summary (contains words like "Replaced", "Added", "Used", "Implemented", "Updated", "Removed", "Changed", "Fixed")
-              if (/^[-*•]\s*(Replaced|Added|Used|Implemented|Updated|Removed|Changed|Fixed|Created|Modified|Introduced|Migrated|Converted)/i.test(trimmed)) {
-                summaryLines.push(trimmed);
-              }
             }
           }
           
-          if (summaryLines.length > 0) {
-            keyChanges = summaryLines.map(line => line.replace(/^[-*•]\s*/, '').trim());
+          // If we found a diff marker, extract any description lines before it as key changes
+          if (firstDiffLineIndex > 0) {
+            const descriptionLines = diffLines.slice(0, firstDiffLineIndex);
+            const extractedKeyChanges: string[] = [];
             
-            // Remove these summary lines from diff content
-            const summaryBlock = summaryLines.join('\n');
-            diffContent = diffContent.replace(new RegExp(summaryLines.map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\r\\n]+'), 'g'), '').trim();
+            for (const line of descriptionLines) {
+              const trimmed = line.trim();
+              // Look for bullet point lines or lines starting with action words
+              if (trimmed && (trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('•'))) {
+                extractedKeyChanges.push(trimmed.replace(/^[-*•]\s*/, '').trim());
+              }
+            }
+            
+            // Add to key changes if we found any
+            if (extractedKeyChanges.length > 0 && keyChanges.length === 0) {
+              keyChanges = extractedKeyChanges;
+            }
+            
+            // Clean the diff content - keep only from first diff marker onwards
+            diffContent = diffLines.slice(firstDiffLineIndex).join('\n').trim();
           }
         }
         
@@ -755,13 +761,14 @@ export class PythonScriptService {
         title,
         kafka_inventory: kafkaInventory,
         code_diffs: codeDiffs,
-        sections: {},
+        keyChanges: [],
         notes: [],
+        sections: [],
         stats: {
           total_files_with_kafka: kafkaInventory.length,
           total_files_with_diffs: codeDiffs.length,
           notes_count: 0,
-          sections_count: Object.keys({}).length
+          sections_count: 0
         }
       };
 
