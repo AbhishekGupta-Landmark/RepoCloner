@@ -569,9 +569,49 @@ export class PythonScriptService {
         };
       }
 
-      // Extract structured data from report
+      // Always read the markdown file
       const reportContent = await fs.promises.readFile(reportPath, 'utf8');
-      const structuredData = await this.extractStructuredData(reportContent);
+      let structuredData: MigrationReportData | null = null;
+      
+      // Try to extract embedded JSON from markdown (pure deserialization - no regex parsing)
+      const jsonMatch = reportContent.match(/<!--BEGIN:REPORT_JSON-->\s*([\s\S]*?)\s*<!--END:REPORT_JSON-->/);
+      
+      if (jsonMatch) {
+        try {
+          const jsonData = JSON.parse(jsonMatch[1]);
+          // Pure JSON deserialization
+          structuredData = {
+            title: 'Kafka to Azure Service Bus Migration Analysis',
+            kafka_inventory: jsonData.inventory || [],
+            code_diffs: (jsonData.diffs || []).map((diff: any) => ({
+              file: diff.path,
+              diff_content: diff.diff,
+              diffContent: diff.diff,
+              description: diff.description,
+              language: this.inferLanguageFromFile(diff.path),
+              key_changes: [],
+              hunks: [],
+              stats: {}
+            })),
+            keyChanges: jsonData.keyChanges || [],
+            notes: jsonData.notes || [],
+            sections: [],
+            stats: {
+              total_files_with_kafka: (jsonData.inventory || []).length,
+              total_files_with_diffs: (jsonData.diffs || []).length,
+              notes_count: (jsonData.notes || []).length,
+              sections_count: 0
+            }
+          };
+          broadcastLog('INFO', `✅ Using pure JSON deserialization from embedded data`);
+        } catch (parseError) {
+          broadcastLog('ERROR', `Failed to parse embedded JSON: ${parseError}`);
+          structuredData = await this.extractStructuredData(reportContent);
+        }
+      } else {
+        broadcastLog('WARN', `No embedded JSON found, falling back to markdown parsing`);
+        structuredData = await this.extractStructuredData(reportContent);
+      }
 
       return {
         success: true,
