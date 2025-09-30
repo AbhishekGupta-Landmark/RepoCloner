@@ -646,7 +646,7 @@ export class PythonScriptService {
           }
           
           // Exit Key Changes section when we hit a blank line or diff marker
-          if (insideKeyChangesSection && (line.trim() === '' || /^(diff --git|---|\\+\\+\\+|@@)/.test(line))) {
+          if (insideKeyChangesSection && (line.trim() === '' || /^(diff --git|---|\+\+\+|@@)/.test(line))) {
             insideKeyChangesSection = false;
           }
           
