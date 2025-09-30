@@ -410,23 +410,59 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
         file_diff = diff.get("diff_content", "") or diff.get("diff", "")
         description = diff.get("description", "")
         
-        # Extract key changes from the diff by analyzing what changed
+        # Extract key changes from BOTH description and diff
+        key_changes_for_file = []
+        
+        # Method 1: Extract from description (more reliable)
+        if description:
+            desc_lower = description.lower()
+            if 'replace' in desc_lower or 'replac' in desc_lower:
+                if 'kafka' in desc_lower and ('azure' in desc_lower or 'service bus' in desc_lower):
+                    key_changes_for_file.append(f"Migrated from Kafka to Azure Service Bus in {file_name}")
+            if 'consumer' in desc_lower and 'servicebus' in desc_lower.replace(' ', ''):
+                key_changes_for_file.append(f"Replaced Kafka Consumer with Azure Service Bus receiver in {file_name}")
+            if 'producer' in desc_lower and 'servicebus' in desc_lower.replace(' ', ''):
+                key_changes_for_file.append(f"Replaced Kafka Producer with Azure Service Bus sender in {file_name}")
+        
+        # Method 2: Analyze diff for specific changes
         if file_diff:
-            # Look for added lines that indicate key changes
+            has_azure_import = False
+            has_kafka_removal = False
+            has_servicebus_client = False
+            has_servicebus_sender = False
+            has_servicebus_receiver = False
+            
             lines = file_diff.split('\n')
             for line in lines:
                 stripped = line.strip()
-                # Look for added lines (starting with +) that show key replacements
+                # Check added lines
                 if stripped.startswith('+') and not stripped.startswith('+++'):
-                    # Extract meaningful changes
-                    if 'Azure.Messaging.ServiceBus' in stripped and 'using' in stripped:
-                        all_key_changes.add(f"Replaced Kafka client library with Azure.Messaging.ServiceBus in {file_name}")
-                    elif 'ServiceBusClient' in stripped:
-                        all_key_changes.add(f"Introduced ServiceBusClient for messaging in {file_name}")
-                    elif 'ServiceBusSender' in stripped:
-                        all_key_changes.add(f"Replaced Kafka Producer with ServiceBusSender in {file_name}")
-                    elif 'ServiceBusReceiver' in stripped:
-                        all_key_changes.add(f"Replaced Kafka Consumer with ServiceBusReceiver in {file_name}")
+                    if 'Azure.Messaging.ServiceBus' in stripped:
+                        has_azure_import = True
+                    if 'ServiceBusClient' in stripped:
+                        has_servicebus_client = True
+                    if 'ServiceBusSender' in stripped:
+                        has_servicebus_sender = True
+                    if 'ServiceBusReceiver' in stripped or 'ServiceBusProcessor' in stripped:
+                        has_servicebus_receiver = True
+                # Check removed lines
+                elif stripped.startswith('-') and not stripped.startswith('---'):
+                    if 'Confluent.Kafka' in stripped or 'kafka' in stripped.lower():
+                        has_kafka_removal = True
+            
+            # Generate key changes based on what we found
+            if has_azure_import and has_kafka_removal:
+                key_changes_for_file.append(f"Replaced Kafka library with Azure.Messaging.ServiceBus in {file_name}")
+            if has_servicebus_sender:
+                key_changes_for_file.append(f"Introduced ServiceBusSender for message publishing in {file_name}")
+            if has_servicebus_receiver:
+                key_changes_for_file.append(f"Introduced ServiceBus receiver/processor for message consumption in {file_name}")
+            if has_servicebus_client:
+                key_changes_for_file.append(f"Added ServiceBusClient for connection management in {file_name}")
+        
+        # Add unique key changes to the global set
+        for change in key_changes_for_file:
+            all_key_changes.add(change)
         
         structured_diffs.append({
             "path": file_name,
