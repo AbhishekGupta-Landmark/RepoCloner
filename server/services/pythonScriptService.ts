@@ -666,17 +666,32 @@ export class PythonScriptService {
         let sectionContent = fileMatch[2].trim();
         
         // Extract diff block (handle both Unix \n and Windows \r\n line endings)
-        const diffMatch = /```diff[\r\n]+([\s\S]*?)[\r\n]+```/.exec(sectionContent);
-        let diffContent = diffMatch ? diffMatch[1] : '';
-        
-        // Get description (everything before the diff block)
-        let description = diffMatch ? sectionContent.substring(0, diffMatch.index).trim() : sectionContent;
-        
-        // Get text after the diff block (where AI often puts "Key changes:" summary)
+        // AI sometimes duplicates ```diff markers, so find the LAST one to get actual diff
+        const allDiffMarkers = Array.from(sectionContent.matchAll(/```diff/g));
+        let diffContent = '';
+        let description = sectionContent;
         let afterDiffText = '';
-        if (diffMatch) {
-          const afterDiffIndex = diffMatch.index + diffMatch[0].length;
-          afterDiffText = sectionContent.substring(afterDiffIndex).trim();
+        let actualDiffEndIndex = 0;
+        
+        if (allDiffMarkers.length > 0) {
+          // Use the LAST ```diff marker as the start of actual diff content
+          const lastMarker = allDiffMarkers[allDiffMarkers.length - 1];
+          const actualDiffStartIndex = (lastMarker.index || 0) + lastMarker[0].length;
+          
+          // Find the FIRST ``` after this point (this closes the actual diff)
+          const afterLastDiff = sectionContent.substring(actualDiffStartIndex);
+          const closingMatch = /[\r\n]+([\s\S]*?)[\r\n]+```/.exec(afterLastDiff);
+          
+          if (closingMatch) {
+            diffContent = closingMatch[1];
+            actualDiffEndIndex = actualDiffStartIndex + (closingMatch.index || 0) + closingMatch[0].length;
+            
+            // Get description (everything before the LAST ```diff marker)
+            description = sectionContent.substring(0, lastMarker.index || 0).trim();
+            
+            // Get text after the FIRST closing ``` (where AI often puts "Key changes:" summary)
+            afterDiffText = sectionContent.substring(actualDiffEndIndex).trim();
+          }
         }
         
         // Extract key changes from multiple locations
