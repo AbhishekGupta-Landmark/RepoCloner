@@ -571,7 +571,7 @@ export class PythonScriptService {
 
       // Extract structured data from report
       const reportContent = await fs.promises.readFile(reportPath, 'utf8');
-      const structuredData = await this.extractStructuredData(reportContent);
+      const structuredData = await this.extractStructuredData(reportContent, reportPath);
 
       return {
         success: true,
@@ -621,11 +621,124 @@ export class PythonScriptService {
   }
 
   /**
-   * Extract structured data from migration report content
+   * Convert JSON report data to our internal MigrationReportData format
    */
-  private async extractStructuredData(reportContent: string): Promise<MigrationReportData | null> {
+  private convertJsonToMigrationData(jsonData: any): MigrationReportData {
+    // Extract code diffs with key changes and notes from JSON
+    const codeDiffs = jsonData.diffs.map((diff: any) => {
+      // Clean diff content to remove Key Changes/Notes lines that AI may have included
+      let cleanedDiff = diff.diff;
+      if (cleanedDiff) {
+        const lines = cleanedDiff.split('\n');
+        const cleanedLines = [];
+        let insideKeyChangesSection = false;
+        
+        for (const line of lines) {
+          // Skip Key Changes section headers and bullets
+          if (/^#+?\s*Key\s+[Cc]hanges?:?\s*$/i.test(line.trim())) {
+            insideKeyChangesSection = true;
+            continue;
+          }
+          
+          // Skip bullet points in Key Changes section
+          if (insideKeyChangesSection && /^[-*]\s+/.test(line.trim())) {
+            continue;
+          }
+          
+          // Exit Key Changes section when we hit a blank line or diff marker
+          if (insideKeyChangesSection && (line.trim() === '' || /^(diff --git|---|\\+\\+\\+|@@)/.test(line))) {
+            insideKeyChangesSection = false;
+          }
+          
+          // Skip Note: lines
+          if (/^Note:\s*/i.test(line.trim())) {
+            continue;
+          }
+          
+          cleanedLines.push(line);
+        }
+        
+        cleanedDiff = cleanedLines.join('\n').trim();
+      }
+      
+      return {
+        file: diff.path,
+        diff_content: cleanedDiff,
+        description: diff.description,
+        diffContent: cleanedDiff,
+        language: 'diff',
+        key_changes: []  // Key changes are now in the top-level keyChanges array
+      };
+    });
+    
+    const sections = codeDiffs.map((diff: any, idx: number) => ({
+      id: `section-${idx + 1}`,
+      title: diff.file,
+      description: diff.description,
+      diffBlock: diff.diff_content,
+      keyChanges: [], // Will be populated from global keyChanges array
+      notes: [], // Will be populated from global notes array
+      evidence: []
+    }));
+    
+    return {
+      title: 'Kafka → Azure Service Bus Migration Analysis',
+      kafka_inventory: jsonData.inventory.map((item: any) => ({
+        file: item.file,
+        apis_used: item.kafka_apis?.join(', ') || '',
+        summary: item.summary || ''
+      })),
+      code_diffs: codeDiffs,
+      sections: sections,
+      keyChanges: jsonData.keyChanges || [],
+      notes: jsonData.notes || [],
+      stats: {
+        total_files_with_kafka: jsonData.inventory.length,
+        total_files_with_diffs: jsonData.diffs.length,
+        notes_count: (jsonData.notes || []).length,
+        sections_count: sections.length
+      }
+    };
+  }
+
+  /**
+   * Extract structured data from migration report content
+   * @param reportPath Optional path to the report file for standalone JSON lookup
+   */
+  private async extractStructuredData(reportContent: string, reportPath?: string): Promise<MigrationReportData | null> {
     try {
-      // Parse migration report sections using regex patterns
+      // First, try to extract JSON data embedded in markdown (<!--BEGIN:REPORT_JSON-->...<!--END:REPORT_JSON-->)
+      const jsonMarkerMatch = reportContent.match(/<!--BEGIN:REPORT_JSON-->\s*([\s\S]*?)\s*<!--END:REPORT_JSON-->/);
+      
+      if (jsonMarkerMatch) {
+        try {
+          const jsonData = JSON.parse(jsonMarkerMatch[1]);
+          broadcastLog('INFO', '✅ Found and parsed embedded JSON data from report');
+          
+          // Convert JSON format to our internal MigrationReportData format
+          return this.convertJsonToMigrationData(jsonData);
+        } catch (jsonError) {
+          broadcastLog('WARN', `⚠️  Failed to parse embedded JSON, falling back to standalone JSON file: ${jsonError}`);
+        }
+      }
+      
+      // Second, try to read standalone JSON file (migration-report-*.json)
+      if (reportPath) {
+        const jsonPath = reportPath.replace(/\.md$/, '.json');
+        if (await this.fileExists(jsonPath)) {
+          try {
+            const jsonContent = await fs.promises.readFile(jsonPath, 'utf-8');
+            const jsonData = JSON.parse(jsonContent);
+            broadcastLog('INFO', `✅ Found and parsed standalone JSON file: ${jsonPath}`);
+            
+            return this.convertJsonToMigrationData(jsonData);
+          } catch (jsonError) {
+            broadcastLog('WARN', `⚠️  Failed to parse standalone JSON file, falling back to markdown parsing: ${jsonError}`);
+          }
+        }
+      }
+      
+      // Fallback: Parse migration report sections using regex patterns
       const titleMatch = reportContent.match(/^#\s+(.+)$/m);
       const title = titleMatch ? titleMatch[1] : 'Kafka to Azure Service Bus Migration Analysis';
 
@@ -814,6 +927,7 @@ export class PythonScriptService {
         title,
         kafka_inventory: kafkaInventory,
         code_diffs: codeDiffs,
+        keyChanges: [],
         sections: {},
         notes: [],
         stats: {
@@ -1070,7 +1184,7 @@ export class PythonScriptService {
       
       try {
         const fileContent = await fs.promises.readFile(migrationReportFile.path, 'utf-8');
-        const parsedMigrationData = await this.extractStructuredData(fileContent);
+        const parsedMigrationData = await this.extractStructuredData(fileContent, migrationReportFile.path);
         
         if (!parsedMigrationData) {
           throw new Error('Failed to extract structured data from migration report');
