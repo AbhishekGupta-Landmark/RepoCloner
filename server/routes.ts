@@ -1375,24 +1375,23 @@ export async function registerRoutes(app: Application): Promise<Server> {
         }
 
         // Create Python script report if migration-report.md was generated
-        let reportId = undefined;
+        let reportId: string | undefined = undefined;
         if (pythonResult.generatedFiles && pythonResult.generatedFiles.length > 0) {
           console.log("💾 Creating Python script report...");
           
           try {
-            await pythonScriptService.createPythonScriptReport(
+            reportId = await pythonScriptService.createPythonScriptReport(
               repository.id,
               repository.url,
               repository.localPath,
               pythonResult,
-              path.join(__dirname, '../scripts/default.py')
+              path.join(__dirname, '../scripts/default.py'),
+              storage
             );
-            // Note: createPythonScriptReport doesn't return a report ID
-            // The report is created and stored internally
+            console.log(`📊 Python script report created with ID: ${reportId}`);
           } catch (reportError) {
             console.warn("Failed to create Python script report:", reportError);
           }
-          console.log("📊 Python script report created - will appear in Reports tab");
         }
 
         // Update repository with analysis timestamp and report ID
@@ -1752,127 +1751,13 @@ export async function registerRoutes(app: Application): Promise<Server> {
         }
       }
       
-      // Fallback: Get all analysis reports for this repository
-      const reports = await storage.getAnalysisReportsByRepository(repositoryId);
-      
-      if (reports.length === 0) {
-        res.json({ structuredData: null, status: 'no_analysis' });
-        return;
-      }
-      
-      // Find the most recent successful report with structured data
-      const successfulReport = reports
-        .filter(report => report.results && (report.results as any).pythonScriptOutput?.generatedFiles && (report.results as any).pythonScriptOutput.parsedMigrationData)
-        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
-      
-      // Find the most recent report with pythonScriptOutput (successful or failed)
-      const latestReportWithPythonOutput = reports
-        .filter(report => report.results && (report.results as any).pythonScriptOutput)
-        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
-        
-      // Find the most recent report overall  
-      const latestReport = reports
-        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0];
-      
-      // If we have a successful report, return its data
-      if (successfulReport) {
-        const pythonOutput = (successfulReport.results as any).pythonScriptOutput;
-        const markdownFile = pythonOutput.generatedFiles.find((file: any) => file.name.endsWith('.md'));
-        
-        if (markdownFile) {
-          // Use same path resolution as download route
-          const filePath = await resolveReportFilePath(repositoryId, markdownFile.name);
-          if (filePath) {
-            // Get structured data from Python script output (already parsed during analysis)
-            const structuredData = pythonOutput.parsedMigrationData;
-            
-            // CRITICAL FIX: Don't return success if no structured data was parsed
-            if (!structuredData) {
-              broadcastLog('WARN', `Analysis completed but no structured data was parsed for repository ${repositoryId}`);
-              
-              res.json({ 
-                structuredData: null,
-                status: 'failed',
-                error: 'Analysis completed but failed to parse migration data from generated report',
-                reportId: successfulReport.id,
-                createdAt: successfulReport.createdAt
-              });
-              return;
-            }
-            
-            broadcastLog('INFO', `Serving structured migration data for repository ${repositoryId}: Data found`);
-            
-            res.json({ 
-              structuredData,
-              reportId: successfulReport.id,
-              createdAt: successfulReport.createdAt,
-              status: 'success'
-            });
-            return;
-          }
-        }
-        
-        // If we reach here, successful report exists but files are missing - this is a failure
-        broadcastLog('WARN', `Report exists but files are missing for repository ${repositoryId}`);
-        res.json({ 
-          structuredData: null,
-          status: 'failed',
-          error: 'Report files are missing or inaccessible',
-          reportId: successfulReport.id,
-          createdAt: successfulReport.createdAt
-        });
-        return;
-      }
-      
-      // If no successful report, check if we have failed attempts
-      if (!successfulReport) {
-        // Check the latest report with Python output first (most specific failure)
-        if (latestReportWithPythonOutput) {
-          const pythonOutput = (latestReportWithPythonOutput.results as any).pythonScriptOutput;
-          let errorMessage = 'Analysis failed';
-          
-          // Use Python script error if available
-          if (pythonOutput.error) {
-            errorMessage = `Python script execution failed: ${pythonOutput.error}`;
-          }
-          // Check for AI/analysis failure (pythonScriptOutput exists but no parsedMigrationData)
-          else if (!pythonOutput.parsedMigrationData) {
-            errorMessage = 'AI analysis failed to generate migration data';
-          }
-          // Check for file generation failure (no generated files)
-          else if (!pythonOutput.generatedFiles?.length) {
-            errorMessage = 'Failed to generate migration report files';
-          }
-          
-          broadcastLog('WARN', `Analysis failure detected for repository ${repositoryId}: ${errorMessage}`);
-          
-          res.json({ 
-            structuredData: null,
-            status: 'failed',
-            error: errorMessage,
-            reportId: latestReportWithPythonOutput.id,
-            createdAt: latestReportWithPythonOutput.createdAt
-          });
-          return;
-        }
-        
-        // Check if we have any reports at all but no Python output (generic failure)
-        if (latestReport) {
-          broadcastLog('WARN', `Analysis attempt without Python output for repository ${repositoryId}`);
-          
-          res.json({ 
-            structuredData: null,
-            status: 'failed',
-            error: 'Analysis failed - Python script did not execute properly',
-            reportId: latestReport.id,
-            createdAt: latestReport.createdAt
-          });
-          return;
-        }
-      }
-      
-      // No reports at all
-      res.json({ structuredData: null, status: 'no_analysis' });
+      // NO FALLBACK - If repository.lastReportId doesn't exist or couldn't be fetched,
+      // return no_analysis status to show error screen
+      res.json({ 
+        structuredData: null, 
+        status: 'no_analysis',
+        error: 'No analysis report found for this repository'
+      });
       
     } catch (error) {
       console.error('Error fetching structured migration data:', error);
