@@ -667,19 +667,18 @@ export class PythonScriptService {
         
         // Extract diff block (handle both Unix \n and Windows \r\n line endings)
         const diffMatch = /```diff[\r\n]+([\s\S]*?)[\r\n]+```/.exec(sectionContent);
-        const diffContent = diffMatch ? diffMatch[1] : '';
+        let diffContent = diffMatch ? diffMatch[1] : '';
         
         // Get description (everything before the diff block)
         let description = diffMatch ? sectionContent.substring(0, diffMatch.index).trim() : sectionContent;
         
-        // Extract bullet lists as "Key Changes" (handle both explicit headers and implicit bullet lists)
+        // Extract key changes - check multiple locations
         let keyChanges: string[] = [];
         
-        // First try explicit "Key Changes:" header
+        // 1. First check for explicit "Key Changes:" header in description
         const explicitKeyChangesMatch = /(?:^|[\r\n])\s*(?:\*\*|##?)?\s*Key\s+Changes\s*:?\s*[\r\n]+((?:[\s]*[-*•]\s+.+[\r\n]+)+)/i.exec(description);
         
         if (explicitKeyChangesMatch) {
-          // Parse bullet points from explicit section
           keyChanges = explicitKeyChangesMatch[1]
             .split(/\r?\n/)
             .map(line => line.trim())
@@ -687,14 +686,13 @@ export class PythonScriptService {
             .map(line => line.replace(/^[-*•]\s*/, '').trim())
             .filter(line => line.length > 0);
           
-          // Remove explicit key changes section from description
           description = description.replace(explicitKeyChangesMatch[0], '').trim();
-        } else {
-          // If no explicit header, extract ALL bullet lists from description as key changes
+        } 
+        // 2. Check for bullet lists in description
+        else {
           const bulletListMatch = description.match(/(?:^|[\r\n])((?:[\s]*[-*•]\s+.+[\r\n]+)+)/);
           
           if (bulletListMatch) {
-            // Parse bullet points
             keyChanges = bulletListMatch[1]
               .split(/\r?\n/)
               .map(line => line.trim())
@@ -702,10 +700,43 @@ export class PythonScriptService {
               .map(line => line.replace(/^[-*•]\s*/, '').trim())
               .filter(line => line.length > 0);
             
-            // Remove bullet list from description if we found key changes
             if (keyChanges.length > 0) {
               description = description.replace(bulletListMatch[0], '').trim();
             }
+          }
+        }
+        
+        // 3. CRITICAL: Check for summary lines INSIDE the diff content (at the beginning, before actual diff syntax)
+        // These look like: "- Replaced Kafka..." "- Added message..." but appear before @@ or --- markers
+        if (keyChanges.length === 0 && diffContent) {
+          const diffLines = diffContent.split(/\r?\n/);
+          const summaryLines: string[] = [];
+          let foundActualDiff = false;
+          
+          for (const line of diffLines) {
+            const trimmed = line.trim();
+            
+            // Check if we've hit actual diff syntax
+            if (trimmed.startsWith('@@') || trimmed.startsWith('---') || trimmed.startsWith('+++') || trimmed.match(/^diff\s+/)) {
+              foundActualDiff = true;
+              break;
+            }
+            
+            // Collect lines that look like summary bullets (but not empty lines)
+            if (trimmed && (trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('•'))) {
+              // Check if it's a descriptive summary (contains words like "Replaced", "Added", "Used", "Implemented", "Updated", "Removed", "Changed", "Fixed")
+              if (/^[-*•]\s*(Replaced|Added|Used|Implemented|Updated|Removed|Changed|Fixed|Created|Modified|Introduced|Migrated|Converted)/i.test(trimmed)) {
+                summaryLines.push(trimmed);
+              }
+            }
+          }
+          
+          if (summaryLines.length > 0) {
+            keyChanges = summaryLines.map(line => line.replace(/^[-*•]\s*/, '').trim());
+            
+            // Remove these summary lines from diff content
+            const summaryBlock = summaryLines.join('\n');
+            diffContent = diffContent.replace(new RegExp(summaryLines.map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\r\\n]+'), 'g'), '').trim();
           }
         }
         
