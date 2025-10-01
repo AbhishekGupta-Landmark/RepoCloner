@@ -10,6 +10,7 @@ import { useAnalysis } from "@/hooks/useAnalysis";
 import { useAppContext } from "../context/AppContext";
 import { Brain, CheckCircle, Shield, Wrench, AlertTriangle, Lightbulb, FileText, Code, ArrowRight, GitCompare } from "lucide-react";
 import { MigrationReportViewer } from "./MigrationReportViewer";
+import { useIsMutating } from "@tanstack/react-query";
 
 export default function AnalysisPanel() {
   const [analysisType, setAnalysisType] = useState("migration");
@@ -20,6 +21,10 @@ export default function AnalysisPanel() {
   };
   
   const { analyzeCode, analysisResult, isLoading } = useAnalysis();
+  
+  // Track global analysis mutations (works across all components)
+  const isMutating = useIsMutating({ mutationKey: ['analysis'] });
+  const isAnalyzing = isLoading || isMutating > 0;
 
   const handleAnalysis = async () => {
     if (!currentRepository?.id) {
@@ -49,16 +54,16 @@ export default function AnalysisPanel() {
     <div className="h-full flex flex-col">
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">AI Code Analysis</h2>
+          <h2 className="text-lg font-semibold">OpenAI Code Analysis</h2>
           <Button 
             onClick={handleAnalysis}
-            disabled={isLoading || !currentRepository || !isCodeAnalysisEnabled}
+            disabled={isAnalyzing || !currentRepository || !isCodeAnalysisEnabled}
             data-testid="button-analyze-code"
             variant="default"
             className="hover-lift transition-smooth group relative overflow-hidden text-white font-medium"
           >
             <AnimatePresence mode="wait">
-              {isLoading ? (
+              {isAnalyzing ? (
                 <motion.div
                   key="analyzing"
                   className="flex items-center gap-2"
@@ -99,7 +104,7 @@ export default function AnalysisPanel() {
             </AnimatePresence>
             
             {/* Pulse effect when analyzing */}
-            {isLoading && (
+            {isAnalyzing && (
               <motion.div
                 className="absolute inset-0 bg-primary/20 rounded"
                 animate={{ opacity: [0, 0.5, 0] }}
