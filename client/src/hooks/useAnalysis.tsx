@@ -13,8 +13,11 @@ export function useAnalysis() {
 
   const analysisMutation = useMutation({
     mutationKey: ['analysis'],
-    mutationFn: async (repositoryId: string) => {
-      const response = await apiRequest('POST', '/api/analysis/run', { repositoryId });
+    mutationFn: async ({ repositoryId, analysisTypeId }: { repositoryId: string; analysisTypeId?: string }) => {
+      const response = await apiRequest('POST', '/api/analysis/run', { 
+        repositoryId,
+        analysisTypeId 
+      });
       const data = await response.json();
       
       // Check if the response indicates success
@@ -24,7 +27,8 @@ export function useAnalysis() {
       
       return data;
     },
-    onSuccess: async (data, repositoryId: string) => {
+    onSuccess: async (data, variables: { repositoryId: string; analysisTypeId?: string }) => {
+      const { repositoryId } = variables;
       // Store the full Python result for structured data access
       setAnalysisResult(data.pythonResult);
       
@@ -52,7 +56,8 @@ export function useAnalysis() {
         description: data.message || "Migration analysis completed successfully"
       });
     },
-    onError: async (error: any, repositoryId: string) => {
+    onError: async (error: any, variables: { repositoryId: string; analysisTypeId?: string }) => {
+      const { repositoryId } = variables;
       // Immediate cache update for failed analysis
       queryClient.setQueryData(['structured-report', repositoryId], {
         status: 'failed',
@@ -108,9 +113,9 @@ export function useAnalysis() {
     enabled: false // Only fetch when we have a repository
   });
 
-  const analyzeCode = async (repositoryId: string): Promise<boolean> => {
+  const analyzeCode = async (repositoryId: string, analysisTypeId?: string): Promise<boolean> => {
     try {
-      await analysisMutation.mutateAsync(repositoryId);
+      await analysisMutation.mutateAsync({ repositoryId, analysisTypeId });
       // CRITICAL FIX: Always invalidate cache after successful analysis
       queryClient.invalidateQueries({ queryKey: ['structured-report', repositoryId] });
       queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });

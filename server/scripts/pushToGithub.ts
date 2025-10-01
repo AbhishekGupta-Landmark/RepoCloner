@@ -44,18 +44,24 @@ class GitHubPusher {
     const { execSync } = await import('child_process');
     
     try {
-      // Get all files changed in recent commits (last 10 commits to be safe)
-      const output = execSync('git diff --name-only HEAD~10 HEAD', { 
+      // Get all files changed in recent commits AND working directory
+      const committedFiles = execSync('git diff --name-only HEAD~10 HEAD', { 
         encoding: 'utf-8',
         cwd: '/home/runner/workspace'
       });
       
-      const files = output
-        .trim()
-        .split('\n')
-        .filter(f => f.length > 0);
+      const uncommittedFiles = execSync('git diff --name-only', { 
+        encoding: 'utf-8',
+        cwd: '/home/runner/workspace'
+      });
       
-      console.log(`📝 Found files from last 10 commits:`, files);
+      const allFiles = new Set([
+        ...committedFiles.trim().split('\n').filter(f => f.length > 0),
+        ...uncommittedFiles.trim().split('\n').filter(f => f.length > 0)
+      ]);
+      
+      const files = Array.from(allFiles);
+      console.log(`📝 Found files (committed + uncommitted):`, files);
       return files;
     } catch (error) {
       console.error('Failed to get changed files from git:', error);

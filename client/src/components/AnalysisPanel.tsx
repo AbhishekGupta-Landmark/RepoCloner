@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -10,14 +10,36 @@ import { useAnalysis } from "@/hooks/useAnalysis";
 import { useAppContext } from "../context/AppContext";
 import { Brain, CheckCircle, Shield, Wrench, AlertTriangle, Lightbulb, FileText, Code, ArrowRight, GitCompare } from "lucide-react";
 import { MigrationReportViewer } from "./MigrationReportViewer";
-import { useIsMutating } from "@tanstack/react-query";
+import { useIsMutating, useQuery } from "@tanstack/react-query";
+
+interface AnalysisType {
+  id: string;
+  label: string;
+  scriptPath: string;
+}
 
 export default function AnalysisPanel() {
+  const [selectedAnalysisTypeId, setSelectedAnalysisTypeId] = useState<string>("");
   const [analysisType, setAnalysisType] = useState("migration");
   const { currentRepository, isCodeAnalysisEnabled } = useAppContext();
   
-  const handleAnalysisTypeChange = (type: string) => {
-    setAnalysisType(type);
+  // Load analysis types from API
+  const { data: analysisTypesData, isLoading: isLoadingTypes } = useQuery<{ types: AnalysisType[] }>({
+    queryKey: ['/api/analysis/types'],
+  });
+  
+  const analysisTypes = analysisTypesData?.types || [];
+  
+  // Set default analysis type when types are loaded
+  useEffect(() => {
+    if (analysisTypes.length > 0 && !selectedAnalysisTypeId) {
+      setSelectedAnalysisTypeId(analysisTypes[0].id);
+    }
+  }, [analysisTypes, selectedAnalysisTypeId]);
+  
+  const handleAnalysisTypeChange = (typeId: string) => {
+    setSelectedAnalysisTypeId(typeId);
+    setAnalysisType("migration"); // Keep for compatibility
   };
   
   const { analyzeCode, analysisResult, isLoading } = useAnalysis();
@@ -31,7 +53,7 @@ export default function AnalysisPanel() {
       return;
     }
     
-    await analyzeCode(currentRepository.id);
+    await analyzeCode(currentRepository.id, selectedAnalysisTypeId);
   };
 
   const getSeverityColor = (severity: string) => {
@@ -117,9 +139,22 @@ export default function AnalysisPanel() {
         <div className="flex gap-4">
           <div className="flex-1">
             <label className="block text-sm font-medium mb-2">Analysis Type</label>
-            <div className="px-3 py-2 bg-muted/50 rounded-md border text-sm">
-              Migration Analysis
-            </div>
+            <Select 
+              value={selectedAnalysisTypeId} 
+              onValueChange={handleAnalysisTypeChange}
+              disabled={isLoadingTypes || analysisTypes.length === 0}
+            >
+              <SelectTrigger data-testid="select-analysis-type">
+                <SelectValue placeholder={isLoadingTypes ? "Loading..." : "Select analysis type"} />
+              </SelectTrigger>
+              <SelectContent>
+                {analysisTypes.map((type) => (
+                  <SelectItem key={type.id} value={type.id} data-testid={`option-analysis-${type.id}`}>
+                    {type.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>
