@@ -10,6 +10,14 @@ An interactive web-based application that allows users to clone Git repositories
 - C#-compatible backend architecture with extensible provider pattern
 
 ## Recent Changes
+- 2025-09-30: **KEY CHANGES JSON DESERIALIZATION** - Completed clean implementation of Key Changes display functionality
+  - **Reverted to commit 1b2aa1ac**: Started with clean state to avoid regression issues
+  - **Python Script Updates**: Enhanced AI response parsing to extract key_changes from bullet points without modifying prompt
+  - **Backend JSON Deserialization**: Replaced regex-based text parsing with clean JSON deserialization from embedded JSON block
+  - **Type System Consolidation**: Fixed duplicate interfaces and aligned snake_case (backend/JSON) with TypeScript types
+  - **UI Key Changes Section**: Updated MigrationReportViewer to aggregate and display key_changes from report and diffs in yellow collapsible section
+  - **Data Flow**: Clean end-to-end flow: Python AI response → JSON → Backend deserialization → Frontend display
+  - **No Regex**: Completely removed fragile regex-based key changes extraction and diff cleaning logic
 - 2025-09-23: **UI/UX OPTIMIZATION & TESTING MILESTONE** - Completed grid layout fixes and comprehensive test updates
   - **Equal Height Grid Layout**: Implemented uniform card heights across all view modes (Simple & Details) with scrollable content areas
   - **Responsive Grid System**: Unified responsive layout with grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5

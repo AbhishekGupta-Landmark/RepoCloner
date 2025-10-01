@@ -1,5 +1,5 @@
-# ANALYSIS_ID: kafka-to-servicebus
-# ANALYSIS_LABEL: Kafka → Azure Service Bus
+# ANALYSIS_ID: quick-migration
+# ANALYSIS_LABEL: Quick Migration Analysis
 import os
 import re
 import json

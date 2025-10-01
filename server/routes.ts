@@ -148,6 +148,7 @@ import { openaiService } from "./services/openaiService";
 import { ReportBuilder, type ExportFormat } from "./services/reportBuilder";
 import { pythonScriptService } from "./services/pythonScriptService";
 import { enhancedTechnologyDetectionService } from "./services/enhancedTechnologyDetection";
+import { analysisRegistry } from "./services/analysisRegistry";
 import { insertRepositorySchema, insertAnalysisReportSchema, insertAISettingsSchema, AuthCredentials, AnalysisRequest } from "@shared/schema";
 import { z } from "zod";
 import { randomUUID } from "crypto";
@@ -1325,12 +1326,14 @@ export async function registerRoutes(app: Application): Promise<Server> {
           }
         }
         
-        // Execute Python script
+        // Execute Python script with selected analysis type
+        const analysisTypeId = req.body.analysisTypeId; // Get from request body
         const pythonResult = await pythonScriptService.executePostCloneScript(
           repository.localPath,
           repository.url,
           repository.id,
-          aiSettings
+          aiSettings,
+          analysisTypeId
         );
 
         // CRITICAL FIX: Check if Python script actually succeeded
@@ -1509,6 +1512,18 @@ export async function registerRoutes(app: Application): Promise<Server> {
   });
 
   // Analysis routes
+  // Get available analysis types
+  app.get("/api/analysis/types", async (req, res) => {
+    try {
+      const types = await analysisRegistry.getAllTypes();
+      res.json({ types });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to retrieve analysis types";
+      broadcastLog('ERROR', `Failed to retrieve analysis types: ${errorMessage}`);
+      res.status(500).json({ error: errorMessage });
+    }
+  });
+
   app.post("/api/analysis/analyze", async (req, res) => {
     try {
       const analysisRequest = req.body as AnalysisRequest;

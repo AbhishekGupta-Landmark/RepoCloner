@@ -160,12 +160,34 @@ export class PythonScriptService {
   /**
    * Execute Python script after repository cloning
    */
-  async executePostCloneScript(repositoryPath: string, repositoryUrl: string, repositoryId?: string, aiSettings?: any): Promise<PythonExecutionResult> {
+  async executePostCloneScript(repositoryPath: string, repositoryUrl: string, repositoryId?: string, aiSettings?: any, analysisTypeId?: string): Promise<PythonExecutionResult> {
     broadcastLog('INFO', `🔄 Starting Python script execution for migration analysis...`);
     broadcastLog('INFO', `Executing post-clone Python script for repository: ${repositoryUrl}`);
     
-    // First try to use the default.py script from scripts folder
-    const defaultScriptPath = path.join(process.cwd(), 'scripts', 'default.py');
+    // Resolve script path based on analysis type
+    const { analysisRegistry } = await import('./analysisRegistry');
+    let scriptPath: string;
+    
+    if (analysisTypeId) {
+      // Use specified analysis type
+      const analysisType = await analysisRegistry.getTypeById(analysisTypeId);
+      if (!analysisType) {
+        broadcastLog('ERROR', `Analysis type not found: ${analysisTypeId}`);
+        return {
+          success: false,
+          error: `Analysis type '${analysisTypeId}' not found. Please select a valid analysis type.`,
+          exitCode: -1
+        };
+      }
+      scriptPath = analysisType.scriptPath;
+      broadcastLog('INFO', `Using analysis type: ${analysisType.label} (${analysisType.id})`);
+    } else {
+      // Default to default.py for backward compatibility
+      scriptPath = path.join(process.cwd(), 'scripts', 'default.py');
+      broadcastLog('INFO', 'No analysis type specified, using default analysis');
+    }
+    
+    const defaultScriptPath = scriptPath;
     
     if (await this.fileExists(defaultScriptPath)) {
       broadcastLog('INFO', `Using Python script from scripts folder: ${defaultScriptPath}`);
@@ -587,16 +609,23 @@ export class PythonScriptService {
           title: structuredData.title,
           kafkaInventory: structuredData.kafka_inventory.map(item => ({
             file: item.file,
-            apis_used: item.apis_used || '',
+            apisUsed: item.apis_used || '',
             summary: item.summary || ''
           })),
-          codeDiffs: structuredData.code_diffs.map(diff => ({
-            file: diff.file,
-            diff_content: diff.diff_content,
-            diffContent: diff.diff_content,
-            language: diff.language
-          })),
+          codeDiffs: structuredData.code_diffs.map(diff => {
+            const mappedDiff: any = {
+              file: diff.file,
+              diff_content: diff.diff_content,
+              diffContent: diff.diff_content,
+              language: diff.language
+            };
+            if (diff.key_changes) {
+              mappedDiff.key_changes = diff.key_changes;
+            }
+            return mappedDiff;
+          }),
           sections: structuredData.sections,
+          key_changes: structuredData.key_changes,
           stats: {
             totalFilesWithKafka: structuredData.stats.total_files_with_kafka,
             totalFilesWithDiffs: structuredData.stats.total_files_with_diffs,
@@ -621,147 +650,83 @@ export class PythonScriptService {
   }
 
   /**
-   * Extract structured data from migration report content
+   * Extract structured data from migration report content using JSON deserialization
    */
   private async extractStructuredData(reportContent: string): Promise<MigrationReportData | null> {
     try {
-      // Parse migration report sections using regex patterns
+      // Extract JSON block from report
+      const jsonMatch = reportContent.match(/<!--BEGIN:REPORT_JSON-->\s*([\s\S]*?)\s*<!--END:REPORT_JSON-->/);
+      
+      if (!jsonMatch) {
+        broadcastLog('WARN', 'No JSON block found in report, falling back to title extraction');
+        const titleMatch = reportContent.match(/^#\s+(.+)$/m);
+        const title = titleMatch ? titleMatch[1] : 'Kafka to Azure Service Bus Migration Analysis';
+        
+        return {
+          title,
+          kafka_inventory: [],
+          code_diffs: [],
+          sections: {},
+          stats: {
+            total_files_with_kafka: 0,
+            total_files_with_diffs: 0,
+            sections_count: 0
+          }
+        };
+      }
+
+      const jsonData = JSON.parse(jsonMatch[1]);
+      
+      // Extract title from report header
       const titleMatch = reportContent.match(/^#\s+(.+)$/m);
       const title = titleMatch ? titleMatch[1] : 'Kafka to Azure Service Bus Migration Analysis';
-
-      // Extract Kafka inventory from markdown table
-      const kafkaInventory: any[] = [];
       
-      // Find the Kafka Usage Inventory section
-      const inventorySection = reportContent.match(/##\s+\d+\.\s*Kafka Usage Inventory([\s\S]*?)(?=##|$)/i);
+      // Map JSON inventory to schema format
+      const kafkaInventory = (jsonData.inventory || []).map((item: any) => ({
+        file: item.file || '',
+        apis_used: (item.kafka_apis || []).join(', '),
+        summary: item.summary || ''
+      }));
       
-      if (inventorySection) {
-        // Parse markdown table rows (skip header and separator rows)
-        const tableRowRegex = /^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|$/gm;
-        let rowMatch;
-        let rowCount = 0;
+      // Map JSON diffs to schema format with key_changes
+      const codeDiffs = (jsonData.diffs || []).map((diff: any) => {
+        const diffObj: any = {
+          file: diff.path || '',
+          diff_content: diff.diff || '',
+          language: this.inferLanguageFromFile(diff.path || ''),
+          hunks: this.parseDiffHunks(diff.diff || ''),
+          stats: this.calculateDiffStats(diff.diff || '')
+        };
         
-        while ((rowMatch = tableRowRegex.exec(inventorySection[1])) !== null) {
-          rowCount++;
-          // Skip header row (File | APIs Used | Summary) and separator row (---|---|---)
-          if (rowCount <= 2) continue;
-          
-          kafkaInventory.push({
-            file: rowMatch[1].trim(),
-            apis_used: rowMatch[2].trim(),
-            summary: rowMatch[3].trim()
-          });
-        }
-      }
-
-      // Extract code diffs with descriptions and key changes
-      const codeDiffs: any[] = [];
-      
-      // Match file sections: ### filename, then description, then ```diff block
-      const fileSectionRegex = /###\s+([^\n]+)\n([\s\S]*?)(?=###|$)/g;
-      let fileMatch;
-      
-      while ((fileMatch = fileSectionRegex.exec(reportContent)) !== null) {
-        const fileName = fileMatch[1].replace(/`/g, '').trim();
-        let sectionContent = fileMatch[2].trim();
-        
-        // Extract diff block (handle both Unix \n and Windows \r\n line endings)
-        const diffMatch = /```diff[\r\n]+([\s\S]*?)[\r\n]+```/.exec(sectionContent);
-        let diffContent = diffMatch ? diffMatch[1] : '';
-        
-        // Get description (everything before the diff block)
-        let description = diffMatch ? sectionContent.substring(0, diffMatch.index).trim() : sectionContent;
-        
-        // Extract key changes - check multiple locations
-        let keyChanges: string[] = [];
-        
-        // 1. First check for explicit "Key Changes:" header in description
-        const explicitKeyChangesMatch = /(?:^|[\r\n])\s*(?:\*\*|##?)?\s*Key\s+Changes\s*:?\s*[\r\n]+((?:[\s]*[-*•]\s+.+[\r\n]+)+)/i.exec(description);
-        
-        if (explicitKeyChangesMatch) {
-          keyChanges = explicitKeyChangesMatch[1]
-            .split(/\r?\n/)
-            .map(line => line.trim())
-            .filter(line => line.startsWith('-') || line.startsWith('*') || line.startsWith('•'))
-            .map(line => line.replace(/^[-*•]\s*/, '').trim())
-            .filter(line => line.length > 0);
-          
-          description = description.replace(explicitKeyChangesMatch[0], '').trim();
-        } 
-        // 2. Check for bullet lists in description
-        else {
-          const bulletListMatch = description.match(/(?:^|[\r\n])((?:[\s]*[-*•]\s+.+[\r\n]+)+)/);
-          
-          if (bulletListMatch) {
-            keyChanges = bulletListMatch[1]
-              .split(/\r?\n/)
-              .map(line => line.trim())
-              .filter(line => line.startsWith('-') || line.startsWith('*') || line.startsWith('•'))
-              .map(line => line.replace(/^[-*•]\s*/, '').trim())
-              .filter(line => line.length > 0);
-            
-            if (keyChanges.length > 0) {
-              description = description.replace(bulletListMatch[0], '').trim();
-            }
-          }
+        if (diff.description) {
+          diffObj.description = diff.description;
         }
         
-        // 3. CRITICAL: Check for summary lines INSIDE the diff content (at the beginning, before actual diff syntax)
-        // These look like: "- Replaced Kafka..." "- Added message..." but appear before @@ or --- markers
-        if (keyChanges.length === 0 && diffContent) {
-          const diffLines = diffContent.split(/\r?\n/);
-          const summaryLines: string[] = [];
-          let foundActualDiff = false;
-          
-          for (const line of diffLines) {
-            const trimmed = line.trim();
-            
-            // Check if we've hit actual diff syntax
-            if (trimmed.startsWith('@@') || trimmed.startsWith('---') || trimmed.startsWith('+++') || trimmed.match(/^diff\s+/)) {
-              foundActualDiff = true;
-              break;
-            }
-            
-            // Collect lines that look like summary bullets (but not empty lines)
-            if (trimmed && (trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('•'))) {
-              // Check if it's a descriptive summary (contains words like "Replaced", "Added", "Used", "Implemented", "Updated", "Removed", "Changed", "Fixed")
-              if (/^[-*•]\s*(Replaced|Added|Used|Implemented|Updated|Removed|Changed|Fixed|Created|Modified|Introduced|Migrated|Converted)/i.test(trimmed)) {
-                summaryLines.push(trimmed);
-              }
-            }
-          }
-          
-          if (summaryLines.length > 0) {
-            keyChanges = summaryLines.map(line => line.replace(/^[-*•]\s*/, '').trim());
-            
-            // Remove these summary lines from diff content
-            const summaryBlock = summaryLines.join('\n');
-            diffContent = diffContent.replace(new RegExp(summaryLines.map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\r\\n]+'), 'g'), '').trim();
-          }
+        if (diff.key_changes && Array.isArray(diff.key_changes) && diff.key_changes.length > 0) {
+          diffObj.key_changes = diff.key_changes;
         }
         
-        codeDiffs.push({
-          file: fileName,
-          diff_content: diffContent,
-          description: description || undefined,
-          key_changes: keyChanges.length > 0 ? keyChanges : undefined,
-          language: this.inferLanguageFromFile(fileName),
-          hunks: this.parseDiffHunks(diffContent),
-          stats: this.calculateDiffStats(diffContent)
-        });
-      }
+        return diffObj;
+      });
+      
+      // Collect all key_changes from diffs for report-level aggregation
+      const allKeyChanges: string[] = [];
+      codeDiffs.forEach((diff: any) => {
+        if (diff.key_changes) {
+          allKeyChanges.push(...diff.key_changes);
+        }
+      });
 
       const structuredData: MigrationReportData = {
         title,
         kafka_inventory: kafkaInventory,
         code_diffs: codeDiffs,
         sections: {},
-        notes: [],
+        key_changes: allKeyChanges.length > 0 ? allKeyChanges : undefined,
         stats: {
           total_files_with_kafka: kafkaInventory.length,
           total_files_with_diffs: codeDiffs.length,
-          notes_count: 0,
-          sections_count: Object.keys({}).length
+          sections_count: 0
         }
       };
 
