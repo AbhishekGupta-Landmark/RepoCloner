@@ -10,14 +10,21 @@ An interactive web-based application that allows users to clone Git repositories
 - C#-compatible backend architecture with extensible provider pattern
 
 ## Recent Changes
+- 2025-10-01: **QUICK MIGRATION ANALYSIS (GPT-4)** - Replaced default2.py with user's GPT-4 assisted analysis script
+  - **GPT-4 Integration**: Uses Azure OpenAI for intelligent Kafka usage detection and analysis
+  - **Manual + AI Detection**: Combines keyword-based detection with GPT-4 analysis for comprehensive results
+  - **Report Sections**: Manual Kafka files, GPT-4 analysis results, NuGet package changes, unit test impact, infrastructure files, documentation references, configuration file keys
+  - **JSON Output**: Outputs structured JSON embedded in markdown for Reports tab display
+  - **URL Compatibility**: Automatically extracts base URL from full chat completions URLs for Azure OpenAI compatibility
+  - **No PNG Files**: Updated push script to exclude attached_assets/ folder from GitHub commits
+  - **GitHub Push**: Successfully pushed 11 files to feature/dynamic-analysis-types branch
 - 2025-10-01: **DYNAMIC ANALYSIS TYPES SYSTEM** - Implemented extensible configuration-driven architecture for analysis types
   - **AnalysisRegistry Service**: Auto-discovers Python scripts in scripts/ directory with metadata parsing (# ANALYSIS_ID, # ANALYSIS_LABEL)
   - **GET /api/analysis/types Endpoint**: Returns all available analysis types dynamically from registry
   - **AnalysisPanel UI Enhancement**: Dropdown now loads analysis types from API instead of hardcoded options
   - **Extensible Architecture**: New analysis types can be added by simply creating Python files in scripts/ directory
-  - **Three Analysis Types Available**: kafka-to-servicebus (default), quick-migration (default2), quick-migration-1 (default3)
-  - **GitHub Push**: Successfully pushed 15 files to feature/dynamic-analysis-types branch
-  - **Backward Compatibility**: Existing analyze endpoint now accepts optional analysisType parameter, defaults to kafka-to-servicebus
+  - **Two Analysis Types Available**: quick-migration (default2), quick-migration-1 (default3)
+  - **Backward Compatibility**: Existing analyze endpoint now accepts optional analysisType parameter, defaults to quick-migration
 - 2025-09-30: **KEY CHANGES JSON DESERIALIZATION** - Completed clean implementation of Key Changes display functionality
   - **Reverted to commit 1b2aa1ac**: Started with clean state to avoid regression issues
   - **Python Script Updates**: Enhanced AI response parsing to extract key_changes from bullet points without modifying prompt
