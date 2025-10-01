@@ -10,20 +10,24 @@ An interactive web-based application that allows users to clone Git repositories
 - C#-compatible backend architecture with extensible provider pattern
 
 ## Recent Changes
-- 2025-10-01: **QUICK MIGRATION ANALYSIS (GPT-4)** - Replaced default2.py with user's GPT-4 assisted analysis script
+- 2025-10-01: **ANALYSIS TYPE CONFIGURATION FIX** - Corrected file mapping and removed Kafka option
+  - **Two Analysis Types**: quick-migration (default1.py), quick-migration-1 (default2.py with GPT-4)
+  - **Removed Kafka Option**: Deleted default.py to eliminate unwanted Kafka analysis type
+  - **Fixed Script Routing**: default1.py for quick-migration, default2.py for quick-migration-1
+  - **OpenAI v2.0.0 Installed**: Fixed import errors by installing openai package
+  - **Added .gitignore**: Added attached_assets/ to .gitignore to prevent PNG files from being tracked
+- 2025-10-01: **QUICK MIGRATION ANALYSIS (GPT-4)** - Added user's GPT-4 assisted analysis script as default2.py
   - **GPT-4 Integration**: Uses Azure OpenAI for intelligent Kafka usage detection and analysis
   - **Manual + AI Detection**: Combines keyword-based detection with GPT-4 analysis for comprehensive results
   - **Report Sections**: Manual Kafka files, GPT-4 analysis results, NuGet package changes, unit test impact, infrastructure files, documentation references, configuration file keys
   - **JSON Output**: Outputs structured JSON embedded in markdown for Reports tab display
   - **URL Compatibility**: Automatically extracts base URL from full chat completions URLs for Azure OpenAI compatibility
-  - **No PNG Files**: Updated push script to exclude attached_assets/ folder from GitHub commits
-  - **GitHub Push**: Successfully pushed 11 files to feature/dynamic-analysis-types branch
 - 2025-10-01: **DYNAMIC ANALYSIS TYPES SYSTEM** - Implemented extensible configuration-driven architecture for analysis types
   - **AnalysisRegistry Service**: Auto-discovers Python scripts in scripts/ directory with metadata parsing (# ANALYSIS_ID, # ANALYSIS_LABEL)
   - **GET /api/analysis/types Endpoint**: Returns all available analysis types dynamically from registry
   - **AnalysisPanel UI Enhancement**: Dropdown now loads analysis types from API instead of hardcoded options
   - **Extensible Architecture**: New analysis types can be added by simply creating Python files in scripts/ directory
-  - **Two Analysis Types Available**: quick-migration (default2), quick-migration-1 (default3)
+  - **Push Script Enhancement**: Excludes attached_assets/ folder from GitHub commits
   - **Backward Compatibility**: Existing analyze endpoint now accepts optional analysisType parameter, defaults to quick-migration
 - 2025-09-30: **KEY CHANGES JSON DESERIALIZATION** - Completed clean implementation of Key Changes display functionality
   - **Reverted to commit 1b2aa1ac**: Started with clean state to avoid regression issues

@@ -6,3 +6,4 @@ vite.config.ts.*
 *.tar.gz
 temp/
 coverage/
+attached_assets/
