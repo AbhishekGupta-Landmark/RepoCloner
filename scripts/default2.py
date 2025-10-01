@@ -3,539 +3,428 @@
 import os
 import re
 import json
-import requests
-import subprocess
 import sys
-from typing import TypedDict, List, Dict, Any, Optional
-from urllib.parse import quote, urlparse, parse_qs, urlencode, urlunparse
-from langgraph.graph import StateGraph, END
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.outputs import ChatResult, ChatGeneration
-
 import argparse
+from typing import List, Dict
+from openai import AzureOpenAI
 
-# Parse command line arguments for AI configuration
+# ========== Configuration ==========
+
 def parse_args():
-    parser = argparse.ArgumentParser(description='AI-powered repository analysis for Kafka to Azure Service Bus migration')
+    parser = argparse.ArgumentParser(description='GPT-4 assisted Kafka to Azure Service Bus migration analysis')
     parser.add_argument('repo_url', help='Repository URL to analyze')
-    parser.add_argument('repo_path', help='Local path to clone/analyze repository')
-    
-    # NO FALLBACK - AI configuration is required
-    parser.add_argument('--model', default=None, help='AI model to use (required)')
-    parser.add_argument('--api-version', default=None, help='API version')
-    parser.add_argument('--base-url', default=None, help='API endpoint URL (required)')
+    parser.add_argument('repo_path', help='Local path to cloned repository')
+    parser.add_argument('--model', default='gpt-4o-mini-2024-07-18', help='AI model to use')
+    parser.add_argument('--api-version', default='2024-02-01', help='API version')
+    parser.add_argument('--base-url', default='https://ai-proxy.lab.epam.com', help='API endpoint URL')
     parser.add_argument('--api-key', required=True, help='AI API key (required)')
     return parser.parse_args()
 
-# Safe defaults - no hardcoded credentials
-DEFAULT_MODEL = "gpt-4"
-DEFAULT_API_VERSION = "2024-02-15-preview"
-DEFAULT_BASE_URL = "https://api.openai.com/v1/chat/completions"
+# Max number of characters from a file snippet to send to GPT‑4
+GPT4_SNIPPET_MAX_CHARS = 2000
 
-class RepoAnalysisState(TypedDict):
-    repo_url: str
-    repo_path: str
-    code_chunks: List[str]
-    messages: List[BaseMessage]
-    analysis: str
-    kafka_inventory: List[dict]
-    code_diffs: List[dict]
-    # AI configuration (optional)
-    model: str
-    api_version: str
-    base_url: str
-    api_key: str
+# ========== File Scanning ==========
 
-class ApiKeyOnlyChatModel(BaseChatModel):
-    model_name: str
-    base_url: str
-    api_key: str
-    api_version: Optional[str] = None
+def scan_project_files(root_dir: str) -> Dict[str, List[str]]:
+    """Scan and classify project files."""
+    files = {
+        "cs_files": [],
+        "csproj_files": [],
+        "config_files": [],
+        "test_files": [],
+        "startup_files": [],
+        "infra_files": [],
+        "doc_files": []
+    }
+    for dirpath, _, filenames in os.walk(root_dir):
+        for fname in filenames:
+            full = os.path.join(dirpath, fname)
+            if fname.lower().endswith(".cs"):
+                files["cs_files"].append(full)
+                if "test" in fname.lower() or "tests" in dirpath.lower():
+                    files["test_files"].append(full)
+                if fname.lower() in ("startup.cs", "program.cs"):
+                    files["startup_files"].append(full)
+            elif fname.lower().endswith(".csproj"):
+                files["csproj_files"].append(full)
+            elif fname.lower().startswith("appsettings") and fname.lower().endswith(".json"):
+                files["config_files"].append(full)
+            elif fname.lower().endswith((".yaml", ".yml", ".tf", ".dockerfile")) or "docker" in fname.lower():
+                files["infra_files"].append(full)
+            elif fname.lower().endswith((".md", ".txt")):
+                files["doc_files"].append(full)
+    return files
 
-    def _generate(self, messages: List[BaseMessage], stop=None, run_manager=None, **kwargs):
-        role_map = {"human": "user", "ai": "assistant", "system": "system"}
-        
-        # Build standard OpenAI-compatible request
-        payload = {
-            "messages": [
-                {"role": role_map.get(m.type, m.type), "content": m.content}
-                for m in messages
-            ],
-            "temperature": 0,
-        }
-        
-        # Only add model name for direct OpenAI API calls (not deployment-based URLs)
-        if 'deployments' not in self.base_url.lower():
-            payload["model"] = self.model_name
-        
-        # Standard OpenAI Authorization header
-        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
-        
-        # Add API version header for Azure OpenAI
-        api_version = getattr(self, 'api_version', None)
-        if api_version and 'azure' in self.base_url.lower():
-            headers["api-version"] = api_version
-            
+# ========== Manual Keyword-based Detection ==========
+
+MANUAL_KAFKA_KEYWORDS = [
+    "Confluent.Kafka",
+    "ProducerBuilder",
+    "ConsumerBuilder",
+    "Consume(",
+    "Subscribe(",
+    "ProduceAsync(",
+    "bootstrap.servers",
+    "IKafkaProducer",
+    "IKafkaConsumer"
+]
+
+def detect_config_keys(file_paths: List[str]) -> List[Dict[str, object]]:
+    kafka_keys = []
+    kafka_key_substrings = [
+        "kafka", "bootstrapservers", "groupid", "enableautocommit",
+        "autooffsetreset", "sasl", "kerberos", "partitioneof"
+    ]
+
+    def flatten_dict(d, parent_key=''):
+        items = []
+        for k, v in d.items():
+            new_key = f"{parent_key}:{k}" if parent_key else k
+            if isinstance(v, dict):
+                items.extend(flatten_dict(v, new_key).items())
+            else:
+                items.append((new_key.lower(), v))
+        return dict(items)
+
+    for file in file_paths:
+        found_keys = set()
         try:
-            print(f"🌐 Making API request to: {self.base_url}")
-            print(f"🔧 Headers: {{'Content-Type': 'application/json', 'Authorization': 'Bearer ***'}}")
-            print(f"📋 Payload: {payload}")
-            
-            resp = requests.post(self.base_url, headers=headers, json=payload, timeout=120)
-            
-            print(f"🔍 Response Status: {resp.status_code}")
-            print(f"📄 Response Headers: ***")
-            
-            if resp.status_code != 200:
-                print(f"❌ Error Response Body: {resp.text}")
-                resp.raise_for_status()
-            
-            data = resp.json()
-            print(f"✅ Success! Response keys: {list(data.keys())}")
-            content = data["choices"][0]["message"]["content"]
-        except requests.exceptions.RequestException as e:
-            error_details = f"Status: {getattr(e.response, 'status_code', 'Unknown')}, Response: {getattr(e.response, 'text', 'No response body')}"
-            raise Exception(f"API request failed: {e}. Details: {error_details}")
-        except Exception as e:
-            print(f"❌ Unexpected error: {e}")
-            raise
-            
-        ai_msg = AIMessage(content=content)
-        return ChatResult(generations=[ChatGeneration(message=ai_msg)])
+            if file.endswith(".json"):
+                with open(file, "r", encoding="utf-8") as f:
+                    try:
+                        raw = f.read()
+                        # Remove comments if any (not valid JSON)
+                        raw = re.sub(r"//.*", "", raw)
+                        data = json.loads(raw)
+                        flat = flatten_dict(data)
 
-    @property
-    def _llm_type(self) -> str:
-        return "api-key-only-chat"
-
-def clone_repo(state: RepoAnalysisState):
-    repo_url = state["repo_url"]
-    local_path = state["repo_path"]
-
-    # Check if repository files already exist (cloned by main application)
-    if os.path.exists(local_path) and os.listdir(local_path):
-        print(f"Repository files already exist at {local_path} (cloned by main application)")
-        return state
-    
-    if os.path.exists(os.path.join(local_path, ".git")):
-        print(f"Repository already exists at {local_path}, checking for updates...")
-
-        remote_commit = subprocess.check_output(
-            ["git", "ls-remote", repo_url, "HEAD"]
-        ).decode().split()[0]
-
-        local_commit = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"],
-            cwd=local_path
-        ).decode().strip()
-
-        if local_commit == remote_commit:
-            print("Local repository is already up-to-date with origin.")
-        else:
-            print("Local repo is outdated, pulling latest changes...")
-            subprocess.run(["git", "pull"], cwd=local_path, check=True)
-    else:
-        print(f"Cloning repository into {local_path}...")
-        os.makedirs(local_path, exist_ok=True)
-        subprocess.run(["git", "clone", "--depth", "1", repo_url, local_path], check=True)
-
-    return state
-
-def get_updated_state_with_code_chunks(state: RepoAnalysisState) -> RepoAnalysisState:
-    repo_path = state["repo_path"]
-    chunks = []
-    EXCLUDED_EXTENSIONS = (".png", ".jpg", ".exe", ".dll", ".bin")
-
-    max_chunk_size = 4000
-    for root, dirs, files in os.walk(repo_path):
-        if ".git" in dirs:
-            dirs.remove(".git")
-        for f in files:
-            path = os.path.join(root, f)
-            if f.lower().endswith(EXCLUDED_EXTENSIONS):
-                continue
-            try:
-                with open(path, "rb") as test_fp:
-                    start = test_fp.read(1024)
-                    if b'\0' in start:
+                        for key in flat:
+                            if any(sub in key for sub in kafka_key_substrings):
+                                found_keys.add(key)
+                    except json.JSONDecodeError:
                         continue
-                with open(path, "r", encoding="utf-8", errors="ignore") as fp:
-                    content = fp.read()
-                    for i in range(0, len(content), max_chunk_size):
-                        chunk = content[i:i+max_chunk_size]
-                        chunks.append(f"File: {os.path.relpath(path, repo_path)}\n{chunk}")
-            except (IOError, OSError):
-                continue
-
-    print(f"📊 Total chunks loaded: {len(chunks)}")
-    print(f"🔍 Phase 2: Starting AI-powered analysis...")
-    return {**state, "code_chunks": chunks}
-
-def analyze_code(state: RepoAnalysisState):
-    llm = ApiKeyOnlyChatModel(
-        model_name=state.get('model', DEFAULT_MODEL), 
-        base_url=state.get('base_url', DEFAULT_BASE_URL), 
-        api_key=state.get('api_key'),
-        api_version=state.get('api_version')
-    )
-    summaries = []
-    for chunk in state["code_chunks"]:
-        prompt = f"Summarize the purpose and functionality of this code:\n\n{chunk}"
-        resp = llm.invoke([HumanMessage(content=prompt)])
-        summaries.append(resp.content)
-
-    analysis = "\n\n".join(summaries)
-    return {**state, "analysis": analysis}
-
-def scan_for_kafka_usage_ai(state: RepoAnalysisState) -> RepoAnalysisState:
-    llm = ApiKeyOnlyChatModel(
-        model_name=state.get('model', DEFAULT_MODEL), 
-        base_url=state.get('base_url', DEFAULT_BASE_URL), 
-        api_key=state.get('api_key'),
-        api_version=state.get('api_version')
-    )
-    inventory: List[Dict[str, Any]] = []
-    code_chunks = state["code_chunks"]
-
-    print(f"Scanning {len(code_chunks)} chunks for Kafka usage via AI...")
-
-    for idx, chunk in enumerate(code_chunks):
-        prompt = (
-            "You are analyzing a .NET Core repository. "
-            "Does this code use Kafka (e.g., Confluent.Kafka, Kafka APIs, producers, consumers, topics, partitions)? "
-            "If yes, return a JSON object with fields: "
-            "{'file': 'relative/path', 'kafka_apis': [...], 'summary': '...'}.\n"
-            "If not, return {}.\n\n"
-            f"Code chunk:\n{chunk}"
-        )
-        resp = llm.invoke([HumanMessage(content=prompt)])
-        text = getattr(resp, "content", "") or str(resp)
-
-        match = re.search(r"\{.*\}", text, flags=re.S)
-        if match:
-            try:
-                data = json.loads(match.group(0))
-                if data and "file" in data:
-                    inventory.append(data)
-            except Exception:
-                pass
-
-        if idx % 20 == 0:
-            print(f"Processed {idx}/{len(code_chunks)} chunks")
-
-    print(f"AI-identified Kafka usage in {len(inventory)} files.")
-    return {**state, "kafka_inventory": inventory}
-
-def extract_key_changes_and_diff(raw: str) -> tuple[list[str], str, str]:
-    """
-    Extract key changes, description and diff content from AI response.
-    Returns (key_changes, description, diff_content) tuple.
-    """
-    s = raw.strip()
-    key_changes = []
-    
-    # Extract key changes section
-    key_changes_match = re.search(r"Key Changes?:\s*\n((?:[-•*]\s+.+\n?)+)", s, re.I | re.M)
-    if key_changes_match:
-        # Extract individual bullet points
-        changes_text = key_changes_match.group(1)
-        key_changes = [
-            line.strip().lstrip('-•*').strip() 
-            for line in changes_text.split('\n') 
-            if line.strip() and line.strip()[0] in '-•*'
-        ]
-        # Remove key changes section from content for further processing
-        s = s[:key_changes_match.start()] + s[key_changes_match.end():]
-        s = s.strip()
-    
-    # Find all fenced code blocks
-    fenced_blocks = list(re.finditer(r"```(\w+)?\s*\n([\s\S]*?)\n```", s, re.I))
-    
-    # Look for diff/patch blocks first
-    for match in fenced_blocks:
-        language = match.group(1) or ""
-        content = match.group(2).strip()
-        
-        # Check if this is a diff block by language or content
-        if (language.lower() in ["diff", "patch"] or 
-            re.search(r"^(diff --git|---\s|\+\+\+\s|@@)", content, re.M)):
-            description = s[:match.start()].strip()
-            return key_changes, description, content
-    
-    # If no suitable fenced block, look for diff markers with stronger validation
-    lines = s.splitlines()
-    diff_start = None
-    
-    for i, line in enumerate(lines):
-        # Only treat as diff start if we see proper diff headers
-        if re.match(r"^(diff --git|index\s|---\s[^\-]|\+\+\+\s[^\+])", line):
-            diff_start = i
-            break
-        # Look for hunk headers
-        elif re.match(r"^@@\s", line):
-            diff_start = i
-            break
-    
-    # If we found a proper diff start, split there
-    if diff_start is not None:
-        description = "\n".join(lines[:diff_start]).strip()
-        diff_content = "\n".join(lines[diff_start:]).strip()
-        return key_changes, description, diff_content
-    
-    # If no diff markers found, treat entire response as description
-    return key_changes, s, ""
-
-def generate_code_diffs(state: RepoAnalysisState) -> RepoAnalysisState:
-    llm = ApiKeyOnlyChatModel(
-        model_name=state.get('model', DEFAULT_MODEL), 
-        base_url=state.get('base_url', DEFAULT_BASE_URL), 
-        api_key=state.get('api_key'),
-        api_version=state.get('api_version')
-    )
-    inventory = state.get("kafka_inventory", [])
-    repo_path = state["repo_path"]
-
-    diffs = []
-    for item in inventory:
-        file_rel = item.get("file")
-        if not file_rel:
-            continue
-        file_abs = os.path.join(repo_path, file_rel)
-
-        if not os.path.exists(file_abs):
-            continue
-
-        try:
-            with open(file_abs, "r", encoding="utf-8", errors="ignore") as fp:
-                file_content = fp.read()
+            elif file.endswith(".cs"):
+                with open(file, "r", encoding="utf-8") as f:
+                    content = f.read()
+                    for keyword in kafka_key_substrings:
+                        matches = re.findall(rf'["\']([^"\']*{keyword}[^"\']*)["\']', content, re.IGNORECASE)
+                        for match in matches:
+                            found_keys.add(match.strip('"\''))
         except Exception:
             continue
 
-        prompt = f"""
-        You are a .NET Core expert.
-        File: {file_rel}
+        if found_keys:
+            kafka_keys.append({
+                "file": file,
+                "keys_to_migrate": sorted(found_keys)
+            })
 
-        Original code:
-        {file_content}
+    return kafka_keys
 
+def manual_detect_kafka(content: str) -> bool:
+    for kw in MANUAL_KAFKA_KEYWORDS:
+        if kw in content:
+            return True
+    return False
 
-        Task:
-        - Show a unified diff patch (`diff` style) that replaces Kafka usage with Azure.Messaging.ServiceBus.
-        - Cover producers, consumers, config, and error handling.
-        - Keep namespaces, classes, and non-Kafka code intact.
-        - If no Kafka usage is present, return an empty diff.
-        """
-        resp = llm.invoke([HumanMessage(content=prompt)])
-        
-        # Extract key changes, description and diff content separately
-        content = resp.content if isinstance(resp.content, str) else str(resp.content)
-        key_changes, description, diff_content = extract_key_changes_and_diff(content)
-        
-        diff_obj = {
-            "file": file_rel,
-            "diff_content": diff_content,
-            "description": description,
-            "language": "diff"
-        }
-        if key_changes:
-            diff_obj["key_changes"] = key_changes
-        
-        diffs.append(diff_obj)
+# ========== GPT‑4 Assisted Detection ==========
+
+def ask_gpt4_for_kafka_usage(code_snippet: str, client: AzureOpenAI, model: str) -> Dict[str, str]:
+    """Ask GPT‑4 whether the snippet uses Kafka, and what role(s).
+Returns a dict like:
+ {
+   "uses_kafka": "yes" / "no" / "maybe",
+   "role": "producer" / "consumer" / "both" / "unknown",
+   "explanation": "..."
+ }
+"""
     
-    print(f"Generated diffs for {len(diffs)} files.")
+    # Craft the prompt
+    prompt = f"""You are an expert in C# messaging systems. I will give you a code snippet in C#. 
+Please analyze it and tell me:
+1. Does it use Kafka? (yes / no / maybe)
+2. If yes or maybe, is it acting as a producer, a consumer, or both?
+3. What clues in the snippet point to that role (line numbers, methods, API names, etc.)?
 
-    return {**state, "code_diffs": diffs}
+Here is the snippet:
 
-def generate_report_streaming(state: RepoAnalysisState, report_path="migration-report.md"):
-    """
-    Streaming-style report generator to avoid token limit issues.
-    Writes each section to disk incrementally instead of building one huge prompt.
-    """
+{code_snippet}
+"""
 
-    llm = ApiKeyOnlyChatModel(
-        model_name=state.get('model', DEFAULT_MODEL), 
-        base_url=state.get('base_url', DEFAULT_BASE_URL), 
-        api_key=state.get('api_key')
+    resp = client.chat.completions.create(
+        model=model,
+        temperature=0,
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant for code analysis."},
+            {"role": "user", "content": prompt}
+        ],
+        max_tokens=200
     )
-    
-    # Prepare structured JSON data for backend deserialization
-    import json
-    import time
-    
-    inventory = state.get("kafka_inventory", [])
-    diffs = state.get("code_diffs", [])
-    
-    # Build structured diffs array
-    structured_diffs = []
-    for diff in diffs:
-        file_name = diff.get("file", "")
-        if file_name.lower() != "readme.md":
-            diff_obj = {
-                "path": file_name,
-                "diff": diff.get("diff_content", "") or diff.get("diff", ""),
-                "description": diff.get("description", "")
-            }
-            if diff.get("key_changes"):
-                diff_obj["key_changes"] = diff.get("key_changes")
-            structured_diffs.append(diff_obj)
-    
-    json_data = {
-        "meta": {
-            "repoUrl": state.get("repo_url", ""),
-            "generatedAt": str(int(time.time() * 1000))
-        },
-        "keyChanges": [],  # Backend will populate this
-        "notes": [],
-        "diffs": structured_diffs,
-        "inventory": inventory
-    }
 
-    with open(report_path, "w", encoding="utf-8") as f:
-        # Embed JSON for backend pure deserialization
-        f.write("<!--BEGIN:REPORT_JSON-->\n")
-        f.write(json.dumps(json_data, indent=2, ensure_ascii=False))
-        f.write("\n<!--END:REPORT_JSON-->\n\n")
-        
-        # Header
-        f.write("# Kafka → Azure Service Bus Migration Report\n\n")
+    content = resp.choices[0].message.content.strip()
 
-        # 1. Kafka Usage Inventory
-        inventory = state.get("kafka_inventory", [])
-        f.write("## 1. Kafka Usage Inventory\n\n")
-        f.write("| File | APIs Used | Summary |\n")
-        f.write("|------|-----------|---------|\n")
-        for item in inventory:
-            f.write(f"| {item.get('file')} | {', '.join(item.get('kafka_apis', []))} | {item.get('summary', '')} |\n")
-        f.write("\n")
+    # Try parsing the JSON
+    try:
+        parsed = json.loads(content)
+        return {
+            "uses_kafka": parsed.get("uses_kafka", "unknown"),
+            "role": parsed.get("role", "unknown"),
+            "explanation": parsed.get("explanation", ""),
+            "raw_response": parsed.get("explanation", "")
+        }
+    except json.JSONDecodeError:
+        # Fallback: if GPT's output is not valid JSON, return raw response
+        return {
+            "uses_kafka": "unknown",
+            "role": "unknown",
+            "explanation": content,
+            "raw_response": content
+        }
 
-        # 2. Code Migration Diffs (all files, no token explosion)
-        f.write("## 2. Code Migration Diffs\n\n")
-        diffs = state.get("code_diffs", [])
-        for diff in diffs:
-            file_name = diff.get("file", "")
-            file_diff = diff.get("diff_content", "") or diff.get("diff", "")
-            description = diff.get("description", "")
-
-            # Ignore README.md or other excluded files
-            if file_name.lower() == "readme.md":
-                continue
-
-            f.write(f"### {file_name}\n")
-            
-            # Write description above the code block if it exists
-            if description:
-                f.write(f"{description}\n\n")
-            
-            # Only write diff block if there's actual diff content
-            if file_diff:
-                f.write("```diff\n")
-                f.write(file_diff.strip() + "\n")
-                f.write("```\n\n")
+def get_snippet_from_file(file_path: str, max_chars: int) -> str:
+    """Return the first up to max_chars of the file for sending to GPT4."""
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = f.read()
+            # If very long, maybe take middle or relevant sections
+            if len(data) > max_chars:
+                # Maybe take first and last parts
+                return data[: max_chars//2] + "\n// ... (omitted) ...\n" + data[-max_chars//2 :]
             else:
-                f.write("*No diff content generated*\n\n")
+                return data
+    except Exception as e:
+        return ""
 
+# ========== .csproj NuGet Parsing ==========
 
-    print(f"✅ Streaming migration report written to {report_path}")
+def parse_csproj_nugets(csproj_file: str) -> List[Dict[str,str]]:
+    results = []
+    try:
+        with open(csproj_file, "r", encoding="utf-8") as f:
+            content = f.read()
+        # Simple regex
+        matches = re.findall(r"<PackageReference Include=\"([^\"]+)\" Version=\"([^\"]+)\"", content, re.IGNORECASE)
+        for pkg, version in matches:
+            results.append({"package": pkg, "version": version})
+    except Exception as e:
+        print(f"Error parsing {csproj_file}: {e}", file=sys.stderr)
+    return results
 
-    # Update state with a final message
-    return {**state, "messages": state["messages"] + [AIMessage(content=f"Migration report generated at {report_path}.")]}
+# ========== Report Generation ==========
 
-# Build workflow
-graph = StateGraph(RepoAnalysisState)
-graph.add_node("clone_repo", clone_repo)
-graph.add_node("load_source_code", get_updated_state_with_code_chunks)
-graph.add_node("analyze_code", analyze_code)
-graph.add_node("scan_for_kafka_usage_ai", scan_for_kafka_usage_ai)
-graph.add_node("generate_code_diffs", generate_code_diffs)
-graph.add_node("generate_report", generate_report_streaming)
-
-graph.set_entry_point("clone_repo")
-graph.add_edge("clone_repo", "load_source_code")
-graph.add_edge("load_source_code", "analyze_code")
-graph.add_edge("analyze_code", "scan_for_kafka_usage_ai")
-graph.add_edge("scan_for_kafka_usage_ai", "generate_code_diffs")
-graph.add_edge("generate_code_diffs", "generate_report")
-graph.add_edge("generate_report", END)
-
-app = graph.compile()
-
-# Run
-def run_analysis(question: str = "Provide a summary of the repository and its Kafka usage."):
-    initial_state: RepoAnalysisState = {
-        "repo_url": "https://github.com/srigumm/dotnetcore-kafka-integration",
-        "repo_path": "./cloned_repo",
-        "code_chunks": [],
-        "analysis": "",
-        "kafka_inventory": [],
-        "code_diffs": [],
-        "messages": [HumanMessage(content=question)],
-        "model": DEFAULT_MODEL,
-        "api_version": DEFAULT_API_VERSION,
-        "base_url": DEFAULT_BASE_URL,
-        "api_key": "",
+def generate_report(root_dir: str, client: AzureOpenAI, model: str) -> Dict:
+    files = scan_project_files(root_dir)
+    report = {
+        "manual_kafka_files": [],
+        "gpt4_kafka_results": [],
+        "csproj_changes": [],
+        "unit_test_impact": [],
+        "infra_files_kafka": [],
+        "doc_references": [],
+        "config_files": []
     }
-    result = app.invoke(initial_state)
-    print("\nAI Proxy Response:\n", result["messages"][-1].content)
 
-# Main execution with proper argument parsing
-if __name__ == "__main__":
-    import time
+    # Manual detection on .cs and config files
+    for f in files["cs_files"] + files["config_files"]:
+        try:
+            with open(f, "r", encoding="utf-8") as rf:
+                content = rf.read()
+        except:
+            continue
+
+        if manual_detect_kafka(content):
+            report["manual_kafka_files"].append(f)
+
+    # GPT‑4 analysis for files flagged via manual detection OR startup / wrappers
+    candidates = set(report["manual_kafka_files"])
+    # also consider wrappers / startup files if not already included
+    for f in files["startup_files"]:
+        if f not in candidates:
+            candidates.add(f)
+    # maybe also test files
+    for f in files["test_files"]:
+        if f not in candidates:
+            candidates.add(f)
+
+    for f in list(candidates):
+        snippet = get_snippet_from_file(f, GPT4_SNIPPET_MAX_CHARS)
+        if snippet.strip() == "":
+            continue
+        result = ask_gpt4_for_kafka_usage(snippet, client, model)
+        report["gpt4_kafka_results"].append({
+            "file": f,
+            "uses_kafka": result["uses_kafka"],
+            "role": result["role"],
+            "explanation": result["explanation"]    
+        })
+
+    # Parse csproj changes: remove Kafka packages
+    for csproj in files["csproj_files"]:
+        nugets = parse_csproj_nugets(csproj)
+        for item in nugets:
+            pkg = item["package"]
+            version = item["version"]
+            if "kafka" in pkg.lower() or "confluent.kafka" in pkg.lower():
+                report["csproj_changes"].append({
+                    "file": csproj,
+                    "remove": f"{pkg} ({version})",
+                    "add": "Azure.Messaging.ServiceBus (latest)"
+                })
+
+    # Unit tests impact
+    for tf in files["test_files"]:
+        try:
+            with open(tf, "r", encoding="utf-8") as f:
+                c = f.read()
+        except:
+            continue
+        if manual_detect_kafka(c):
+            report["unit_test_impact"].append({
+                "file": tf,
+                "note": "Contains Kafka usage — may need mocks or refactor for Service Bus"
+            })
+
+    # Infra files
+    for inf in files["infra_files"]:
+        try:
+            with open(inf, "r", encoding="utf-8") as f:
+                c = f.read().lower()
+        except:
+            continue
+        if "kafka" in c:
+            report["infra_files_kafka"].append(inf)
+
+    # Docs
+    for doc in files["doc_files"]:
+        try:
+            with open(doc, "r", encoding="utf-8") as f:
+                c = f.read().lower()
+        except:
+            continue
+        if "kafka" in c or "confluent" in c:
+            report["doc_references"].append(doc)
+
+    # Config files with Kafka keys
+    report["config_files"] = detect_config_keys(files["config_files"])
+
+    return report
+
+# ========== Main ==========
+
+def main():
     args = parse_args()
     
-    # Generate unique report filename
-    analysis_id = str(int(time.time() * 1000))
-    report_filename = f"migration-report-{analysis_id}.md"
-    report_path = os.path.join(args.repo_path, report_filename)
+    # Fail fast if AI is not configured
+    if not args.api_key:
+        print("ERROR: AI API key is required. Cannot proceed without AI configuration.", file=sys.stderr)
+        sys.exit(1)
     
-    print(f"🚀 Starting migration analysis...")
-    print(f"📁 Repository URL: {args.repo_url}")
-    print(f"📂 Repository Path: {args.repo_path}")
-    print(f"🤖 Using Model: {args.model}")
-    print(f"🔧 Using API Version: {args.api_version}")
-    print(f"🌐 Using Endpoint: {args.base_url}")
-    print(f"📊 Phase 1: Repository validation and code loading...")
-    
-    report_generated = False
-    analysis_type = "Static Analysis"
-    
-    # Try AI analysis if we have credentials
-    if args.api_key and args.base_url and args.api_key != "test" and args.base_url != "test":
-        try:
-            print("🤖 Attempting AI analysis...")
-            result = app.invoke({
-                "repo_url": args.repo_url,
-                "repo_path": args.repo_path,
-                "code_chunks": [],
-                "analysis": "",
-                "kafka_inventory": [],
-                "code_diffs": [],
-                "messages": [HumanMessage(content="Analyze this repository for Kafka usage and generate migration report.")],
-                # AI configuration from command-line arguments
-                "model": args.model,
-                "api_version": args.api_version,
-                "base_url": args.base_url,
-                "api_key": args.api_key
-            })
-            
-            print("\n✅ AI Migration analysis completed!")
-            print(f"📄 REPORT_GENERATED: {report_filename}")
-            analysis_type = "AI Analysis"
-            report_generated = True
+    root_dir = args.repo_path
+    if not os.path.isdir(root_dir):
+        print(f"ERROR: Provided path is not a directory or doesn't exist: {root_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    # Initialize Azure OpenAI client
+    try:
+        # Extract base URL if full chat completions URL was provided
+        base_url = args.base_url
+        if '/openai/' in base_url or '/chat/completions' in base_url:
+            # Extract just the base URL (e.g., https://ai-proxy.lab.epam.com)
+            from urllib.parse import urlparse
+            parsed = urlparse(base_url)
+            base_url = f"{parsed.scheme}://{parsed.netloc}"
+            print(f"Extracted base URL: {base_url}", file=sys.stderr)
         
-        except Exception as e:
-            print(f"\n❌ AI Analysis failed: {str(e)}")
-            print("❌ NO FALLBACK - AI configuration is required for analysis")
-            sys.exit(1)
-    else:
-        print("❌ No AI credentials provided - analysis cannot proceed")
-        print("❌ NO FALLBACK - AI configuration is required for analysis")
+        client = AzureOpenAI(
+            api_key=args.api_key,
+            api_version=args.api_version,
+            azure_endpoint=base_url
+        )
+    except Exception as e:
+        print(f"ERROR: Failed to initialize AI client: {e}", file=sys.stderr)
         sys.exit(1)
+
+    # Generate report
+    report = generate_report(root_dir, client, args.model)
     
-    # Final status
-    if report_generated:
-        print(f"✅ Analysis complete - Report available: {report_filename}")
-        print(f"📊 Analysis type: {analysis_type}")
-        sys.exit(0)
-    else:
-        print("❌ Both AI and static analysis failed - no report generated")
-        sys.exit(1)
+    # Transform report to match the expected format
+    import time
+    transformed_report = {
+        "meta": {
+            "repoUrl": args.repo_url,
+            "generatedAt": str(int(time.time() * 1000))
+        },
+        "inventory": [],
+        "diffs": [],
+        "keyChanges": []
+    }
+    
+    # Map GPT4 kafka results to inventory
+    for item in report.get("gpt4_kafka_results", []):
+        if item.get("uses_kafka") == "yes" or item.get("uses_kafka") == "maybe":
+            transformed_report["inventory"].append({
+                "file": item.get("file", ""),
+                "kafka_apis": [item.get("role", "unknown")],
+                "summary": item.get("explanation", "")
+            })
+    
+    # Map manual kafka files to inventory if not already present
+    for file in report.get("manual_kafka_files", []):
+        if not any(item["file"] == file for item in transformed_report["inventory"]):
+            transformed_report["inventory"].append({
+                "file": file,
+                "kafka_apis": ["manual detection"],
+                "summary": "Detected via keyword matching"
+            })
+    
+    # Output markdown with embedded JSON (required format for backend)
+    print("<!--BEGIN:REPORT_JSON-->")
+    print(json.dumps(transformed_report, indent=2))
+    print("<!--END:REPORT_JSON-->")
+    print()
+    print("# Quick Migration Analysis Report")
+    print()
+    print("## 1. Kafka Usage Detection")
+    print()
+    print("### Manual Detection")
+    for file in report.get("manual_kafka_files", []):
+        print(f"- {file}")
+    print()
+    print("### AI-Powered Analysis")
+    print()
+    print("| File | Uses Kafka | Role | Explanation |")
+    print("|------|------------|------|-------------|")
+    for item in report.get("gpt4_kafka_results", []):
+        print(f"| {item.get('file', '')} | {item.get('uses_kafka', '')} | {item.get('role', '')} | {item.get('explanation', '')} |")
+    print()
+    print("## 2. NuGet Package Changes Required")
+    print()
+    for change in report.get("csproj_changes", []):
+        print(f"### {change.get('file', '')}")
+        print(f"- **Remove**: {change.get('remove', '')}")
+        print(f"- **Add**: {change.get('add', '')}")
+        print()
+    print("## 3. Unit Test Impact")
+    print()
+    for test in report.get("unit_test_impact", []):
+        print(f"- **{test.get('file', '')}**: {test.get('note', '')}")
+    print()
+    print("## 4. Infrastructure Files")
+    print()
+    for file in report.get("infra_files_kafka", []):
+        print(f"- {file}")
+    print()
+    print("## 5. Documentation References")
+    print()
+    for file in report.get("doc_references", []):
+        print(f"- {file}")
+    print()
+    print("## 6. Configuration Files")
+    print()
+    for config in report.get("config_files", []):
+        print(f"### {config.get('file', '')}")
+        print(f"Keys to migrate: {', '.join(config.get('keys_to_migrate', []))}")
+        print()
+
+if __name__ == "__main__":
+    main()

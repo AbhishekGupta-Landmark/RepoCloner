@@ -60,8 +60,9 @@ class GitHubPusher {
         ...uncommittedFiles.trim().split('\n').filter(f => f.length > 0)
       ]);
       
-      const files = Array.from(allFiles);
-      console.log(`📝 Found files (committed + uncommitted):`, files);
+      // Exclude attached_assets folder
+      const files = Array.from(allFiles).filter(f => !f.startsWith('attached_assets/'));
+      console.log(`📝 Found files (committed + uncommitted, excluding attached_assets):`, files);
       return files;
     } catch (error) {
       console.error('Failed to get changed files from git:', error);
