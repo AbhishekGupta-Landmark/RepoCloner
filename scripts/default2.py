@@ -376,7 +376,16 @@ def main():
         sys.exit(1)
 
     # Generate report
-    report = generate_report(root_dir, client, args.model)
+    try:
+        report = generate_report(root_dir, client, args.model)
+    except Exception as e:
+        # Catch all errors including network/VPN failures
+        error_msg = str(e)
+        if "connection" in error_msg.lower() or "network" in error_msg.lower() or "timeout" in error_msg.lower():
+            print(f"ERROR: Network connection failed. Please check your VPN connection and try again. Details: {e}", file=sys.stderr)
+        else:
+            print(f"ERROR: AI API call failed: {e}", file=sys.stderr)
+        sys.exit(1)
     
     # Transform report to match the expected format
     import time
