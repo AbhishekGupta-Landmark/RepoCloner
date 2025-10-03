@@ -1556,7 +1556,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
       }
       
       // Get the script path for the requested analysis type
-      const analysisType = await analysisRegistry.getType(analysisRequest.analysisType);
+      const analysisType = await analysisRegistry.getTypeById(analysisRequest.analysisType);
       if (!analysisType) {
         return res.status(404).json({ error: `Analysis type '${analysisRequest.analysisType}' not found` });
       }
