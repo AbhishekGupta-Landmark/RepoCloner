@@ -1,3 +1,5 @@
+# ANALYSIS_ID: default
+# ANALYSIS_LABEL: Migration Analysis
 import os
 import re
 import json
@@ -19,32 +21,12 @@ def parse_args():
     parser.add_argument('repo_url', help='Repository URL to analyze')
     parser.add_argument('repo_path', help='Local path to clone/analyze repository')
     
-    # AI API key with EPAM fallback
-    ai_api_key = os.environ.get("AI_API_KEY")
-    base_url = os.environ.get("AI_ENDPOINT_URL", "https://api.openai.com/v1/chat/completions")
-    model = os.environ.get("AI_MODEL", "gpt-4")
-    api_version = os.environ.get("AI_API_VERSION", "2024-02-15-preview")
-    
-    if not ai_api_key:
-        # Fallback to EPAM AI proxy if no app-configured AI key
-        ai_api_key = os.environ.get("EPAM_AI_API_KEY")
-        if ai_api_key:
-            print("🔧 Using EPAM AI proxy credentials from environment")
-            # Set EPAM-specific defaults
-            base_url = "https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions"
-            model = "claude-3-5-haiku@20241022"
-            api_version = "3.5 Haiku"
-    
-    parser.add_argument('--model', default=model, help='AI model to use')
-    parser.add_argument('--api-version', default=api_version, help='API version')
-    parser.add_argument('--base-url', default=base_url, help='API endpoint URL')
-    parser.add_argument('--api-key', default=ai_api_key, help='AI API key (required)')
+    # AI configuration - NO fallbacks, must be provided explicitly
+    parser.add_argument('--model', required=True, help='AI model to use')
+    parser.add_argument('--api-version', help='API version (optional)')
+    parser.add_argument('--base-url', required=True, help='API endpoint URL')
+    parser.add_argument('--api-key', required=True, help='AI API key (required)')
     return parser.parse_args()
-
-# Safe defaults - no hardcoded credentials
-DEFAULT_MODEL = "gpt-4"
-DEFAULT_API_VERSION = "2024-02-15-preview"
-DEFAULT_BASE_URL = "https://api.openai.com/v1/chat/completions"
 
 class RepoAnalysisState(TypedDict):
     repo_url: str
@@ -196,10 +178,10 @@ def get_updated_state_with_code_chunks(state: RepoAnalysisState) -> RepoAnalysis
 
 def analyze_code(state: RepoAnalysisState):
     llm = ApiKeyOnlyChatModel(
-        model_name=state.get('model', DEFAULT_MODEL), 
-        base_url=state.get('base_url', DEFAULT_BASE_URL), 
-        api_key=state.get('api_key'),
-        api_version=state.get('api_version')
+        model_name=state['model'], 
+        base_url=state['base_url'], 
+        api_key=state['api_key'],
+        api_version=state['api_version']
     )
     summaries = []
     for chunk in state["code_chunks"]:
@@ -212,10 +194,10 @@ def analyze_code(state: RepoAnalysisState):
 
 def scan_for_kafka_usage_ai(state: RepoAnalysisState) -> RepoAnalysisState:
     llm = ApiKeyOnlyChatModel(
-        model_name=state.get('model', DEFAULT_MODEL), 
-        base_url=state.get('base_url', DEFAULT_BASE_URL), 
-        api_key=state.get('api_key'),
-        api_version=state.get('api_version')
+        model_name=state['model'], 
+        base_url=state['base_url'], 
+        api_key=state['api_key'],
+        api_version=state['api_version']
     )
     inventory: List[Dict[str, Any]] = []
     code_chunks = state["code_chunks"]
@@ -297,10 +279,10 @@ def extract_description_and_diff(raw: str) -> tuple[str, str]:
 
 def generate_code_diffs(state: RepoAnalysisState) -> RepoAnalysisState:
     llm = ApiKeyOnlyChatModel(
-        model_name=state.get('model', DEFAULT_MODEL), 
-        base_url=state.get('base_url', DEFAULT_BASE_URL), 
-        api_key=state.get('api_key'),
-        api_version=state.get('api_version')
+        model_name=state['model'], 
+        base_url=state['base_url'], 
+        api_key=state['api_key'],
+        api_version=state['api_version']
     )
     inventory = state.get("kafka_inventory", [])
     repo_path = state["repo_path"]
@@ -359,12 +341,15 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
     """
 
     llm = ApiKeyOnlyChatModel(
-        model_name=state.get('model', DEFAULT_MODEL), 
-        base_url=state.get('base_url', DEFAULT_BASE_URL), 
-        api_key=state.get('api_key')
+        model_name=state['model'], 
+        base_url=state['base_url'], 
+        api_key=state['api_key']
     )
 
-    with open(report_path, "w", encoding="utf-8") as f:
+    # Use report_path from state if provided, otherwise use default parameter
+    actual_report_path = state.get('report_path', report_path)
+
+    with open(actual_report_path, "w", encoding="utf-8") as f:
         # Header
         f.write("# Kafka → Azure Service Bus Migration Report\n\n")
 
@@ -404,10 +389,10 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
                 f.write("*No diff content generated*\n\n")
 
 
-    print(f"✅ Streaming migration report written to {report_path}")
+    print(f"✅ Streaming migration report written to {actual_report_path}")
 
     # Update state with a final message
-    return {**state, "messages": state["messages"] + [AIMessage(content=f"Migration report generated at {report_path}.")]}
+    return {**state, "messages": state["messages"] + [AIMessage(content=f"Migration report generated at {actual_report_path}.")]}
 
 # Build workflow
 graph = StateGraph(RepoAnalysisState)
@@ -428,23 +413,7 @@ graph.add_edge("generate_report", END)
 
 app = graph.compile()
 
-# Run
-def run_analysis(question: str = "Provide a summary of the repository and its Kafka usage."):
-    initial_state: RepoAnalysisState = {
-        "repo_url": "https://github.com/srigumm/dotnetcore-kafka-integration",
-        "repo_path": "./cloned_repo",
-        "code_chunks": [],
-        "analysis": "",
-        "kafka_inventory": [],
-        "code_diffs": [],
-        "messages": [HumanMessage(content=question)],
-        "model": DEFAULT_MODEL,
-        "api_version": DEFAULT_API_VERSION,
-        "base_url": DEFAULT_BASE_URL,
-        "api_key": "",
-    }
-    result = app.invoke(initial_state)
-    print("\nAI Proxy Response:\n", result["messages"][-1].content)
+# Removed: run_analysis function (relied on fallback constants, no longer needed)
 
 # Main execution with proper argument parsing
 if __name__ == "__main__":
@@ -474,6 +443,7 @@ if __name__ == "__main__":
             result = app.invoke({
                 "repo_url": args.repo_url,
                 "repo_path": args.repo_path,
+                "report_path": report_path,
                 "code_chunks": [],
                 "analysis": "",
                 "kafka_inventory": [],

@@ -148,6 +148,7 @@ import { openaiService } from "./services/openaiService";
 import { ReportBuilder, type ExportFormat } from "./services/reportBuilder";
 import { pythonScriptService } from "./services/pythonScriptService";
 import { enhancedTechnologyDetectionService } from "./services/enhancedTechnologyDetection";
+import { analysisRegistry } from "./services/analysisRegistry";
 import { insertRepositorySchema, insertAnalysisReportSchema, insertAISettingsSchema, AuthCredentials, AnalysisRequest } from "@shared/schema";
 import { z } from "zod";
 import { randomUUID } from "crypto";
@@ -1277,7 +1278,8 @@ export async function registerRoutes(app: Application): Promise<Server> {
   // NEW: Analysis run endpoint (PYTHON SCRIPT ONLY)
   app.post("/api/analysis/run", async (req, res) => {
     try {
-      const { repositoryId } = req.body;
+      // Frontend sends analysisTypeId, backend uses analysisType
+      const { repositoryId, analysisTypeId, analysisType } = req.body;
       
       if (!repositoryId) {
         return res.status(400).json({ error: "Repository ID is required" });
@@ -1302,35 +1304,56 @@ export async function registerRoutes(app: Application): Promise<Server> {
         });
       }
 
-      // Execute Python script for migration analysis
-      broadcastLog('INFO', `Executing Python script for migration analysis: ${repository.name}`);
+      // Use analysisTypeId (from frontend) or analysisType (for backward compatibility), default to 'default'
+      const selectedAnalysisTypeId = analysisTypeId || analysisType || 'default';
+      
+      // Look up the analysis type info from registry to get the label
+      const analysisTypeInfo = await analysisRegistry.getTypeById(selectedAnalysisTypeId);
+      const analysisTypeLabel = analysisTypeInfo?.label || 'Migration Analysis';
+      
+      broadcastLog('INFO', `Executing Python script for migration analysis: ${repository.name} (type: ${selectedAnalysisTypeId}, label: ${analysisTypeLabel})`);
 
       try {
         // Fetch AI settings from storage to pass to Python script
-        let aiSettings = await storage.getAISettingsForScript();
+        const aiSettings = await storage.getAISettingsForScript();
         
-        // CRITICAL FIX: If no AI settings configured, use environment variables
+        // AI settings are REQUIRED - no fallbacks allowed
         if (!aiSettings || !aiSettings.apiKey) {
-          const epamApiKey = process.env.EPAM_AI_API_KEY;
-          if (epamApiKey) {
-            broadcastLog('INFO', 'Using EPAM AI API key from environment variable');
-            aiSettings = {
-              apiKey: epamApiKey,
-              model: 'claude-3-5-haiku@20241022', // Default EPAM model
-              apiEndpointUrl: 'https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions',
-              apiVersion: '2024-02-15-preview'
-            } as any;
-          } else {
-            broadcastLog('WARN', 'No EPAM_AI_API_KEY environment variable found');
+          broadcastLog('ERROR', 'AI settings not configured - analysis cannot proceed');
+          
+          // Create a failed report so error is displayed properly
+          try {
+            const failedReport = await storage.createAnalysisReport({
+              repositoryId: repository.id,
+              analysisType: 'migration' as any,
+              results: {
+                pythonScriptOutput: {
+                  exitCode: -1,
+                  error: 'AI settings are required to perform migration analysis. Please configure AI settings first.',
+                  stderr: 'AI settings not configured',
+                  generatedFiles: [],
+                  parsedMigrationData: null
+                }
+              }
+            });
+            await storage.updateRepositoryAnalysis(repository.id, new Date(), failedReport.id);
+          } catch (reportError) {
+            broadcastLog('ERROR', `Failed to create AI settings error report: ${reportError}`);
           }
+          
+          return res.status(400).json({
+            success: false,
+            error: 'AI settings are required to perform migration analysis. Please configure AI settings first.'
+          });
         }
         
-        // Execute Python script
+        // Execute Python script with selected analysis type
         const pythonResult = await pythonScriptService.executePostCloneScript(
           repository.localPath,
           repository.url,
           repository.id,
-          aiSettings
+          aiSettings,
+          selectedAnalysisTypeId
         );
 
         // CRITICAL FIX: Check if Python script actually succeeded
@@ -1383,7 +1406,8 @@ export async function registerRoutes(app: Application): Promise<Server> {
               repository.localPath,
               pythonResult,
               path.join(__dirname, '../scripts/default.py'),
-              storage
+              storage,
+              analysisTypeLabel // Pass analysis type label from registry lookup
             );
             broadcastLog('INFO', `Python script report created with ID: ${reportId}`);
           } catch (reportError) {
@@ -1509,6 +1533,18 @@ export async function registerRoutes(app: Application): Promise<Server> {
   });
 
   // Analysis routes
+  // Get available analysis types
+  app.get("/api/analysis/types", async (req, res) => {
+    try {
+      const types = await analysisRegistry.getAllTypes();
+      res.json({ types });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to retrieve analysis types";
+      broadcastLog('ERROR', `Failed to retrieve analysis types: ${errorMessage}`);
+      res.status(500).json({ error: errorMessage });
+    }
+  });
+
   app.post("/api/analysis/analyze", async (req, res) => {
     try {
       const analysisRequest = req.body as AnalysisRequest;
