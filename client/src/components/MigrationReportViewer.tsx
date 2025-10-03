@@ -219,9 +219,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
 
   // Get report title - use descriptive migration-specific title
   const reportTitle = "Kafka → Azure Service Bus Migration Report";
-  const reportSubtitle = reportData.analysisTypeLabel 
-    ? `${reportData.analysisTypeLabel} • Generated on ${new Date(data.createdAt).toLocaleDateString()}`
-    : `Generated on ${new Date(data.createdAt).toLocaleDateString()}`;
+  const reportSubtitle = `Generated on ${new Date(data.createdAt).toLocaleDateString()}`;
 
   return (
     <div className="space-y-6" data-testid="migration-report-viewer">
