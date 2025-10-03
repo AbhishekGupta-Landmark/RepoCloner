@@ -476,7 +476,86 @@ def main():
             "key_changes": [f"Remove {remove_pkg}", f"Add {add_pkg}"]
         })
     
-    # Output pure JSON to stdout (all logs go to stderr)
+    # Generate markdown report file with embedded JSON
+    import time
+    analysis_id = str(int(time.time() * 1000))
+    report_filename = f"migration-report-{analysis_id}.md"
+    report_path = os.path.join(root_dir, report_filename)
+    
+    with open(report_path, "w", encoding="utf-8") as f:
+        f.write("# Quick Migration Analysis Report\n\n")
+        f.write("*AI-powered Kafka to Azure Service Bus migration analysis using GPT-4*\n\n")
+        f.write(f"**Repository:** {args.repo_url}\n\n")
+        f.write(f"**Analysis Type:** Quick Migration Analysis\n\n")
+        f.write("---\n\n")
+        
+        # Summary section
+        f.write("## Summary\n\n")
+        inventory_count = len(transformed_report.get("inventory", []))
+        diffs_count = len(transformed_report.get("diffs", []))
+        f.write(f"- **Files with Kafka usage:** {inventory_count}\n")
+        f.write(f"- **Migration changes required:** {diffs_count}\n\n")
+        
+        # Manual detection results
+        if report.get("manual_kafka_files"):
+            f.write("### Manual Keyword Detection\n\n")
+            f.write("Files detected via keyword matching:\n\n")
+            for file in report["manual_kafka_files"]:
+                f.write(f"- `{file}`\n")
+            f.write("\n")
+        
+        # GPT-4 analysis results
+        if report.get("gpt4_kafka_results"):
+            f.write("### AI-Powered Analysis Results\n\n")
+            for item in report["gpt4_kafka_results"]:
+                if item.get("uses_kafka") in ["yes", "maybe"]:
+                    f.write(f"**File:** `{item.get('file', 'N/A')}`\n")
+                    f.write(f"- **Role:** {item.get('role', 'unknown')}\n")
+                    f.write(f"- **Explanation:** {item.get('explanation', 'N/A')}\n\n")
+        
+        # NuGet package changes
+        if report.get("csproj_changes"):
+            f.write("### NuGet Package Changes\n\n")
+            for change in report["csproj_changes"]:
+                f.write(f"**File:** `{change.get('file', 'N/A')}`\n")
+                f.write(f"- Remove: `{change.get('remove', 'N/A')}`\n")
+                f.write(f"- Add: `{change.get('add', 'N/A')}`\n\n")
+        
+        # Unit test impact
+        if report.get("test_file_count", 0) > 0:
+            f.write(f"### Unit Test Impact\n\n")
+            f.write(f"Found {report['test_file_count']} test files that may need updates.\n\n")
+        
+        # Infrastructure files
+        if report.get("infra_files"):
+            f.write("### Infrastructure Files\n\n")
+            for file in report["infra_files"]:
+                f.write(f"- `{file}`\n")
+            f.write("\n")
+        
+        # Configuration keys
+        if report.get("config_keys"):
+            f.write("### Configuration Keys\n\n")
+            for item in report["config_keys"]:
+                f.write(f"**File:** `{item.get('file', 'N/A')}`\n")
+                f.write(f"- Keys: {', '.join([f'`{k}`' for k in item.get('keys', [])])}\n\n")
+        
+        # Documentation references
+        if report.get("doc_files"):
+            f.write("### Documentation References\n\n")
+            for file in report["doc_files"]:
+                f.write(f"- `{file}`\n")
+            f.write("\n")
+        
+        # Embed structured JSON for UI parsing
+        f.write("---\n\n")
+        f.write("## Structured Data (JSON)\n\n")
+        f.write("```json\n")
+        f.write(json.dumps(transformed_report, indent=2))
+        f.write("\n```\n")
+    
+    print(f"✅ Quick Migration Analysis Report generated: {report_path}")
+    # Also output JSON to stdout for compatibility
     print(json.dumps(transformed_report, indent=2))
 
 if __name__ == "__main__":
