@@ -1545,26 +1545,57 @@ export async function registerRoutes(app: Application): Promise<Server> {
 
       broadcastLog('INFO', `Starting ${analysisRequest.analysisType} analysis for repository ${repository.name}`);
       
-      const analysisResult = await openaiService.analyzeRepository(
-        analysisRequest, 
-        repository.fileStructure as any || [], 
-        repoPath
-      );
+      // Get AI settings - NO fallbacks allowed
+      const aiSettings = await storage.getAISettingsForScript();
+      if (!aiSettings || !aiSettings.apiKey) {
+        broadcastLog('ERROR', 'AI settings not configured - analysis cannot proceed');
+        return res.status(400).json({
+          success: false,
+          error: 'AI settings must be configured before running analysis. Please configure AI settings in the Code Analysis panel.'
+        });
+      }
+      
+      // Get the script path for the requested analysis type
+      const analysisType = await analysisRegistry.getType(analysisRequest.analysisType);
+      if (!analysisType) {
+        return res.status(404).json({ error: `Analysis type '${analysisRequest.analysisType}' not found` });
+      }
+      
+      // Execute Python script with workingDirectory
+      const pythonResult = await pythonScriptService.executePythonScript({
+        scriptPath: analysisType.scriptPath,
+        workingDirectory: repoPath,
+        args: [
+          repository.url,
+          repoPath,
+          '--api-key', aiSettings.apiKey,
+          '--model', aiSettings.model,
+          ...(aiSettings.apiEndpointUrl ? ['--base-url', aiSettings.apiEndpointUrl] : []),
+          ...(aiSettings.apiVersion && !aiSettings.apiEndpointUrl?.includes('api-version=') ? ['--api-version', aiSettings.apiVersion] : [])
+        ]
+      });
 
-      broadcastLog('INFO', `Analysis completed successfully for repository ${repository.name} - Quality: ${analysisResult.summary.qualityScore}%, Issues: ${analysisResult.issues.length}`);
+      if (!pythonResult.success) {
+        broadcastLog('ERROR', `Python script failed: ${pythonResult.error}`);
+        return res.status(500).json({
+          success: false,
+          error: pythonResult.error || 'Analysis failed'
+        });
+      }
+
+      broadcastLog('INFO', `Analysis completed successfully for repository ${repository.name}`);
 
       // Store analysis result
       const report = await storage.createAnalysisReport({
         repositoryId: analysisRequest.repositoryId,
         analysisType: analysisRequest.analysisType,
-        results: analysisResult
+        results: pythonResult as any
       });
-
 
       res.json({
         success: true,
         report,
-        results: analysisResult
+        results: pythonResult
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Analysis failed";
