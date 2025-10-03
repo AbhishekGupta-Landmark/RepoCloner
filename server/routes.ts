@@ -1278,7 +1278,8 @@ export async function registerRoutes(app: Application): Promise<Server> {
   // NEW: Analysis run endpoint (PYTHON SCRIPT ONLY)
   app.post("/api/analysis/run", async (req, res) => {
     try {
-      const { repositoryId } = req.body;
+      // Frontend sends analysisTypeId, backend uses analysisType
+      const { repositoryId, analysisTypeId, analysisType } = req.body;
       
       if (!repositoryId) {
         return res.status(400).json({ error: "Repository ID is required" });
@@ -1303,35 +1304,30 @@ export async function registerRoutes(app: Application): Promise<Server> {
         });
       }
 
-      // Execute Python script for migration analysis
-      broadcastLog('INFO', `Executing Python script for migration analysis: ${repository.name}`);
+      // Use analysisTypeId (from frontend) or analysisType (for backward compatibility), default to 'default'
+      const selectedAnalysisType = analysisTypeId || analysisType || 'default';
+      broadcastLog('INFO', `Executing Python script for migration analysis: ${repository.name} (type: ${selectedAnalysisType})`);
 
       try {
         // Fetch AI settings from storage to pass to Python script
-        let aiSettings = await storage.getAISettingsForScript();
+        const aiSettings = await storage.getAISettingsForScript();
         
-        // CRITICAL FIX: If no AI settings configured, use environment variables
+        // AI settings are REQUIRED - no fallbacks allowed
         if (!aiSettings || !aiSettings.apiKey) {
-          const epamApiKey = process.env.EPAM_AI_API_KEY;
-          if (epamApiKey) {
-            broadcastLog('INFO', 'Using EPAM AI API key from environment variable');
-            aiSettings = {
-              apiKey: epamApiKey,
-              model: 'claude-3-5-haiku@20241022', // Default EPAM model
-              apiEndpointUrl: 'https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions',
-              apiVersion: '2024-02-15-preview'
-            } as any;
-          } else {
-            broadcastLog('WARN', 'No EPAM_AI_API_KEY environment variable found');
-          }
+          broadcastLog('ERROR', 'AI settings not configured - analysis cannot proceed');
+          return res.status(400).json({
+            success: false,
+            error: 'AI settings are required to perform migration analysis. Please configure AI settings first.'
+          });
         }
         
-        // Execute Python script
+        // Execute Python script with selected analysis type
         const pythonResult = await pythonScriptService.executePostCloneScript(
           repository.localPath,
           repository.url,
           repository.id,
-          aiSettings
+          aiSettings,
+          selectedAnalysisType
         );
 
         // CRITICAL FIX: Check if Python script actually succeeded

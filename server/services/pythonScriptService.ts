@@ -160,15 +160,29 @@ export class PythonScriptService {
   /**
    * Execute Python script after repository cloning
    */
-  async executePostCloneScript(repositoryPath: string, repositoryUrl: string, repositoryId?: string, aiSettings?: any): Promise<PythonExecutionResult> {
+  async executePostCloneScript(repositoryPath: string, repositoryUrl: string, repositoryId?: string, aiSettings?: any, analysisType: string = 'default'): Promise<PythonExecutionResult> {
     broadcastLog('INFO', `🔄 Starting Python script execution for migration analysis...`);
     broadcastLog('INFO', `Executing post-clone Python script for repository: ${repositoryUrl}`);
+    broadcastLog('INFO', `Selected analysis type: ${analysisType}`);
     
-    // First try to use the default.py script from scripts folder
-    const defaultScriptPath = path.join(process.cwd(), 'scripts', 'default.py');
+    // Use analysisRegistry to get the correct script path
+    const { analysisRegistry } = await import('./analysisRegistry');
+    const analysisTypeInfo = await analysisRegistry.getTypeById(analysisType);
     
-    if (await this.fileExists(defaultScriptPath)) {
-      broadcastLog('INFO', `Using Python script from scripts folder: ${defaultScriptPath}`);
+    if (!analysisTypeInfo) {
+      broadcastLog('ERROR', `Analysis type '${analysisType}' not found in registry`);
+      return {
+        success: false,
+        error: `Analysis type '${analysisType}' not found. Available types: default, quick-migration-1`,
+        exitCode: -1
+      };
+    }
+    
+    const scriptPath = analysisTypeInfo.scriptPath;
+    broadcastLog('INFO', `Using Python script: ${scriptPath} (${analysisTypeInfo.label})`);
+    
+    if (await this.fileExists(scriptPath)) {
+      broadcastLog('INFO', `✅ Script file exists: ${scriptPath}`);
       
       // Build command arguments including AI settings
       let scriptArgs = [repositoryUrl, repositoryPath];
@@ -196,7 +210,7 @@ export class PythonScriptService {
         
         // SECURITY: Properly mask sensitive arguments
         const maskedArgs = this.maskSensitiveArgs(scriptArgs);
-        broadcastLog('INFO', `Final script command: python ${defaultScriptPath} ${maskedArgs.join(' ')}`);
+        broadcastLog('INFO', `Final script command: python ${scriptPath} ${maskedArgs.join(' ')}`);
       } else {
         broadcastLog('ERROR', 'AI settings are required for migration analysis');
         return {
@@ -207,10 +221,10 @@ export class PythonScriptService {
       }
       
       broadcastLog('INFO', `🐍 About to execute Python script with ${scriptArgs.length} arguments`);
-      broadcastLog('INFO', `🐍 Script path: ${defaultScriptPath}`);
+      broadcastLog('INFO', `🐍 Script path: ${scriptPath}`);
       
       const result = await this.executePythonScript({
-        scriptPath: defaultScriptPath,
+        scriptPath: scriptPath,
         workingDirectory: repositoryPath,
         args: scriptArgs
       });
@@ -236,27 +250,27 @@ export class PythonScriptService {
         broadcastLog('INFO', `📁 Using default report directory: ${reportDirectory}`);
       }
       
-      // DEBUGGING: Log expected MD file path and check what files actually exist
-      const expectedMdPattern = `migration-report-*.md`;
-      broadcastLog('INFO', `🐍 Expected MD file pattern: ${expectedMdPattern}`);
-      broadcastLog('INFO', `🐍 Repository working directory: ${repositoryPath}`);
+      // Check for generated migration report files (supports both timestamped and non-timestamped)
+      broadcastLog('INFO', `🐍 Checking for migration report files in: ${repositoryPath}`);
       
-      // Check if any migration report files were actually created
+      // Check if migration report file was created
       try {
         const fs = await import('fs');
         const files = await fs.promises.readdir(repositoryPath);
-        const migrationReports = files.filter(file => file.startsWith('migration-report-') && file.endsWith('.md'));
-        broadcastLog('INFO', `🐍 Found ${migrationReports.length} migration report files: ${migrationReports.join(', ')}`);
+        const migrationReports = files.filter(file => 
+          file.startsWith('migration-report') && file.endsWith('.md')
+        );
+        
         if (migrationReports.length > 0) {
-          migrationReports.forEach(file => {
-            const fullPath = path.join(repositoryPath, file);
-            broadcastLog('INFO', `🐍 MD file found at: ${fullPath}`);
-          });
+          for (const reportFile of migrationReports) {
+            const stats = await fs.promises.stat(path.join(repositoryPath, reportFile));
+            broadcastLog('INFO', `✅ Migration report found: ${reportFile} (${stats.size} bytes)`);
+          }
         } else {
-          broadcastLog('WARN', `🐍 No migration report MD files found in ${repositoryPath}`);
+          broadcastLog('WARN', `⚠️  No migration report files found matching pattern: migration-report*.md`);
         }
       } catch (error) {
-        broadcastLog('ERROR', `🐍 Error checking for MD files: ${error}`);
+        broadcastLog('ERROR', `🐍 Error checking for migration report files: ${error}`);
       }
       
       broadcastLog('INFO', `🐍 Python script execution completed - Success: ${result.success}`);
@@ -587,7 +601,7 @@ export class PythonScriptService {
           title: structuredData.title,
           kafkaInventory: structuredData.kafka_inventory.map(item => ({
             file: item.file,
-            apis_used: item.apis_used || '',
+            apisUsed: item.apis_used || '',
             summary: item.summary || ''
           })),
           codeDiffs: structuredData.code_diffs.map(diff => ({
@@ -756,11 +770,9 @@ export class PythonScriptService {
         kafka_inventory: kafkaInventory,
         code_diffs: codeDiffs,
         sections: {},
-        notes: [],
         stats: {
           total_files_with_kafka: kafkaInventory.length,
           total_files_with_diffs: codeDiffs.length,
-          notes_count: 0,
           sections_count: Object.keys({}).length
         }
       };
