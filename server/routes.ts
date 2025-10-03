@@ -1276,20 +1276,25 @@ export async function registerRoutes(app: Application): Promise<Server> {
 
   // NEW: Analysis run endpoint (PYTHON SCRIPT ONLY)
   app.post("/api/analysis/run", async (req, res) => {
+    broadcastLog('INFO', '🚀 Analysis run endpoint called');
     try {
       const { repositoryId } = req.body;
+      broadcastLog('INFO', `🚀 Repository ID: ${repositoryId}`);
       
       if (!repositoryId) {
+        broadcastLog('ERROR', '🚀 No repository ID provided');
         return res.status(400).json({ error: "Repository ID is required" });
       }
 
       const repository = await storage.getRepository(repositoryId);
       if (!repository) {
+        broadcastLog('ERROR', `🚀 Repository not found: ${repositoryId}`);
         return res.status(404).json({ error: "Repository not found" });
       }
 
       // Check if repository is cloned
       if (repository.cloneStatus !== 'cloned') {
+        broadcastLog('ERROR', `🚀 Repository not cloned: ${repository.cloneStatus}`);
         return res.status(400).json({ 
           error: "Repository must be cloned before running analysis. Please clone the repository first." 
         });
@@ -1297,17 +1302,22 @@ export async function registerRoutes(app: Application): Promise<Server> {
 
       // Check if local path exists
       if (!repository.localPath) {
+        broadcastLog('ERROR', '🚀 Repository local path not found');
         return res.status(400).json({ 
           error: "Repository local path not found. Please re-clone the repository." 
         });
       }
 
       // Execute Python script for migration analysis
-      broadcastLog('INFO', `Executing Python script for migration analysis: ${repository.name}`);
+      broadcastLog('INFO', `🚀 Executing Python script for migration analysis: ${repository.name}`);
 
       try {
         // Fetch AI settings from storage to pass to Python script
         let aiSettings = await storage.getAISettingsForScript();
+        broadcastLog('INFO', `🚀 AI Settings loaded: ${aiSettings ? 'YES' : 'NO'}`);
+        if (aiSettings) {
+          broadcastLog('INFO', `🚀 AI Model: ${aiSettings.model}, API Key present: ${!!aiSettings.apiKey}`);
+        }
         
         // CRITICAL FIX: If no AI settings configured, use environment variables
         if (!aiSettings || !aiSettings.apiKey) {
@@ -1326,12 +1336,14 @@ export async function registerRoutes(app: Application): Promise<Server> {
         }
         
         // Execute Python script
+        broadcastLog('INFO', '🚀 About to call pythonScriptService.executePostCloneScript');
         const pythonResult = await pythonScriptService.executePostCloneScript(
           repository.localPath,
           repository.url,
           repository.id,
           aiSettings
         );
+        broadcastLog('INFO', `🚀 Python script completed. Success: ${pythonResult.success}`);
 
         // CRITICAL FIX: Check if Python script actually succeeded
         if (!pythonResult.success) {
