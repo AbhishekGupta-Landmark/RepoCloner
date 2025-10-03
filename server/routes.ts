@@ -1305,8 +1305,13 @@ export async function registerRoutes(app: Application): Promise<Server> {
       }
 
       // Use analysisTypeId (from frontend) or analysisType (for backward compatibility), default to 'default'
-      const selectedAnalysisType = analysisTypeId || analysisType || 'default';
-      broadcastLog('INFO', `Executing Python script for migration analysis: ${repository.name} (type: ${selectedAnalysisType})`);
+      const selectedAnalysisTypeId = analysisTypeId || analysisType || 'default';
+      
+      // Look up the analysis type info from registry to get the label
+      const analysisTypeInfo = await analysisRegistry.getTypeById(selectedAnalysisTypeId);
+      const analysisTypeLabel = analysisTypeInfo?.label || 'Migration Analysis';
+      
+      broadcastLog('INFO', `Executing Python script for migration analysis: ${repository.name} (type: ${selectedAnalysisTypeId}, label: ${analysisTypeLabel})`);
 
       try {
         // Fetch AI settings from storage to pass to Python script
@@ -1327,7 +1332,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
           repository.url,
           repository.id,
           aiSettings,
-          selectedAnalysisType
+          selectedAnalysisTypeId
         );
 
         // CRITICAL FIX: Check if Python script actually succeeded
@@ -1381,7 +1386,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
               pythonResult,
               path.join(__dirname, '../scripts/default.py'),
               storage,
-              selectedAnalysisType.label // Pass analysis type label
+              analysisTypeLabel // Pass analysis type label from registry lookup
             );
             broadcastLog('INFO', `Python script report created with ID: ${reportId}`);
           } catch (reportError) {
