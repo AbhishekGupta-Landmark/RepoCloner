@@ -223,7 +223,7 @@ export default function MainPage() {
                   className="bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 shadow-md hover:shadow-lg transition-all duration-200 font-medium border border-blue-500/20 focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 focus:ring-offset-background"
                 >
                   <Zap className="mr-2 h-4 w-4" />
-                  Sign In
+                  Git Connection Preferences
                 </Button>
               </motion.div>
             ) : (
