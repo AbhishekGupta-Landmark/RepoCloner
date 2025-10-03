@@ -23,7 +23,7 @@ def parse_args():
     
     # AI configuration - NO fallbacks, must be provided explicitly
     parser.add_argument('--model', required=True, help='AI model to use')
-    parser.add_argument('--api-version', default='2024-02-15-preview', help='API version')
+    parser.add_argument('--api-version', help='API version (optional)')
     parser.add_argument('--base-url', required=True, help='API endpoint URL')
     parser.add_argument('--api-key', required=True, help='AI API key (required)')
     return parser.parse_args()
