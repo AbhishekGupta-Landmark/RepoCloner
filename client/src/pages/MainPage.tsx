@@ -251,7 +251,7 @@ export default function MainPage() {
                         transition={{ type: "spring", stiffness: 400, damping: 10 }}
                       />
                       <span 
-                        className="text-sm font-medium" 
+                        className="text-sm font-medium text-foreground" 
                         data-testid="text-username"
                       >
                         {user?.username}
