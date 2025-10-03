@@ -359,14 +359,12 @@ def main():
             from urllib.parse import urlparse, parse_qs
             parsed = urlparse(base_url)
             base_url = f"{parsed.scheme}://{parsed.netloc}"
-            print(f"Extracted base URL: {base_url}", file=sys.stderr)
             
             # Extract api-version from URL if not provided as CLI arg
             if not api_version and parsed.query:
                 query_params = parse_qs(parsed.query)
                 if 'api-version' in query_params:
                     api_version = query_params['api-version'][0]
-                    print(f"Extracted api-version from URL: {api_version}", file=sys.stderr)
         
         client = AzureOpenAI(
             api_key=args.api_key,
