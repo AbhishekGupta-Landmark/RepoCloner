@@ -148,6 +148,7 @@ import { openaiService } from "./services/openaiService";
 import { ReportBuilder, type ExportFormat } from "./services/reportBuilder";
 import { pythonScriptService } from "./services/pythonScriptService";
 import { enhancedTechnologyDetectionService } from "./services/enhancedTechnologyDetection";
+import { analysisRegistry } from "./services/analysisRegistry";
 import { insertRepositorySchema, insertAnalysisReportSchema, insertAISettingsSchema, AuthCredentials, AnalysisRequest } from "@shared/schema";
 import { z } from "zod";
 import { randomUUID } from "crypto";
@@ -1306,26 +1307,19 @@ export async function registerRoutes(app: Application): Promise<Server> {
       broadcastLog('INFO', `Executing Python script for migration analysis: ${repository.name}`);
 
       try {
-        // Fetch AI settings from storage to pass to Python script
-        let aiSettings = await storage.getAISettingsForScript();
+        // Fetch AI settings from storage - NO fallbacks allowed
+        const aiSettings = await storage.getAISettingsForScript();
         
-        // CRITICAL FIX: If no AI settings configured, use environment variables
+        // Validate AI settings are configured
         if (!aiSettings || !aiSettings.apiKey) {
-          const epamApiKey = process.env.EPAM_AI_API_KEY;
-          if (epamApiKey) {
-            broadcastLog('INFO', 'Using EPAM AI API key from environment variable');
-            aiSettings = {
-              apiKey: epamApiKey,
-              model: 'claude-3-5-haiku@20241022', // Default EPAM model
-              apiEndpointUrl: 'https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions',
-              apiVersion: '2024-02-15-preview'
-            } as any;
-          } else {
-            broadcastLog('WARN', 'No EPAM_AI_API_KEY environment variable found');
-          }
+          broadcastLog('ERROR', 'AI settings not configured - analysis cannot proceed');
+          return res.status(400).json({
+            success: false,
+            error: 'AI settings must be configured before running analysis. Please configure AI settings in the Code Analysis panel.'
+          });
         }
         
-        // Execute Python script
+        // Execute Python script (default.py from main branch)
         const pythonResult = await pythonScriptService.executePostCloneScript(
           repository.localPath,
           repository.url,
@@ -1371,24 +1365,34 @@ export async function registerRoutes(app: Application): Promise<Server> {
           });
         }
 
-        // Create Python script report if migration-report.md was generated
+        // Create analysis report from JSON output (parsedMigrationData already set in executePostCloneScript)
         let reportId: string | undefined = undefined;
-        if (pythonResult.generatedFiles && pythonResult.generatedFiles.length > 0) {
-          broadcastLog('INFO', "Creating Python script report...");
+        const parsedData = (pythonResult as any).parsedMigrationData;
+        
+        if (parsedData) {
+          broadcastLog('INFO', "Creating migration analysis report...");
           
           try {
-            reportId = await pythonScriptService.createPythonScriptReport(
-              repository.id,
-              repository.url,
-              repository.localPath,
-              pythonResult,
-              path.join(__dirname, '../scripts/default.py'),
-              storage
-            );
-            broadcastLog('INFO', `Python script report created with ID: ${reportId}`);
+            const report = await storage.createAnalysisReport({
+              repositoryId: repository.id,
+              analysisType: 'migration' as any,
+              results: {
+                pythonScriptOutput: {
+                  success: pythonResult.success,
+                  output: pythonResult.output,
+                  exitCode: pythonResult.exitCode,
+                  error: pythonResult.error,
+                  parsedMigrationData: parsedData
+                }
+              }
+            });
+            reportId = report.id;
+            broadcastLog('INFO', `Migration analysis report created with ID: ${reportId}, has data: ${!!parsedData}`);
           } catch (reportError) {
-            broadcastLog('WARN', `Failed to create Python script report: ${reportError}`);
+            broadcastLog('WARN', `Failed to create migration analysis report: ${reportError}`);
           }
+        } else {
+          broadcastLog('ERROR', 'Python script succeeded but parsedMigrationData is missing!');
         }
 
         // Update repository with analysis timestamp and report ID
@@ -1509,6 +1513,18 @@ export async function registerRoutes(app: Application): Promise<Server> {
   });
 
   // Analysis routes
+  // Get available analysis types
+  app.get("/api/analysis/types", async (req, res) => {
+    try {
+      const types = await analysisRegistry.getAllTypes();
+      res.json({ types });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to retrieve analysis types";
+      broadcastLog('ERROR', `Failed to retrieve analysis types: ${errorMessage}`);
+      res.status(500).json({ error: errorMessage });
+    }
+  });
+
   app.post("/api/analysis/analyze", async (req, res) => {
     try {
       const analysisRequest = req.body as AnalysisRequest;
@@ -1579,8 +1595,15 @@ export async function registerRoutes(app: Application): Promise<Server> {
     try {
       const reports = await storage.getAnalysisReportsByRepository(req.params.repositoryId);
       
+      // Get repository directly to access localPath
+      const repository = await storage.getRepository(req.params.repositoryId);
+      broadcastLog('DEBUG', `Repository lookup for ${req.params.repositoryId}: ${repository ? 'FOUND' : 'NOT FOUND'}`);
+      if (repository) {
+        broadcastLog('DEBUG', `Repository localPath: ${repository.localPath || 'NOT SET'}`);
+      }
+      
       // Also check for generated migration reports in the repository directory
-      const repoPath = await storage.getRepositoryPath(req.params.repositoryId);
+      const repoPath = repository?.localPath || await storage.getRepositoryPath(req.params.repositoryId);
       const generatedReports: any[] = [];
       
       if (repoPath) {
@@ -1588,9 +1611,21 @@ export async function registerRoutes(app: Application): Promise<Server> {
           const fs = await import('fs');
           const path = await import('path');
           
-          // Look for migration report files
+          broadcastLog('INFO', `📂 Scanning for reports in: ${repoPath}`);
+          
+          // Look for migration report files (both with and without timestamp)
           const files = await fs.promises.readdir(repoPath);
-          const migrationReports = files.filter(file => file.startsWith('migration-report-') && file.endsWith('.md'));
+          broadcastLog('INFO', `📂 Found ${files.length} files in directory`);
+          broadcastLog('DEBUG', `📂 Files: ${files.join(', ')}`);
+          
+          const migrationReports = files.filter(file => 
+            (file === 'migration-report.md' || file.startsWith('migration-report-')) && file.endsWith('.md')
+          );
+          
+          broadcastLog('INFO', `📂 Filtered migration reports: ${migrationReports.length} files`);
+          if (migrationReports.length > 0) {
+            broadcastLog('INFO', `📂 Migration report files: ${migrationReports.join(', ')}`);
+          }
           
           for (const reportFile of migrationReports) {
             const filePath = path.join(repoPath, reportFile);
@@ -1602,10 +1637,13 @@ export async function registerRoutes(app: Application): Promise<Server> {
               createdAt: stats.birthtime,
               size: stats.size
             });
+            broadcastLog('INFO', `✅ Added report to list: ${reportFile} (${stats.size} bytes)`);
           }
         } catch (error) {
-          // Silent fail - if we can't read directory, just return database reports
+          broadcastLog('ERROR', `❌ Error reading reports directory: ${error}`);
         }
+      } else {
+        broadcastLog('WARN', `⚠️  No repository path found for repositoryId: ${req.params.repositoryId}`);
       }
       
       res.json({ 
@@ -1718,7 +1756,11 @@ export async function registerRoutes(app: Application): Promise<Server> {
             
             // Check if it's a failed report
             const pythonOutput = (latestReport.results as any)?.pythonScriptOutput;
-            if (pythonOutput?.error || pythonOutput?.exitCode !== 0 || !pythonOutput?.parsedMigrationData) {
+            const hasParsedData = !!pythonOutput?.parsedMigrationData;
+            
+            broadcastLog('INFO', `Report has parsedMigrationData: ${hasParsedData}`);
+            
+            if (pythonOutput?.error || pythonOutput?.exitCode !== 0 || !hasParsedData) {
               const errorMessage = pythonOutput?.error || 'Analysis failed to generate migration data';
               
               res.json({ 
