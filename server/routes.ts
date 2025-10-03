@@ -1320,6 +1320,27 @@ export async function registerRoutes(app: Application): Promise<Server> {
         // AI settings are REQUIRED - no fallbacks allowed
         if (!aiSettings || !aiSettings.apiKey) {
           broadcastLog('ERROR', 'AI settings not configured - analysis cannot proceed');
+          
+          // Create a failed report so error is displayed properly
+          try {
+            const failedReport = await storage.createAnalysisReport({
+              repositoryId: repository.id,
+              analysisType: 'migration' as any,
+              results: {
+                pythonScriptOutput: {
+                  exitCode: -1,
+                  error: 'AI settings are required to perform migration analysis. Please configure AI settings first.',
+                  stderr: 'AI settings not configured',
+                  generatedFiles: [],
+                  parsedMigrationData: null
+                }
+              }
+            });
+            await storage.updateRepositoryAnalysis(repository.id, new Date(), failedReport.id);
+          } catch (reportError) {
+            broadcastLog('ERROR', `Failed to create AI settings error report: ${reportError}`);
+          }
+          
           return res.status(400).json({
             success: false,
             error: 'AI settings are required to perform migration analysis. Please configure AI settings first.'
