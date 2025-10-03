@@ -217,10 +217,11 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
     });
   }
 
-  // Get report title - prefer analysisTypeLabel over title
-  const reportTitle = reportData.analysisTypeLabel 
-    ? `${reportData.analysisTypeLabel} Report`
-    : reportData.title || 'Migration Analysis Report';
+  // Get report title - use descriptive migration-specific title
+  const reportTitle = "Kafka → Azure Service Bus Migration Report";
+  const reportSubtitle = reportData.analysisTypeLabel 
+    ? `${reportData.analysisTypeLabel} • Generated on ${new Date(data.createdAt).toLocaleDateString()}`
+    : `Generated on ${new Date(data.createdAt).toLocaleDateString()}`;
 
   return (
     <div className="space-y-6" data-testid="migration-report-viewer">
@@ -233,7 +234,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
               {reportTitle}
             </CardTitle>
             <CardDescription>
-              Generated on {new Date(data.createdAt).toLocaleDateString()}
+              {reportSubtitle}
             </CardDescription>
           </div>
         </CardHeader>
