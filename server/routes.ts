@@ -148,6 +148,7 @@ import { openaiService } from "./services/openaiService";
 import { ReportBuilder, type ExportFormat } from "./services/reportBuilder";
 import { pythonScriptService } from "./services/pythonScriptService";
 import { enhancedTechnologyDetectionService } from "./services/enhancedTechnologyDetection";
+import { analysisRegistry } from "./services/analysisRegistry";
 import { insertRepositorySchema, insertAnalysisReportSchema, insertAISettingsSchema, AuthCredentials, AnalysisRequest } from "@shared/schema";
 import { z } from "zod";
 import { randomUUID } from "crypto";
