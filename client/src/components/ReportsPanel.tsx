@@ -27,6 +27,19 @@ export default function ReportsPanel() {
   // Helper function to get report title and description based on analysis type
   const getReportInfo = (analysisType: string, results?: any) => {
     switch (analysisType) {
+      case 'migration':
+        // Use analysisTypeLabel from results if available
+        const analysisLabel = results?.pythonScriptOutput?.analysisTypeLabel;
+        if (analysisLabel) {
+          return {
+            title: `${analysisLabel} Report`,
+            description: 'Kafka to Azure Service Bus migration analysis'
+          };
+        }
+        return {
+          title: 'Migration Analysis Report',
+          description: 'Kafka to Azure Service Bus migration analysis'
+        };
       case 'python-script':
         // Extract filename from generated files
         if (results?.pythonScriptOutput?.generatedFiles?.length > 0) {

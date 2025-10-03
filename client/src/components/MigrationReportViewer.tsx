@@ -32,7 +32,9 @@ interface MigrationReportData {
   kafka_inventory: KafkaUsageItem[];
   code_diffs: CodeDiff[];
   sections: Record<string, any>;
+  key_changes?: string[];
   notes?: string[];
+  analysisTypeLabel?: string;
   stats: {
     total_files_with_kafka: number;
     total_files_with_diffs: number;
@@ -180,6 +182,24 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
 
   const reportData: MigrationReportData = data.structuredData;
 
+  // Extract all key changes from report level and code diffs
+  const allKeyChanges: string[] = [];
+  if (reportData.key_changes) {
+    allKeyChanges.push(...reportData.key_changes);
+  }
+  
+  // Also extract key_changes from individual code diffs
+  if (reportData.code_diffs && Array.isArray(reportData.code_diffs)) {
+    reportData.code_diffs.forEach(diff => {
+      if (diff.key_changes) {
+        allKeyChanges.push(...diff.key_changes);
+      }
+    });
+  }
+  
+  // Remove duplicates
+  const uniqueKeyChanges = Array.from(new Set(allKeyChanges));
+  
   // Extract all notes from code diffs and report level
   const allNotes: string[] = [];
   
@@ -197,6 +217,11 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
     });
   }
 
+  // Get report title - prefer analysisTypeLabel over title
+  const reportTitle = reportData.analysisTypeLabel 
+    ? `${reportData.analysisTypeLabel} Report`
+    : reportData.title || 'Migration Analysis Report';
+
   return (
     <div className="space-y-6" data-testid="migration-report-viewer">
       {/* Header */}
@@ -205,7 +230,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
           <div>
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              {reportData.title || 'Migration Analysis Report'}
+              {reportTitle}
             </CardTitle>
             <CardDescription>
               Generated on {new Date(data.createdAt).toLocaleDateString()}
@@ -235,6 +260,45 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
           </div>
         </CardContent>
       </Card>
+
+      {/* Key Changes Section */}
+      {uniqueKeyChanges.length > 0 && (
+        <Collapsible defaultOpen={true}>
+          <Card className="border-yellow-200 dark:border-yellow-800" data-testid="section-key-changes">
+            <CardHeader>
+              <CollapsibleTrigger asChild>
+                <div className="flex items-center justify-between cursor-pointer">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
+                      <CheckCircle className="h-5 w-5" />
+                      Key Changes
+                      <Badge variant="secondary" className="ml-2">{uniqueKeyChanges.length}</Badge>
+                    </CardTitle>
+                    <CardDescription>
+                      Critical modifications required for Kafka to Azure Service Bus migration
+                    </CardDescription>
+                  </div>
+                  <ChevronDown className="h-5 w-5 text-yellow-600 dark:text-yellow-400 transition-transform" />
+                </div>
+              </CollapsibleTrigger>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent>
+                <div className="space-y-3">
+                  {uniqueKeyChanges.map((change, index) => (
+                    <div key={index} className="flex items-start gap-3 p-3 bg-yellow-50 dark:bg-yellow-950/30 rounded-lg border border-yellow-200 dark:border-yellow-800" data-testid={`text-key-change-${index}`}>
+                      <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2 flex-shrink-0"></div>
+                      <p className="text-sm text-yellow-800 dark:text-yellow-200 leading-relaxed">
+                        {change}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+      )}
 
       {/* Notes Section */}
       {allNotes.length > 0 && (
