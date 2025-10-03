@@ -14,7 +14,6 @@ export function useAnalysis() {
   const analysisMutation = useMutation({
     mutationKey: ['analysis'],
     mutationFn: async ({ repositoryId, analysisTypeId }: { repositoryId: string; analysisTypeId?: string }) => {
-      console.log('🔍 Frontend sending analysis request:', { repositoryId, analysisTypeId });
       const response = await apiRequest('POST', '/api/analysis/run', { 
         repositoryId,
         analysisTypeId 
@@ -59,7 +58,7 @@ export function useAnalysis() {
     },
     onError: async (error: any, variables: { repositoryId: string; analysisTypeId?: string }) => {
       const { repositoryId } = variables;
-      // Immediate cache update for failed analysis
+      // Immediate cache update for failed analysis - this will trigger the main screen error display
       queryClient.setQueryData(['structured-report', repositoryId], {
         status: 'failed',
         error: error.message || "Analysis failed",
@@ -77,11 +76,7 @@ export function useAnalysis() {
       
       queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
       
-      toast({
-        title: "Migration Analysis Failed",
-        description: error.message || "Failed to run migration analysis",
-        variant: "destructive"
-      });
+      // Error is displayed on main screen - no toast needed
     }
   });
 
