@@ -643,7 +643,84 @@ export class PythonScriptService {
       const titleMatch = reportContent.match(/^#\s+(.+)$/m);
       const title = titleMatch ? titleMatch[1] : 'Kafka to Azure Service Bus Migration Analysis';
 
-      // Extract Kafka inventory from markdown table
+      // CRITICAL: Try to extract JSON block first (for default2.py reports)
+      const jsonBlockMatch = reportContent.match(/```json\s*\n([\s\S]*?)\n```/);
+      
+      if (jsonBlockMatch) {
+        // Parse JSON structure from default2.py
+        try {
+          const jsonData = JSON.parse(jsonBlockMatch[1]);
+          broadcastLog('INFO', `📦 Found JSON block in report - parsing default2.py format`);
+          
+          // Map inventory array to kafka_inventory
+          const kafkaInventory = (jsonData.inventory || []).map((item: any) => ({
+            file: item.file,
+            apis_used: Array.isArray(item.kafka_apis) ? item.kafka_apis.join(', ') : item.kafka_apis,
+            summary: item.summary || ''
+          }));
+          
+          // Map diffs array to code_diffs
+          const codeDiffs = (jsonData.diffs || []).map((item: any) => ({
+            file: item.file,
+            diff_content: item.diff || '',
+            description: item.description || '',
+            key_changes: item.key_changes || [],
+            language: this.inferLanguageFromFile(item.file),
+            hunks: this.parseDiffHunks(item.diff || ''),
+            stats: this.calculateDiffStats(item.diff || '')
+          }));
+          
+          // Parse markdown sections for AI results and package changes
+          const sections: any = {};
+          
+          // Extract AI-Powered Analysis Results section
+          const aiSectionMatch = reportContent.match(/###\s*AI-Powered Analysis Results\s*\n([\s\S]*?)(?=###|##|```json|$)/i);
+          if (aiSectionMatch && aiSectionMatch[1].trim()) {
+            sections.ai_powered = {
+              title: 'AI-Powered Analysis Results',
+              content: aiSectionMatch[1].trim()
+            };
+          }
+          
+          // Extract NuGet Package Changes section
+          const packageSectionMatch = reportContent.match(/###\s*NuGet Package Changes\s*\n([\s\S]*?)(?=###|##|```json|$)/i);
+          if (packageSectionMatch && packageSectionMatch[1].trim()) {
+            sections.package_changes = {
+              title: 'NuGet Package Changes',
+              content: packageSectionMatch[1].trim()
+            };
+          }
+          
+          // Extract Manual Keyword Detection section
+          const manualSectionMatch = reportContent.match(/###\s*Manual Keyword Detection\s*\n([\s\S]*?)(?=###|##|```json|$)/i);
+          if (manualSectionMatch && manualSectionMatch[1].trim()) {
+            sections.manual_detection = {
+              title: 'Manual Keyword Detection',
+              content: manualSectionMatch[1].trim()
+            };
+          }
+          
+          const structuredData: MigrationReportData = {
+            title,
+            kafka_inventory: kafkaInventory,
+            code_diffs: codeDiffs,
+            sections,
+            stats: {
+              total_files_with_kafka: kafkaInventory.length,
+              total_files_with_diffs: codeDiffs.length,
+              sections_count: Object.keys(sections).length
+            }
+          };
+          
+          broadcastLog('INFO', `✅ Parsed JSON format: ${kafkaInventory.length} inventory items, ${codeDiffs.length} diffs, ${Object.keys(sections).length} sections`);
+          return structuredData;
+        } catch (jsonError) {
+          broadcastLog('WARN', `Failed to parse JSON block, falling back to markdown parsing: ${jsonError}`);
+          // Fall through to markdown parsing
+        }
+      }
+
+      // FALLBACK: Extract Kafka inventory from markdown table (for default.py reports)
       const kafkaInventory: any[] = [];
       
       // Find the Kafka Usage Inventory section
@@ -999,7 +1076,8 @@ export class PythonScriptService {
     repositoryPath: string,
     pythonResult: PythonExecutionResult,
     scriptPath: string,
-    storage: any
+    storage: any,
+    analysisTypeLabel?: string
   ): Promise<string | undefined> {
     try {
       broadcastLog('INFO', `📊 Processing Python script results for structured report...`);
@@ -1032,6 +1110,11 @@ export class PythonScriptService {
         // Set the parsed data directly on the pythonResult object (this is where the API expects it)
         (pythonResult as any).parsedMigrationData = parsedMigrationData;
         
+        // Add analysis type label to parsed data for display
+        if (analysisTypeLabel) {
+          parsedMigrationData.analysisTypeLabel = analysisTypeLabel;
+        }
+        
         broadcastLog('INFO', `✅ Successfully parsed migration data: ${parsedMigrationData.code_diffs?.length || 0} diffs, ${parsedMigrationData.kafka_inventory?.length || 0} files with Kafka`);
         
         // Create analysis report in database and return its ID
@@ -1041,7 +1124,8 @@ export class PythonScriptService {
           results: {
             pythonScriptOutput: {
               ...pythonResult,
-              parsedMigrationData
+              parsedMigrationData,
+              analysisTypeLabel: analysisTypeLabel || 'Migration Analysis' // Store label for retrieval
             }
           }
         });

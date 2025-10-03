@@ -1381,7 +1381,8 @@ export async function registerRoutes(app: Application): Promise<Server> {
               repository.localPath,
               pythonResult,
               path.join(__dirname, '../scripts/default.py'),
-              storage
+              storage,
+              selectedAnalysisType.label // Pass analysis type label
             );
             broadcastLog('INFO', `Python script report created with ID: ${reportId}`);
           } catch (reportError) {
