@@ -177,7 +177,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
               <Bar 
                 dataKey="Test Cases Found" 
                 fill="#10b981" 
-                onClick={(data: any) => handleBarClick(data.fullPath)}
+                onClick={(data: any) => handleBarClick(data?.payload?.fullPath)}
                 cursor="pointer"
               >
                 {chartData.map((entry: any, index: number) => (
@@ -190,7 +190,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
               <Bar 
                 dataKey="New Test Cases Added" 
                 fill="#a855f7"
-                onClick={(data: any) => handleBarClick(data.fullPath)}
+                onClick={(data: any) => handleBarClick(data?.payload?.fullPath)}
                 cursor="pointer"
               >
                 {chartData.map((entry: any, index: number) => (
