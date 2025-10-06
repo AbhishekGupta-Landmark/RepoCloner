@@ -513,7 +513,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                 dataKey="Test Cases Found" 
                 fill="hsl(162,73%,55%)"
                 radius={[6, 6, 0, 0]}
-                barSize={20}
+                barSize={40}
                 activeBar={{ fill: 'hsl(162,73%,65%)', stroke: 'hsl(162,73%,75%)', strokeWidth: 2 }}
               >
                 {chartData.map((entry: any, index: number) => (
@@ -527,7 +527,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                 dataKey="New Test Cases Added" 
                 fill="hsl(199,98%,57%)"
                 radius={[6, 6, 0, 0]}
-                barSize={20}
+                barSize={40}
                 activeBar={{ fill: 'hsl(199,98%,67%)', stroke: 'hsl(199,98%,77%)', strokeWidth: 2 }}
               >
                 {chartData.map((entry: any, index: number) => (
