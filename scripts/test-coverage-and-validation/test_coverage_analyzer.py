@@ -82,8 +82,13 @@ def analyze_and_generate_tests(source_path: str, test_path: Optional[str], api_k
         f"Source file:\n{source_code}\n\n"
         f"Test file:\n{test_code}\n"
         "\n---\n"
+        "CRITICAL: Your response must be ONLY valid JSON - nothing else!\n"
+        "- NO markdown code blocks (no ```json or ```)\n"
+        "- NO explanatory text before or after\n"
+        "- NO comments\n"
+        "- ONLY the raw JSON object\n\n"
         "Count the existing test cases and newly generated test cases. "
-        "Respond ONLY with valid JSON in this exact format:\n"
+        "Return this exact JSON structure:\n"
         "{\n"
         '  "testCasesFound": <number>,\n'
         '  "newTestCasesAdded": <number>,\n'
@@ -93,68 +98,67 @@ def analyze_and_generate_tests(source_path: str, test_path: Optional[str], api_k
         '  "keyImprovements": "<key improvements made>",\n'
         '  "note": "<any important notes>",\n'
         '  "testCaseCategories": "<categories of test cases generated>"\n'
-        "}\n"
-        "IMPORTANT: Do NOT use generic names like 'UnitTest1'. Create proper test class names based on the source file.\n"
-        "Do NOT include markdown formatting, only pure JSON."
+        "}\n\n"
+        "IMPORTANT: Do NOT use generic names like 'UnitTest1'. Create proper test class names based on the source file."
     )
     
     messages = [{"role": "user", "content": prompt}]
     response = call_llm(messages, api_key, base_url)
     
-    # Parse JSON response using robust extraction with validation
+    # Parse JSON response - simple but robust
     import json
-    import re
     
-    def is_valid_test_result(obj):
-        """Check if JSON object has required test coverage fields"""
-        return (
-            isinstance(obj, dict) and
-            'testCasesFound' in obj and
-            'newTestCasesAdded' in obj and
-            'generatedTestCode' in obj
-        )
+    def is_valid_result(obj):
+        """Verify JSON has required fields"""
+        return (isinstance(obj, dict) and 
+                'testCasesFound' in obj and 
+                'newTestCasesAdded' in obj and 
+                'generatedTestCode' in obj)
     
     result = None
     
-    # Strategy 1: Try to find valid JSON in markdown code blocks
-    code_blocks = re.findall(r'```(?:json)?\s*(\{[^`]+\})\s*```', response, re.DOTALL)
-    for block in code_blocks:
-        try:
-            candidate = json.loads(block.strip())
-            if is_valid_test_result(candidate):
-                result = candidate
-                break  # Found valid result!
-        except json.JSONDecodeError:
-            continue
+    # Strategy 1: Direct deserialization (AI should return pure JSON)
+    try:
+        candidate = json.loads(response.strip())
+        if is_valid_result(candidate):
+            result = candidate
+    except json.JSONDecodeError:
+        pass
     
-    # Strategy 2: Use JSONDecoder to find valid JSON object in response
+    # Strategy 2: Strip markdown code blocks if present
+    if not result and '```' in response:
+        start_idx = response.find('```')
+        end_idx = response.rfind('```')
+        
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            content = response[start_idx + 3:end_idx]
+            
+            # Remove 'json' language identifier
+            if content.strip().startswith('json'):
+                content = content.strip()[4:]
+            
+            try:
+                candidate = json.loads(content.strip())
+                if is_valid_result(candidate):
+                    result = candidate
+            except json.JSONDecodeError:
+                pass
+    
+    # Strategy 3: Scan for JSON object in response (handles prose before/after)
     if not result:
         decoder = json.JSONDecoder()
         idx = 0
         while idx < len(response):
-            response_substr = response[idx:].lstrip()
-            if not response_substr or not response_substr.startswith('{'):
-                idx += 1
-                continue
             try:
-                candidate, end_idx = decoder.raw_decode(response_substr)
-                if is_valid_test_result(candidate):
+                candidate, end_idx = decoder.raw_decode(response[idx:])
+                if is_valid_result(candidate):
                     result = candidate
-                    break  # Found valid result!
-                else:
-                    # Keep searching after this object
-                    idx += len(response_substr) - len(response_substr.lstrip()) + end_idx
+                    break
+                idx += end_idx
             except json.JSONDecodeError:
                 idx += 1
-    
-    # Strategy 3: Try parsing entire response as JSON
-    if not result:
-        try:
-            candidate = json.loads(response.strip())
-            if is_valid_test_result(candidate):
-                result = candidate
-        except json.JSONDecodeError:
-            pass
+                if idx >= len(response):
+                    break
     
     # If we got a valid result, process it
     if result:
