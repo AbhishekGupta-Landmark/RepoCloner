@@ -58,11 +58,14 @@ interface SourceCodeDialogData {
 interface ParsedTestData {
   aiAnalysis: string;
   codeBlock: string;
-  summary: string;
+  sections: Array<{
+    title: string;
+    content: string;
+  }>;
 }
 
 function parseGeneratedTests(text: string): ParsedTestData {
-  if (!text) return { aiAnalysis: '', codeBlock: '', summary: '' };
+  if (!text) return { aiAnalysis: '', codeBlock: '', sections: [] };
   
   const codeStartPatterns = [
     /^using System/m,
@@ -84,18 +87,63 @@ function parseGeneratedTests(text: string): ParsedTestData {
     }
   }
   
-  const summaryMatch = restOfText.match(/###\s*\*\*Summary\*\*/i);
-  let codeBlock = '';
-  let summary = '';
+  // Extract sections after code block
+  const sectionHeaders = [
+    'Summary',
+    'Recommendations for improving the original code',
+    'Summary Report',
+    'Key improvements',
+    'Note',
+    'Key Test Case Categories'
+  ];
   
-  if (summaryMatch && summaryMatch.index) {
-    codeBlock = restOfText.substring(0, summaryMatch.index).trim();
-    summary = restOfText.substring(summaryMatch.index).trim();
-  } else {
-    codeBlock = restOfText.trim();
+  let codeBlock = restOfText;
+  const sections: Array<{ title: string; content: string }> = [];
+  
+  // Find all section matches
+  const sectionMatches: Array<{ title: string; index: number }> = [];
+  
+  for (const header of sectionHeaders) {
+    const regex = new RegExp(`###?\\s*\\*\\*${header}.*?\\*\\*`, 'i');
+    const match = restOfText.match(regex);
+    if (match && match.index !== undefined) {
+      sectionMatches.push({ title: header, index: match.index });
+    }
   }
   
-  return { aiAnalysis, codeBlock, summary };
+  // Sort by index to process in order
+  sectionMatches.sort((a, b) => a.index - b.index);
+  
+  if (sectionMatches.length > 0) {
+    // Code block ends where first section starts
+    codeBlock = restOfText.substring(0, sectionMatches[0].index).trim();
+    
+    // Extract each section's content
+    for (let i = 0; i < sectionMatches.length; i++) {
+      const currentSection = sectionMatches[i];
+      const nextSection = sectionMatches[i + 1];
+      
+      const startIndex = currentSection.index;
+      const endIndex = nextSection ? nextSection.index : restOfText.length;
+      
+      let content = restOfText.substring(startIndex, endIndex).trim();
+      
+      // Remove the header line from content
+      const lines = content.split('\n');
+      if (lines.length > 0) {
+        content = lines.slice(1).join('\n').trim();
+      }
+      
+      if (content) {
+        sections.push({
+          title: currentSection.title,
+          content
+        });
+      }
+    }
+  }
+  
+  return { aiAnalysis, codeBlock, sections };
 }
 
 function generateMockSourceCode(filePath: string): string {
@@ -385,7 +433,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
       {data.fileReports?.[0]?.generatedTests && (() => {
         const firstReport = data.fileReports[0];
         const parsed = parseGeneratedTests(firstReport.generatedTests);
-        return parsed.aiAnalysis || parsed.summary ? (
+        return parsed.aiAnalysis || parsed.sections.length > 0 ? (
           <Card className="border-2 border-[hsl(43,96%,56%)]/40 bg-gradient-to-br from-[hsl(43,96%,56%)]/15 via-[hsl(43,96%,56%)]/10 to-[hsl(43,96%,56%)]/5 overflow-hidden relative shadow-xl">
             <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-[hsl(43,96%,56%)]/20 to-transparent rounded-full blur-3xl"></div>
             <CardHeader className="relative">
@@ -406,11 +454,12 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                     <p className="text-base leading-relaxed whitespace-pre-wrap text-[hsl(0,0%,95%)]">{parsed.aiAnalysis}</p>
                   </div>
                 )}
-                {parsed.summary && (
-                  <div className="p-4 bg-[hsl(222,47%,8%)]/60 backdrop-blur rounded-lg border border-[hsl(43,96%,56%)]/30">
-                    <div className="text-base leading-relaxed whitespace-pre-wrap text-[hsl(0,0%,95%)]">{parsed.summary}</div>
+                {parsed.sections.map((section, idx) => (
+                  <div key={idx} className="p-4 bg-[hsl(222,47%,8%)]/60 backdrop-blur rounded-lg border border-[hsl(43,96%,56%)]/30">
+                    <h4 className="text-sm font-semibold text-[hsl(43,96%,56%)] mb-2">{section.title}</h4>
+                    <div className="text-base leading-relaxed whitespace-pre-wrap text-[hsl(0,0%,95%)]">{section.content}</div>
                   </div>
-                )}
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -466,6 +515,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                 dataKey="Test Cases Found" 
                 fill="hsl(162,73%,55%)"
                 radius={[6, 6, 0, 0]}
+                activeBar={{ fill: 'hsl(162,73%,65%)', stroke: 'hsl(162,73%,75%)', strokeWidth: 2 }}
               >
                 {chartData.map((entry: any, index: number) => (
                   <Cell 
@@ -478,6 +528,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                 dataKey="New Test Cases Added" 
                 fill="hsl(199,98%,57%)"
                 radius={[6, 6, 0, 0]}
+                activeBar={{ fill: 'hsl(199,98%,67%)', stroke: 'hsl(199,98%,77%)', strokeWidth: 2 }}
               >
                 {chartData.map((entry: any, index: number) => (
                   <Cell 
@@ -617,34 +668,24 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                   </Badge>
                 </DialogDescription>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsFullscreen(!isFullscreen)}
-                  className="text-[hsl(210,40%,98%)] hover:bg-[hsl(222,47%,15%)]"
-                >
-                  {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setDialogData(null)}
-                  className="text-[hsl(210,40%,98%)] hover:bg-[hsl(222,47%,15%)]"
-                >
-                  <X className="h-5 w-5" />
-                </Button>
-              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="text-[hsl(210,40%,98%)] hover:bg-[hsl(222,47%,15%)]"
+              >
+                {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+              </Button>
             </div>
           </DialogHeader>
           <Separator className="my-4 bg-[hsl(222,47%,20%)]" />
-          <ScrollArea className={`flex-1 ${isFullscreen ? 'px-6 pb-6' : '-mr-4 pr-4'}`}>
+          <div className={`flex-1 overflow-hidden ${isFullscreen ? 'px-6 pb-6' : 'px-6 pb-6'}`}>
             {dialogData?.tests && (() => {
               const parsed = parseGeneratedTests(dialogData.tests);
               return (
-                <div className="space-y-4">
+                <div className="space-y-4 h-full flex flex-col">
                   {parsed.aiAnalysis && (
-                    <Card className="bg-[hsl(199,98%,57%)]/10 border-[hsl(199,98%,57%)]/30">
+                    <Card className="bg-[hsl(199,98%,57%)]/10 border-[hsl(199,98%,57%)]/30 flex-shrink-0">
                       <CardHeader className="pb-3">
                         <CardTitle className="text-sm flex items-center gap-2 text-[hsl(210,40%,98%)]">
                           <Sparkles className="h-4 w-4 text-[hsl(199,98%,57%)]" />
@@ -658,7 +699,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                   )}
                   
                   {parsed.codeBlock && (
-                    <div className="relative rounded-lg overflow-hidden border-2 border-[hsl(162,73%,44%)]/50 bg-[hsl(222,47%,6%)]">
+                    <div className="relative rounded-lg overflow-hidden border-2 border-[hsl(162,73%,44%)]/50 bg-[hsl(222,47%,6%)] flex-shrink-0">
                       <div className="bg-[hsl(222,47%,10%)] px-4 py-2 border-b border-[hsl(222,47%,20%)] flex items-center gap-2">
                         <div className="flex gap-1.5">
                           <div className="w-3 h-3 rounded-full bg-red-500"></div>
@@ -667,31 +708,38 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                         </div>
                         <span className="text-xs text-[hsl(215,20%,65%)] ml-2 font-mono">{dialogData.testFile}</span>
                       </div>
-                      <ScrollArea className={isFullscreen ? "h-[calc(100vh-400px)]" : "max-h-96"}>
+                      <div className={`${isFullscreen ? "h-[calc(100vh-500px)]" : "h-96"} overflow-y-auto scrollbar-visible`} style={{ 
+                        scrollbarWidth: 'thin',
+                        scrollbarColor: 'hsl(199,98%,57%) hsl(222,47%,12%)'
+                      }}>
                         <pre className="p-4 text-sm leading-relaxed">
                           <code className="text-[hsl(210,40%,98%)] font-mono">{parsed.codeBlock}</code>
                         </pre>
-                      </ScrollArea>
+                      </div>
                     </div>
                   )}
 
-                  {parsed.summary && (
-                    <Card className="border-2 border-[hsl(43,96%,56%)]/50 bg-gradient-to-br from-[hsl(43,96%,56%)]/20 via-[hsl(43,96%,56%)]/15 to-[hsl(43,96%,56%)]/10 shadow-lg">
-                      <CardHeader className="pb-3 bg-[hsl(43,96%,56%)]/10 border-b border-[hsl(43,96%,56%)]/30">
-                        <CardTitle className="text-base flex items-center gap-2 text-[hsl(0,0%,100%)] font-semibold">
-                          <Sparkles className="h-5 w-5 text-[hsl(43,96%,56%)]" />
-                          Summary
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="pt-4">
-                        <div className="text-sm leading-relaxed whitespace-pre-wrap text-[hsl(0,0%,95%)] font-medium">{parsed.summary}</div>
-                      </CardContent>
-                    </Card>
+                  {parsed.sections.length > 0 && (
+                    <div className="space-y-3 flex-shrink-0">
+                      {parsed.sections.map((section, idx) => (
+                        <Card key={idx} className="border-2 border-[hsl(43,96%,56%)]/50 bg-gradient-to-br from-[hsl(43,96%,56%)]/20 via-[hsl(43,96%,56%)]/15 to-[hsl(43,96%,56%)]/10 shadow-lg">
+                          <CardHeader className="pb-3 bg-[hsl(43,96%,56%)]/10 border-b border-[hsl(43,96%,56%)]/30">
+                            <CardTitle className="text-base flex items-center gap-2 text-[hsl(0,0%,100%)] font-semibold">
+                              <Sparkles className="h-5 w-5 text-[hsl(43,96%,56%)]" />
+                              {section.title}
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="pt-4">
+                            <div className="text-sm leading-relaxed whitespace-pre-wrap text-[hsl(0,0%,95%)] font-medium">{section.content}</div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
                   )}
                 </div>
               );
             })()}
-          </ScrollArea>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -725,24 +773,14 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                   )}
                 </DialogDescription>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsFullscreen(!isFullscreen)}
-                  className="text-[hsl(210,40%,98%)] hover:bg-[hsl(222,47%,15%)]"
-                >
-                  {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSourceDialogData(null)}
-                  className="text-[hsl(210,40%,98%)] hover:bg-[hsl(222,47%,15%)]"
-                >
-                  <X className="h-5 w-5" />
-                </Button>
-              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="text-[hsl(210,40%,98%)] hover:bg-[hsl(222,47%,15%)]"
+              >
+                {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+              </Button>
             </div>
           </DialogHeader>
           <Separator className="my-4 bg-[hsl(222,47%,20%)]" />
@@ -878,7 +916,7 @@ function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage
                 }`}
                 style={{ 
                   width: '60px',
-                  color: line.status !== 'uncovered' ? 'hsl(210,40%,98%)' : 'hsl(215,20%,45%)'
+                  color: line.status !== 'uncovered' ? 'hsl(210,40%,98%)' : 'hsl(0,70%,50%)'
                 }}
               >
                 {line.lineNumber}
