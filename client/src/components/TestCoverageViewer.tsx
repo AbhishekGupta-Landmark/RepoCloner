@@ -26,7 +26,7 @@ import {
   X
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
-import type { TestCoverageReportData } from "@/shared/schema";
+import type { TestCoverageReportData } from "@shared/schema";
 
 interface TestCoverageViewerProps {
   report: {
@@ -161,10 +161,11 @@ function generateMockCoverageData(sourceCode: string, type: 'old' | 'new'): Arra
     } else {
       const isOldCovered = lineNumber % 3 !== 0;
       const isNewCovered = lineNumber % 2 === 0;
+      const status: 'uncovered' | 'covered-old' | 'covered-new' = isNewCovered ? 'covered-new' : isOldCovered ? 'covered-old' : 'uncovered';
       return { 
         lineNumber, 
         content, 
-        status: (isNewCovered ? 'covered-new' : isOldCovered ? 'covered-old' : 'uncovered') as const 
+        status 
       };
     }
   });
