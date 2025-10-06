@@ -10,6 +10,12 @@ An interactive web-based application that allows users to clone Git repositories
 - C#-compatible backend architecture with extensible provider pattern
 
 ## Recent Changes
+- 2025-10-06: **JSON-BASED TEST COVERAGE + CHART/COVERAGE FIXES** - Commit 2bf16db
+  - **JSON Output**: Python AI now returns pure structured JSON instead of markdown (no more parsing issues!)
+  - **Coverage Calculation Fixed**: Changed from wrong formula `(newTests/totalTests)*100` to weighted average of file percentages
+  - **Chart Improvements**: Removed white bars (filtered 0-value files), reduced height 600→400px, fixed tooltip colors
+  - **Backend Updates**: Updated to read `.json` files, direct JSON parsing (no parseTestCoverageReport needed)
+  - **AI Sections**: Summary, Recommendations, Key Improvements, etc. now properly extracted from JSON
 - 2025-10-06: **TEST COVERAGE AND VALIDATION FEATURE** - Added comprehensive test analysis capability
   - **New Analysis Type**: "Initial Test Coverage and Validation" with dedicated tab in UI
   - **Python Scripts**: Created test_coverage_analyzer.py and test_report_stats.py in scripts/test-coverage-and-validation/
