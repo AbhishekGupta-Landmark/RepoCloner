@@ -28,10 +28,32 @@ export default function TestCoveragePanel() {
       if (!currentRepository) throw new Error("No repository selected");
       
       setIsAnalyzing(true);
-      const response = await apiRequest('POST', '/api/analysis/test-coverage', {
-        repositoryId: currentRepository.id
-      });
-      return response;
+      
+      try {
+        const response = await apiRequest('POST', '/api/analysis/test-coverage', {
+          repositoryId: currentRepository.id
+        });
+        const data = await response.json();
+        
+        // Check if the response indicates failure
+        if (!data.success && data.error) {
+          throw new Error(data.error);
+        }
+        
+        return data;
+      } catch (error: any) {
+        setIsAnalyzing(false);
+        // Extract error message from different error formats
+        if (error.message?.includes('500:') || error.message?.includes('400:')) {
+          try {
+            const errorJson = JSON.parse(error.message.split(': ')[1]);
+            throw new Error(errorJson.error || errorJson.message || 'Test coverage analysis failed');
+          } catch {
+            throw new Error(error.message.split(': ').slice(1).join(': ') || 'Test coverage analysis failed');
+          }
+        }
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports', currentRepository?.id] });
@@ -109,12 +131,28 @@ export default function TestCoveragePanel() {
           </div>
 
           {runAnalysisMutation.isError && (
-            <Card className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800" data-testid="alert-analysis-error">
-              <CardContent className="p-4 flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-red-800 dark:text-red-200">
+            <Card className="border-red-200 dark:border-red-800" data-testid="alert-analysis-error">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                  <AlertCircle className="h-5 w-5" />
+                  Test Coverage Analysis Failed
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm mb-4 text-red-600 dark:text-red-400">
                   {runAnalysisMutation.error?.message || 'Test coverage analysis failed'}
                 </p>
+                <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-md">
+                  <p className="text-sm text-red-700 dark:text-red-300 mb-2">
+                    <strong>Common solutions:</strong>
+                  </p>
+                  <ul className="list-disc list-inside text-sm space-y-1 text-red-600 dark:text-red-400">
+                    <li>Check AI settings and ensure API credentials are configured</li>
+                    <li>If using EPAM AI API, verify VPN connection is active</li>
+                    <li>Ensure the repository contains C# source files</li>
+                    <li>Check network connectivity and try again</li>
+                  </ul>
+                </div>
               </CardContent>
             </Card>
           )}
