@@ -177,12 +177,12 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
               <Bar 
                 dataKey="Test Cases Found" 
                 fill="#10b981" 
-                onClick={(data) => handleBarClick(data.fullPath)}
+                onClick={(data: any) => handleBarClick(data.fullPath)}
                 cursor="pointer"
               >
                 {chartData.map((entry: any, index: number) => (
                   <Cell 
-                    key={`cell-${index}`}
+                    key={`cell-found-${index}`}
                     fill={selectedFile === entry.fullPath ? '#059669' : '#10b981'}
                   />
                 ))}
@@ -190,12 +190,12 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
               <Bar 
                 dataKey="New Test Cases Added" 
                 fill="#a855f7"
-                onClick={(data) => handleBarClick(data.fullPath)}
+                onClick={(data: any) => handleBarClick(data.fullPath)}
                 cursor="pointer"
               >
                 {chartData.map((entry: any, index: number) => (
                   <Cell 
-                    key={`cell-${index}`}
+                    key={`cell-new-${index}`}
                     fill={selectedFile === entry.fullPath ? '#7e22ce' : '#a855f7'}
                   />
                 ))}
