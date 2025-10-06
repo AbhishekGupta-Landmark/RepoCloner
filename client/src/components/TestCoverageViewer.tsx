@@ -973,30 +973,32 @@ function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage
             {coverageData.map((line) => (
               <div 
                 key={line.lineNumber} 
-                className={`px-2 py-1 text-right text-xs font-mono border-l-4 ${
+                className={`px-2 text-right text-sm font-mono border-l-4 ${
                   line.status === 'covered-old' ? 'border-l-[hsl(162,73%,44%)] bg-[hsl(162,73%,44%)]/50 text-[hsl(162,73%,85%)]' :
                   line.status === 'covered-new' ? 'border-l-[hsl(199,98%,57%)] bg-[hsl(199,98%,57%)]/50 text-[hsl(199,98%,85%)]' :
                   'border-l-transparent text-[hsl(215,20%,65%)]'
                 }`}
                 style={{ 
-                  width: '60px'
+                  width: '60px',
+                  lineHeight: '1.75rem'
                 }}
               >
                 {line.lineNumber}
               </div>
             ))}
           </div>
-          <div className="flex-1 p-4">
-            <pre className="text-sm leading-relaxed">
+          <div className="flex-1">
+            <pre className="text-sm" style={{ lineHeight: '1.75rem' }}>
               {coverageData.map((line) => (
                 <div 
                   key={line.lineNumber}
-                  className={`${
+                  className={`px-4 ${
                     line.status === 'covered-old' ? 'bg-[hsl(162,73%,44%)]/50' :
                     line.status === 'covered-new' ? 'bg-[hsl(199,98%,57%)]/50' :
                     line.status === 'uncovered' && line.content.trim() ? 'bg-[hsl(0,70%,50%)]/40' :
                     ''
                   }`}
+                  style={{ lineHeight: '1.75rem' }}
                 >
                   <code className="text-[hsl(210,40%,98%)] font-mono">{line.content}</code>
                 </div>
