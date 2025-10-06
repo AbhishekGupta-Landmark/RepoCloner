@@ -13,7 +13,7 @@ export default function TestCoveragePanel() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Fetch latest test coverage report
-  const { data: reports, isLoading: reportsLoading, isFetching: reportsFetching } = useQuery<any>({
+  const { data: reports, isLoading: reportsLoading } = useQuery<any>({
     queryKey: ['/api/analysis/reports', currentRepository?.id],
     enabled: !!currentRepository?.id,
   });
