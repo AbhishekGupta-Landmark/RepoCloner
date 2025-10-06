@@ -679,13 +679,16 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
             </div>
           </DialogHeader>
           <Separator className="my-4 bg-[hsl(222,47%,20%)]" />
-          <div className={`flex-1 overflow-hidden ${isFullscreen ? 'px-6 pb-6' : 'px-6 pb-6'}`}>
+          <div className={`flex-1 ${isFullscreen ? 'max-h-[calc(100vh-200px)]' : 'max-h-[calc(85vh-200px)]'} overflow-y-scroll scrollbar-visible px-6 pb-6`} style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'hsl(199,98%,57%) hsl(222,47%,12%)'
+          }}>
             {dialogData && (() => {
               const parsed = parseGeneratedTests(dialogData.tests);
               const hasAnalysis = dialogData.summary || dialogData.recommendations || dialogData.keyImprovements || dialogData.note || dialogData.testCaseCategories;
               
               return (
-                <div className="space-y-4 h-full flex flex-col">
+                <div className="space-y-4">
                   {/* Show actual AI Analysis from data - Summary, Recommendations, Key Improvements ABOVE code */}
                   {hasAnalysis && (dialogData.summary || dialogData.recommendations || dialogData.keyImprovements) && (
                     <div className="space-y-3 flex-shrink-0">
@@ -759,7 +762,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                         </div>
                         <span className="text-xs text-[hsl(215,20%,65%)] ml-2 font-mono">{dialogData.testFile}</span>
                       </div>
-                      <div className={`${isFullscreen ? "h-[calc(100vh-500px)]" : "h-96"} overflow-y-scroll scrollbar-visible`} style={{
+                      <div className={`${isFullscreen ? "h-[500px]" : "h-80"} overflow-y-scroll scrollbar-visible`} style={{
                         scrollbarWidth: 'thin',
                         scrollbarColor: 'hsl(199,98%,57%) hsl(222,47%,12%)'
                       }}>
