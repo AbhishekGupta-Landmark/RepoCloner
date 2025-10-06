@@ -970,44 +970,34 @@ function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage
         </div>
       </div>
       <ScrollArea className={`border-x border-b border-[hsl(222,47%,20%)] bg-[hsl(222,47%,6%)] ${isFullscreen ? 'max-h-[80vh]' : 'max-h-[60vh]'} scrollbar-visible`}>
-        <div className="flex">
-          <div className="flex-shrink-0 bg-[hsl(222,47%,8%)] border-r border-[hsl(222,47%,20%)]">
-            {coverageData.map((line) => (
-              <div 
-                key={line.lineNumber} 
-                className={`px-2 text-right text-sm font-mono border-l-4 ${
-                  line.status === 'covered-old' ? 'border-l-[hsl(162,73%,44%)] bg-[hsl(162,73%,44%)]/50 text-[hsl(162,73%,85%)]' :
-                  line.status === 'covered-new' ? 'border-l-[hsl(199,98%,57%)] bg-[hsl(199,98%,57%)]/50 text-[hsl(199,98%,85%)]' :
-                  'border-l-transparent text-[hsl(215,20%,65%)]'
-                }`}
-                style={{ 
-                  width: '60px',
-                  lineHeight: '1.75rem'
-                }}
-              >
-                {line.lineNumber}
-              </div>
-            ))}
-          </div>
-          <div className="flex-1">
-            <pre className="text-sm" style={{ lineHeight: '1.75rem' }}>
-              {coverageData.map((line) => (
-                <div 
-                  key={line.lineNumber}
-                  className={`px-4 ${
-                    line.status === 'covered-old' ? 'bg-[hsl(162,73%,44%)]/50' :
-                    line.status === 'covered-new' ? 'bg-[hsl(199,98%,57%)]/50' :
-                    line.status === 'uncovered' && line.content.trim() ? 'bg-[hsl(0,70%,50%)]/40' :
-                    ''
-                  }`}
-                  style={{ lineHeight: '1.75rem' }}
-                >
-                  <code className="text-[hsl(210,40%,98%)] font-mono">{line.content}</code>
-                </div>
-              ))}
+        {coverageData.map((line) => (
+          <div 
+            key={line.lineNumber}
+            className={`flex border-l-4 ${
+              line.status === 'covered-old' ? 'border-l-[hsl(162,73%,44%)] bg-[hsl(162,73%,44%)]/50' :
+              line.status === 'covered-new' ? 'border-l-[hsl(199,98%,57%)] bg-[hsl(199,98%,57%)]/50' :
+              line.status === 'uncovered' && line.content.trim() ? 'border-l-transparent bg-[hsl(0,70%,50%)]/40' :
+              'border-l-transparent'
+            }`}
+          >
+            <div 
+              className={`flex-shrink-0 px-2 text-right text-sm font-mono bg-[hsl(222,47%,8%)] border-r border-[hsl(222,47%,20%)] ${
+                line.status === 'covered-old' ? 'text-[hsl(162,73%,85%)]' :
+                line.status === 'covered-new' ? 'text-[hsl(199,98%,85%)]' :
+                'text-[hsl(215,20%,65%)]'
+              }`}
+              style={{ 
+                width: '60px',
+                lineHeight: '1.75rem'
+              }}
+            >
+              {line.lineNumber}
+            </div>
+            <pre className="flex-1 px-4 m-0 text-sm font-mono text-[hsl(210,40%,98%)]" style={{ lineHeight: '1.75rem' }}>
+              {line.content}
             </pre>
           </div>
-        </div>
+        ))}
       </ScrollArea>
     </div>
   );
