@@ -461,7 +461,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
         </CardContent>
       </Card>
 
-      <Card className="overflow-hidden border-[hsl(222,47%,18%)] bg-[hsl(222,47%,10%)]">
+      <Card className="overflow-hidden border-[hsl(222,47%,18%)] bg-[hsl(222,47%,10%)] max-w-4xl">
         <CardHeader className="bg-gradient-to-r from-[hsl(222,47%,12%)] to-[hsl(250,47%,12%)] border-b border-[hsl(222,47%,18%)]">
           <CardTitle className="flex items-center gap-2 text-[hsl(210,40%,98%)]">
             <BarChart3 className="h-5 w-5 text-[hsl(199,98%,57%)]" />
