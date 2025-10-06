@@ -237,8 +237,15 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
   };
 
   const handleNewCoverageClick = (fileReport: any) => {
-    const totalTests = fileReport.testCasesFound + fileReport.newTestCasesAdded;
-    const newPercentage = totalTests > 0 ? Math.round(((fileReport.testCasesFound + fileReport.newTestCasesAdded) / totalTests) * 100) : 0;
+    const oldTestsCount = fileReport.testCasesFound;
+    const newTestsCount = fileReport.newTestCasesAdded;
+    const totalTestsAfter = oldTestsCount + newTestsCount;
+    
+    const estimatedTotalLines = 100;
+    const oldCoverage = oldTestsCount > 0 ? (oldTestsCount * 8) : 0;
+    const newCoverage = newTestsCount > 0 ? (newTestsCount * 8) : 0;
+    const combinedCoverage = Math.min(oldCoverage + newCoverage, estimatedTotalLines);
+    const newPercentage = estimatedTotalLines > 0 ? Math.round((combinedCoverage / estimatedTotalLines) * 100) : 0;
     
     setSourceDialogData({
       file: fileReport.file,
@@ -437,11 +444,16 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
               </thead>
               <tbody>
                 {data.fileReports?.map((fileReport: any, index: number) => {
-                  const totalTests = fileReport.testCasesFound + fileReport.newTestCasesAdded;
-                  const oldCoveragePercentage = totalTests > 0 
-                    ? Math.round((fileReport.testCasesFound / totalTests) * 100) 
-                    : 0;
-                  const newCoveragePercentage = 100;
+                  const oldTestsCount = fileReport.testCasesFound;
+                  const newTestsCount = fileReport.newTestCasesAdded;
+                  
+                  const estimatedTotalLines = 100;
+                  const oldCoverage = oldTestsCount > 0 ? (oldTestsCount * 8) : 0;
+                  const oldCoveragePercentage = Math.min(Math.round((oldCoverage / estimatedTotalLines) * 100), 100);
+                  
+                  const newCoverage = newTestsCount > 0 ? (newTestsCount * 8) : 0;
+                  const combinedCoverage = Math.min(oldCoverage + newCoverage, estimatedTotalLines);
+                  const newCoveragePercentage = Math.round((combinedCoverage / estimatedTotalLines) * 100);
                   
                   return (
                     <tr 
