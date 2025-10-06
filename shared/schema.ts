@@ -117,6 +117,27 @@ export interface MigrationReportData {
   };
 }
 
+// Test Coverage report structured data types
+export interface TestCoverageFileReport {
+  file: string;
+  testFile: string;
+  testCasesFound: number;
+  newTestCasesAdded: number;
+  generatedTests: string;
+  summary?: string;
+}
+
+export interface TestCoverageReportData {
+  title: string;
+  repositoryUrl: string;
+  generatedAt: string;
+  totalFilesAnalyzed: number;
+  totalOriginalTestCases: number;
+  totalNewTestCasesAdded: number;
+  totalTestCasesAfterImprovements: number;
+  fileReports: TestCoverageFileReport[];
+}
+
 // Insert schemas
 export const insertRepositorySchema = createInsertSchema(repositories).omit({
   id: true,

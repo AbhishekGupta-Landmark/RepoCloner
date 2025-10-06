@@ -129,6 +129,105 @@ function switchActiveAccount(req: Express['request'], accountId: string): boolea
   return true;
 }
 
+// Parse test coverage report from markdown
+async function parseTestCoverageReport(content: string, repoUrl: string) {
+  const lines = content.split('\n');
+  const fileReports: any[] = [];
+  
+  let currentFile = '';
+  let currentTestFile = '';
+  let currentTests = '';
+  let inCodeBlock = false;
+  let testCasesFound = 0;
+  let newTestCasesAdded = 0;
+  
+  // Extract summary stats
+  let totalFilesAnalyzed = 0;
+  let totalOriginalTestCases = 0;
+  let totalNewTestCasesAdded = 0;
+  let totalTestCasesAfterImprovements = 0;
+  let generatedAt = '';
+  
+  for (const line of lines) {
+    // Extract summary stats
+    const filesMatch = line.match(/\*\*Total Files Analyzed:\*\*\s+(\d+)/);
+    const originalMatch = line.match(/\*\*Total Original Test Cases:\*\*\s+(\d+)/);
+    const newMatch = line.match(/\*\*Total New Test Cases Added:\*\*\s+(\d+)/);
+    const totalMatch = line.match(/\*\*Total Test Cases After Improvements:\*\*\s+(\d+)/);
+    const dateMatch = line.match(/\*\*Generated:\*\*\s+(.+)/);
+    
+    if (filesMatch) totalFilesAnalyzed = parseInt(filesMatch[1]);
+    if (originalMatch) totalOriginalTestCases = parseInt(originalMatch[1]);
+    if (newMatch) totalNewTestCasesAdded = parseInt(newMatch[1]);
+    if (totalMatch) totalTestCasesAfterImprovements = parseInt(totalMatch[1]);
+    if (dateMatch) generatedAt = dateMatch[1];
+    
+    // Extract file-level data
+    if (line.startsWith('## ') && !line.includes('Summary')) {
+      // Save previous file if exists
+      if (currentFile) {
+        fileReports.push({
+          file: currentFile,
+          testFile: currentTestFile,
+          testCasesFound,
+          newTestCasesAdded,
+          generatedTests: currentTests
+        });
+      }
+      
+      currentFile = line.substring(3).trim();
+      currentTests = '';
+      testCasesFound = 0;
+      newTestCasesAdded = 0;
+      inCodeBlock = false;
+    }
+    
+    if (line.startsWith('**Test file:**')) {
+      currentTestFile = line.replace('**Test file:**', '').trim();
+    }
+    
+    const foundMatch = line.match(/\*\*Test Cases Found\*\*:\s+(\d+)/);
+    const addedMatch = line.match(/\*\*New Test Cases Added\*\*:\s+(\d+)/);
+    
+    if (foundMatch) testCasesFound = parseInt(foundMatch[1]);
+    if (addedMatch) newTestCasesAdded = parseInt(addedMatch[1]);
+    
+    if (line.includes('```csharp')) {
+      inCodeBlock = true;
+      continue;
+    }
+    if (line.includes('```') && inCodeBlock) {
+      inCodeBlock = false;
+      continue;
+    }
+    if (inCodeBlock) {
+      currentTests += line + '\n';
+    }
+  }
+  
+  // Save last file
+  if (currentFile) {
+    fileReports.push({
+      file: currentFile,
+      testFile: currentTestFile,
+      testCasesFound,
+      newTestCasesAdded,
+      generatedTests: currentTests
+    });
+  }
+  
+  return {
+    title: 'AI Test Coverage Report',
+    repositoryUrl: repoUrl,
+    generatedAt,
+    totalFilesAnalyzed,
+    totalOriginalTestCases,
+    totalNewTestCasesAdded,
+    totalTestCasesAfterImprovements,
+    fileReports
+  };
+}
+
 function accountToPublic(account: OAuthAccount): OAuthAccountPublic {
   return {
     id: account.id,
@@ -1520,6 +1619,143 @@ export async function registerRoutes(app: Application): Promise<Server> {
     } catch (error) {
       console.error('Error fetching repository technologies:', error);
       res.status(500).json({ error: "Failed to fetch repository technologies" });
+    }
+  });
+
+  // Test Coverage Analysis endpoint
+  app.post("/api/analysis/test-coverage", async (req, res) => {
+    try {
+      const { repositoryId } = req.body;
+      
+      if (!repositoryId) {
+        return res.status(400).json({ error: "Repository ID is required" });
+      }
+
+      const repository = await storage.getRepository(repositoryId);
+      if (!repository) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+
+      // Check if repository is cloned
+      if (repository.cloneStatus !== 'cloned') {
+        return res.status(400).json({ 
+          error: "Repository must be cloned before running test coverage analysis." 
+        });
+      }
+
+      if (!repository.localPath) {
+        return res.status(400).json({ 
+          error: "Repository local path not found. Please re-clone the repository." 
+        });
+      }
+
+      broadcastLog('INFO', `Executing test coverage analysis for repository: ${repository.name}`);
+
+      try {
+        // Fetch AI settings
+        const aiSettings = await storage.getAISettingsForScript();
+        
+        if (!aiSettings || !aiSettings.apiKey) {
+          broadcastLog('ERROR', 'AI settings not configured - test coverage analysis cannot proceed');
+          return res.status(400).json({
+            success: false,
+            error: 'AI settings are required to perform test coverage analysis. Please configure AI settings first.'
+          });
+        }
+        
+        // Execute test coverage Python script
+        const { execSync } = await import('child_process');
+        const scriptPath = path.join(__dirname, '../scripts/test-coverage-and-validation/test_coverage_analyzer.py');
+        
+        const command = `python3 "${scriptPath}" --repo-path "${repository.localPath}" --repo-url "${repository.url}" --api-key "${aiSettings.apiKey}" --base-url "${aiSettings.apiEndpointUrl}"`;
+        
+        broadcastLog('INFO', `Running test coverage analyzer: ${scriptPath}`);
+        
+        let stdout = '';
+        let stderr = '';
+        let exitCode = 0;
+        
+        try {
+          stdout = execSync(command, {
+            encoding: 'utf-8',
+            timeout: 600000, // 10 minutes
+            cwd: repository.localPath,
+            env: { ...process.env }
+          });
+          broadcastLog('INFO', 'Test coverage analysis completed successfully');
+        } catch (error: any) {
+          exitCode = error.status || -1;
+          stderr = error.stderr?.toString() || error.message;
+          stdout = error.stdout?.toString() || '';
+          broadcastLog('ERROR', `Test coverage analysis failed: ${stderr}`);
+          
+          return res.status(500).json({
+            success: false,
+            error: stderr || 'Test coverage analysis failed',
+            exitCode
+          });
+        }
+        
+        // Find generated test coverage report
+        const fs = await import('fs');
+        const files = await fs.promises.readdir(repository.localPath);
+        const testCoverageReports = files.filter(file => file.startsWith('test-coverage-report-') && file.endsWith('.md'));
+        
+        if (testCoverageReports.length === 0) {
+          broadcastLog('WARN', 'No test coverage report generated');
+          return res.status(500).json({
+            success: false,
+            error: 'No test coverage report was generated'
+          });
+        }
+        
+        const reportFile = testCoverageReports[testCoverageReports.length - 1]; // Get the latest
+        const reportPath = path.join(repository.localPath, reportFile);
+        
+        broadcastLog('INFO', `Test coverage report generated: ${reportFile}`);
+        
+        // Store test coverage report in database
+        const reportContent = await fs.promises.readFile(reportPath, 'utf-8');
+        const parsedData = await parseTestCoverageReport(reportContent, repository.url);
+        
+        const report = await storage.createAnalysisReport({
+          repositoryId: repository.id,
+          analysisType: 'test-coverage',
+          results: {
+            testCoverageOutput: {
+              exitCode: 0,
+              stdout,
+              stderr,
+              reportFile,
+              parsedData
+            }
+          },
+          structuredData: parsedData
+        });
+        
+        await storage.updateRepositoryAnalysis(repository.id, new Date(), report.id);
+        
+        res.json({
+          success: true,
+          reportId: report.id,
+          reportFile,
+          data: parsedData
+        });
+        
+      } catch (error: any) {
+        const errorMessage = error.message || 'Test coverage analysis failed';
+        broadcastLog('ERROR', `Test coverage analysis error: ${errorMessage}`);
+        
+        res.status(500).json({
+          success: false,
+          error: errorMessage
+        });
+      }
+      
+    } catch (error: any) {
+      const errorMessage = error.message || 'Test coverage analysis failed';
+      broadcastLog('ERROR', `Test coverage analysis error: ${errorMessage}`);
+      res.status(500).json({ error: errorMessage });
     }
   });
 
