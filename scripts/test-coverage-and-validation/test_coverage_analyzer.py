@@ -10,6 +10,14 @@ import argparse
 import requests
 from typing import List, Dict, Optional
 
+# Fix Windows console encoding for emoji support
+if sys.platform == 'win32':
+    import codecs
+    if sys.stdout.encoding != 'utf-8':
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+    if sys.stderr.encoding != 'utf-8':
+        sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+
 
 def find_cs_files(root: str) -> List[str]:
     """Find all C# source files excluding test files"""
