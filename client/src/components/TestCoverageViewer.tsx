@@ -52,6 +52,7 @@ interface SourceCodeDialogData {
   type: 'source' | 'old-coverage' | 'new-coverage';
   testFile?: string;
   coveragePercentage?: number;
+  oldCoveragePercentage?: number;
 }
 
 interface ParsedTestData {
@@ -145,7 +146,7 @@ namespace Api
 }`;
 }
 
-function generateMockCoverageData(sourceCode: string, type: 'old' | 'new', coveragePercentage: number): Array<{lineNumber: number, content: string, status: 'uncovered' | 'covered-old' | 'covered-new'}> {
+function generateMockCoverageData(sourceCode: string, type: 'old' | 'new', oldCoveragePercent: number, newCoveragePercent?: number): Array<{lineNumber: number, content: string, status: 'uncovered' | 'covered-old' | 'covered-new'}> {
   const lines = sourceCode.split('\n');
   const coverableLines: number[] = [];
   
@@ -157,34 +158,44 @@ function generateMockCoverageData(sourceCode: string, type: 'old' | 'new', cover
     }
   });
   
-  const numLinesToCover = Math.floor((coverableLines.length * coveragePercentage) / 100);
-  const coveredLineNumbers = new Set(coverableLines.slice(0, numLinesToCover));
-  
-  return lines.map((content, index) => {
-    const lineNumber = index + 1;
-    const isCoverable = coverableLines.includes(lineNumber);
+  if (type === 'old') {
+    const numLinesToCoverOld = Math.floor((coverableLines.length * oldCoveragePercent) / 100);
+    const coveredByOld = new Set(coverableLines.slice(0, numLinesToCoverOld));
     
-    if (!isCoverable) {
-      return { lineNumber, content, status: 'uncovered' as const };
-    }
-    
-    if (type === 'old') {
+    return lines.map((content, index) => {
+      const lineNumber = index + 1;
+      if (!coverableLines.includes(lineNumber)) {
+        return { lineNumber, content, status: 'uncovered' as const };
+      }
       return { 
         lineNumber, 
         content, 
-        status: coveredLineNumbers.has(lineNumber) ? 'covered-old' as const : 'uncovered' as const 
+        status: coveredByOld.has(lineNumber) ? 'covered-old' as const : 'uncovered' as const 
       };
-    } else {
-      const isOldCovered = coveredLineNumbers.has(lineNumber);
-      const isNewCovered = !isOldCovered && lineNumber % 2 === 0 && lineNumber > Math.max(...Array.from(coveredLineNumbers), 0);
-      const status: 'uncovered' | 'covered-old' | 'covered-new' = isNewCovered ? 'covered-new' : isOldCovered ? 'covered-old' : 'uncovered';
-      return { 
-        lineNumber, 
-        content, 
-        status 
-      };
-    }
-  });
+    });
+  } else {
+    const combinedCoverage = newCoveragePercent || oldCoveragePercent;
+    const numLinesToCoverOld = Math.floor((coverableLines.length * oldCoveragePercent) / 100);
+    const numLinesToCoverCombined = Math.floor((coverableLines.length * combinedCoverage) / 100);
+    
+    const coveredByOld = new Set(coverableLines.slice(0, numLinesToCoverOld));
+    const coveredByNew = new Set(coverableLines.slice(numLinesToCoverOld, numLinesToCoverCombined));
+    
+    return lines.map((content, index) => {
+      const lineNumber = index + 1;
+      if (!coverableLines.includes(lineNumber)) {
+        return { lineNumber, content, status: 'uncovered' as const };
+      }
+      
+      if (coveredByOld.has(lineNumber)) {
+        return { lineNumber, content, status: 'covered-old' as const };
+      } else if (coveredByNew.has(lineNumber)) {
+        return { lineNumber, content, status: 'covered-new' as const };
+      } else {
+        return { lineNumber, content, status: 'uncovered' as const };
+      }
+    });
+  }
 }
 
 export default function TestCoverageViewer({ report }: TestCoverageViewerProps) {
@@ -258,10 +269,11 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
   const handleNewCoverageClick = (fileReport: any) => {
     const oldTestsCount = fileReport.testCasesFound;
     const newTestsCount = fileReport.newTestCasesAdded;
-    const totalTestsAfter = oldTestsCount + newTestsCount;
     
     const estimatedTotalLines = 100;
     const oldCoverage = oldTestsCount > 0 ? (oldTestsCount * 8) : 0;
+    const oldPercentage = Math.min(Math.round((oldCoverage / estimatedTotalLines) * 100), 100);
+    
     const newCoverage = newTestsCount > 0 ? (newTestsCount * 8) : 0;
     const combinedCoverage = Math.min(oldCoverage + newCoverage, estimatedTotalLines);
     const newPercentage = estimatedTotalLines > 0 ? Math.round((combinedCoverage / estimatedTotalLines) * 100) : 0;
@@ -270,7 +282,8 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
       file: fileReport.file,
       testFile: fileReport.testFile,
       type: 'new-coverage',
-      coveragePercentage: newPercentage
+      coveragePercentage: newPercentage,
+      oldCoveragePercentage: oldPercentage
     });
     setIsFullscreen(false);
   };
@@ -753,6 +766,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                   coverageType="new" 
                   isFullscreen={isFullscreen}
                   coveragePercentage={sourceDialogData.coveragePercentage || 0}
+                  oldCoveragePercentage={sourceDialogData.oldCoveragePercentage || 0}
                 />
               )}
             </div>
@@ -815,9 +829,11 @@ function SourceCodeView({ filePath, isFullscreen }: { filePath: string; isFullsc
   );
 }
 
-function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage }: { filePath: string; coverageType: 'old' | 'new'; isFullscreen: boolean; coveragePercentage: number }) {
+function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage, oldCoveragePercentage }: { filePath: string; coverageType: 'old' | 'new'; isFullscreen: boolean; coveragePercentage: number; oldCoveragePercentage?: number }) {
   const sourceCode = generateMockSourceCode(filePath);
-  const coverageData = generateMockCoverageData(sourceCode, coverageType, coveragePercentage);
+  const oldPercent = coverageType === 'old' ? coveragePercentage : (oldCoveragePercentage || 0);
+  const newPercent = coverageType === 'new' ? coveragePercentage : undefined;
+  const coverageData = generateMockCoverageData(sourceCode, coverageType, oldPercent, newPercent);
   const fileName = filePath.split('\\').pop() || filePath.split('/').pop() || 'Unknown.cs';
   
   return (
