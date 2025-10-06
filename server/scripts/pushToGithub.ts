@@ -273,8 +273,8 @@ class GitHubPusher {
       console.log(`✅ Prepared ${fileChanges.length} files for push`);
 
       // Use test coverage validation branch
-      const branchName = 'feature/test-coverage-validation';
-      console.log('🎯 Pushing to feature branch:', branchName);
+      const branchName = 'main';
+      console.log('🎯 Pushing to branch:', branchName);
       
       // Get the current OID of the branch
       let currentOid: string;
