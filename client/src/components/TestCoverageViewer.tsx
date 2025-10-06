@@ -461,7 +461,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
         </CardContent>
       </Card>
 
-      <Card className="overflow-hidden border-[hsl(222,47%,18%)] bg-[hsl(222,47%,10%)] max-w-4xl">
+      <Card className="overflow-hidden border-[hsl(222,47%,18%)] bg-[hsl(222,47%,10%)]">
         <CardHeader className="bg-gradient-to-r from-[hsl(222,47%,12%)] to-[hsl(250,47%,12%)] border-b border-[hsl(222,47%,18%)]">
           <CardTitle className="flex items-center gap-2 text-[hsl(210,40%,98%)]">
             <BarChart3 className="h-5 w-5 text-[hsl(199,98%,57%)]" />
@@ -492,14 +492,14 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                 contentStyle={{ 
                   backgroundColor: 'hsl(222,47%,12%)', 
                   border: '1px solid hsl(222,47%,30%)',
-                  borderRadius: '6px',
+                  borderRadius: '4px',
                   color: 'hsl(210,40%,98%)',
-                  fontSize: '11px',
+                  fontSize: '10px',
                   fontWeight: 400,
-                  padding: '6px 8px'
+                  padding: '4px 6px'
                 }}
-                labelStyle={{ color: 'hsl(199,98%,67%)', fontWeight: 500, fontSize: '11px' }}
-                itemStyle={{ color: 'hsl(210,40%,98%)', fontSize: '11px' }}
+                labelStyle={{ color: 'hsl(199,98%,67%)', fontWeight: 500, fontSize: '10px' }}
+                itemStyle={{ color: 'hsl(210,40%,98%)', fontSize: '10px' }}
               />
               <Legend 
                 wrapperStyle={{ 
