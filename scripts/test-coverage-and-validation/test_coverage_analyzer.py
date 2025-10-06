@@ -101,17 +101,63 @@ def analyze_and_generate_tests(source_path: str, test_path: Optional[str], api_k
     messages = [{"role": "user", "content": prompt}]
     response = call_llm(messages, api_key, base_url)
     
-    # Parse JSON response
+    # Parse JSON response using robust extraction with validation
     import json
     import re
     
-    # Try to extract JSON if wrapped in markdown code blocks
-    json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
-    if json_match:
-        response = json_match.group(1)
+    def is_valid_test_result(obj):
+        """Check if JSON object has required test coverage fields"""
+        return (
+            isinstance(obj, dict) and
+            'testCasesFound' in obj and
+            'newTestCasesAdded' in obj and
+            'generatedTestCode' in obj
+        )
     
-    try:
-        result = json.loads(response.strip())
+    result = None
+    
+    # Strategy 1: Try to find valid JSON in markdown code blocks
+    code_blocks = re.findall(r'```(?:json)?\s*(\{[^`]+\})\s*```', response, re.DOTALL)
+    for block in code_blocks:
+        try:
+            candidate = json.loads(block.strip())
+            if is_valid_test_result(candidate):
+                result = candidate
+                break  # Found valid result!
+        except json.JSONDecodeError:
+            continue
+    
+    # Strategy 2: Use JSONDecoder to find valid JSON object in response
+    if not result:
+        decoder = json.JSONDecoder()
+        idx = 0
+        while idx < len(response):
+            response_substr = response[idx:].lstrip()
+            if not response_substr or not response_substr.startswith('{'):
+                idx += 1
+                continue
+            try:
+                candidate, end_idx = decoder.raw_decode(response_substr)
+                if is_valid_test_result(candidate):
+                    result = candidate
+                    break  # Found valid result!
+                else:
+                    # Keep searching after this object
+                    idx += len(response_substr) - len(response_substr.lstrip()) + end_idx
+            except json.JSONDecodeError:
+                idx += 1
+    
+    # Strategy 3: Try parsing entire response as JSON
+    if not result:
+        try:
+            candidate = json.loads(response.strip())
+            if is_valid_test_result(candidate):
+                result = candidate
+        except json.JSONDecodeError:
+            pass
+    
+    # If we got a valid result, process it
+    if result:
         
         # Validate and fix test class names - NO generic names allowed
         generated_code = result.get("generatedTestCode", "")
@@ -131,19 +177,19 @@ def analyze_and_generate_tests(source_path: str, test_path: Optional[str], api_k
         
         result["generatedTestCode"] = generated_code
         return result
-        
-    except json.JSONDecodeError:
-        # Fallback if AI doesn't return valid JSON
-        return {
-            "testCasesFound": 0,
-            "newTestCasesAdded": 0,
-            "generatedTestCode": response,
-            "summary": "AI response parsing failed",
-            "recommendations": "",
-            "keyImprovements": "",
-            "note": "",
-            "testCaseCategories": ""
-        }
+    
+    # Fallback if no valid JSON was found
+    print(f"WARNING: Failed to parse AI response as JSON. Response preview: {response[:200]}...")
+    return {
+        "testCasesFound": 0,
+        "newTestCasesAdded": 0,
+        "generatedTestCode": response,
+        "summary": "AI response parsing failed",
+        "recommendations": "",
+        "keyImprovements": "",
+        "note": "",
+        "testCaseCategories": ""
+    }
 
 
 def map_sources_to_tests(cs_files: List[str], test_files: List[str]) -> Dict[str, Optional[str]]:
