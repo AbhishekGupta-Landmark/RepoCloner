@@ -28,7 +28,7 @@ export default function TestCoveragePanel() {
       if (!currentRepository) throw new Error("No repository selected");
       
       setIsAnalyzing(true);
-      const response = await apiRequest('/api/analysis/test-coverage', 'POST', {
+      const response = await apiRequest('POST', '/api/analysis/test-coverage', {
         repositoryId: currentRepository.id
       });
       return response;
