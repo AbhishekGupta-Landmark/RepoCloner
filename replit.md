@@ -10,6 +10,13 @@ An interactive web-based application that allows users to clone Git repositories
 - C#-compatible backend architecture with extensible provider pattern
 
 ## Recent Changes
+- 2025-10-06: **COMPREHENSIVE TEST COVERAGE FIXES** - Commit 0d6e161
+  - **DETERMINISTIC CLASS NAME VALIDATION**: Added robust regex to replace ALL generic test class names (UnitTest1, UnitTest, Tests)
+  - **Handles ALL C# Modifiers**: public/internal/protected, sealed, static, abstract, partial - preserves modifiers while fixing names
+  - **Guaranteed Proper Names**: {SourceFileName}Tests format (e.g., UnitTest1.cs → UnitTest1Tests class)
+  - **Download Fixed**: Backend accepts both .md and .json files (was returning 400 for .json)
+  - **UI Improvements**: Removed AI Analysis Summary card (user requested multiple times), added blue scrollbars, transparent chart bars when value = 0
+  - **Kept JSON Format**: Better for deserialization with deterministic post-processing for data quality
 - 2025-10-06: **JSON-BASED TEST COVERAGE + CHART/COVERAGE FIXES** - Commit 2bf16db
   - **JSON Output**: Python AI now returns pure structured JSON instead of markdown (no more parsing issues!)
   - **Coverage Calculation Fixed**: Changed from wrong formula `(newTests/totalTests)*100` to weighted average of file percentages
