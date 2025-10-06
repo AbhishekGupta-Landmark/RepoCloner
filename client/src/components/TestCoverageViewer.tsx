@@ -224,8 +224,11 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
   };
 
   const handleOldCoverageClick = (fileReport: any) => {
-    const totalTests = fileReport.testCasesFound + fileReport.newTestCasesAdded;
-    const oldPercentage = totalTests > 0 ? Math.round((fileReport.testCasesFound / totalTests) * 100) : 0;
+    const oldTestsCount = fileReport.testCasesFound;
+    
+    const estimatedTotalLines = 100;
+    const oldCoverage = oldTestsCount > 0 ? (oldTestsCount * 8) : 0;
+    const oldPercentage = Math.min(Math.round((oldCoverage / estimatedTotalLines) * 100), 100);
     
     setSourceDialogData({
       file: fileReport.file,
