@@ -87,13 +87,14 @@ def analyze_and_generate_tests(source_path: str, test_path: Optional[str], api_k
         "{\n"
         '  "testCasesFound": <number>,\n'
         '  "newTestCasesAdded": <number>,\n'
-        '  "generatedTestCode": "<complete C# test code>",\n'
+        '  "generatedTestCode": "<complete C# test code with proper class names>",\n'
         '  "summary": "<brief summary>",\n'
         '  "recommendations": "<recommendations for improving the code>",\n'
         '  "keyImprovements": "<key improvements made>",\n'
         '  "note": "<any important notes>",\n'
         '  "testCaseCategories": "<categories of test cases generated>"\n'
         "}\n"
+        "IMPORTANT: Do NOT use generic names like 'UnitTest1'. Create proper test class names based on the source file.\n"
         "Do NOT include markdown formatting, only pure JSON."
     )
     
@@ -110,7 +111,27 @@ def analyze_and_generate_tests(source_path: str, test_path: Optional[str], api_k
         response = json_match.group(1)
     
     try:
-        return json.loads(response.strip())
+        result = json.loads(response.strip())
+        
+        # Validate and fix test class names - NO generic names allowed
+        generated_code = result.get("generatedTestCode", "")
+        source_file_name = os.path.basename(source_path).replace('.cs', '')
+        
+        # Replace generic test class names with proper names based on source file
+        # Handle ALL class declaration variations: public/internal/protected, sealed, static, abstract, etc.
+        import re
+        generic_class_names = ['UnitTest1', 'UnitTest', 'Tests', 'Test', 'TestClass', 'UnitTests']
+        
+        for generic_name in generic_class_names:
+            # Match: (any access modifiers/attributes) class (GenericName)
+            # Captures everything before 'class' to preserve modifiers
+            pattern = r'((?:public|internal|protected|private)?\s*(?:sealed|static|abstract|partial)?\s*)class\s+' + generic_name + r'\b'
+            replacement = r'\1class ' + f'{source_file_name}Tests'
+            generated_code = re.sub(pattern, replacement, generated_code, flags=re.IGNORECASE)
+        
+        result["generatedTestCode"] = generated_code
+        return result
+        
     except json.JSONDecodeError:
         # Fallback if AI doesn't return valid JSON
         return {

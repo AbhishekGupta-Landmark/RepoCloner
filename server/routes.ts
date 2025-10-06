@@ -1944,10 +1944,10 @@ export async function registerRoutes(app: Application): Promise<Server> {
     try {
       const { repositoryId, fileName } = req.params;
       
-      // Validate filename - allow all markdown files for now to debug
+      // Validate filename - allow markdown and JSON files
       broadcastLog('DEBUG', `Attempting to download file: ${fileName}`);
-      if (!fileName.endsWith('.md')) {
-        return res.status(400).json({ error: "Only markdown files are allowed" });
+      if (!fileName.endsWith('.md') && !fileName.endsWith('.json')) {
+        return res.status(400).json({ error: "Only markdown and JSON files are allowed" });
       }
       
       const filePath = await resolveReportFilePath(repositoryId, fileName);
@@ -1961,16 +1961,19 @@ export async function registerRoutes(app: Application): Promise<Server> {
       const fileContent = await fs.promises.readFile(filePath, 'utf-8');
       const stats = await fs.promises.stat(filePath);
       
+      // Set appropriate content type
+      const contentType = fileName.endsWith('.json') ? 'application/json' : 'text/markdown';
+      
       // Set download headers
-      res.setHeader('Content-Type', 'text/markdown');
+      res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
       res.setHeader('Content-Length', Buffer.byteLength(fileContent, 'utf-8').toString());
       
-      broadcastLog('INFO', `Migration report download: ${fileName} (${stats.size} bytes)`);
+      broadcastLog('INFO', `Report download: ${fileName} (${stats.size} bytes)`);
       res.send(fileContent);
       
     } catch (error) {
-      broadcastLog('ERROR', `Migration report download error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      broadcastLog('ERROR', `Report download error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       res.status(500).json({ error: "Report download failed" });
     }
   });

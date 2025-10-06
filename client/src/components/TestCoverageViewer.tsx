@@ -451,42 +451,6 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
         </CardContent>
       </Card>
 
-      {data.fileReports?.[0]?.generatedTests && (() => {
-        const firstReport = data.fileReports[0];
-        const parsed = parseGeneratedTests(firstReport.generatedTests);
-        return parsed.aiAnalysis || parsed.sections.length > 0 ? (
-          <Card className="border-2 border-[hsl(43,96%,56%)]/40 bg-gradient-to-br from-[hsl(43,96%,56%)]/15 via-[hsl(43,96%,56%)]/10 to-[hsl(43,96%,56%)]/5 overflow-hidden relative shadow-xl">
-            <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-[hsl(43,96%,56%)]/20 to-transparent rounded-full blur-3xl"></div>
-            <CardHeader className="relative">
-              <CardTitle className="flex items-center gap-3 text-2xl text-[hsl(0,0%,100%)]">
-                <div className="p-2 bg-[hsl(43,96%,56%)] rounded-lg">
-                  <Sparkles className="h-6 w-6 text-[hsl(222,47%,10%)]" />
-                </div>
-                AI Analysis Summary
-              </CardTitle>
-              <CardDescription className="text-[hsl(0,0%,90%)] mt-2">
-                Key insights and recommendations from the comprehensive test coverage analysis
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="relative">
-              <div className="space-y-4">
-                {parsed.aiAnalysis && (
-                  <div className="p-4 bg-[hsl(222,47%,8%)]/60 backdrop-blur rounded-lg border border-[hsl(43,96%,56%)]/30">
-                    <p className="text-base leading-relaxed whitespace-pre-wrap text-[hsl(0,0%,95%)]">{parsed.aiAnalysis}</p>
-                  </div>
-                )}
-                {parsed.sections.map((section, idx) => (
-                  <div key={idx} className="p-4 bg-[hsl(222,47%,8%)]/60 backdrop-blur rounded-lg border border-[hsl(43,96%,56%)]/30">
-                    <h4 className="text-sm font-semibold text-[hsl(43,96%,56%)] mb-2">{section.title}</h4>
-                    <div className="text-base leading-relaxed whitespace-pre-wrap text-[hsl(0,0%,95%)]">{section.content}</div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        ) : null;
-      })()}
-
       <Card className="overflow-hidden border-[hsl(222,47%,18%)] bg-[hsl(222,47%,10%)]">
         <CardHeader className="bg-gradient-to-r from-[hsl(222,47%,12%)] to-[hsl(250,47%,12%)] border-b border-[hsl(222,47%,18%)]">
           <CardTitle className="flex items-center gap-2 text-[hsl(210,40%,98%)]">
@@ -542,7 +506,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                 {chartData.map((entry: any, index: number) => (
                   <Cell 
                     key={`cell-found-${index}`}
-                    fill="hsl(162,73%,55%)"
+                    fill={entry['Test Cases Found'] > 0 ? "hsl(162,73%,55%)" : "transparent"}
                   />
                 ))}
               </Bar>
@@ -555,7 +519,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                 {chartData.map((entry: any, index: number) => (
                   <Cell 
                     key={`cell-new-${index}`}
-                    fill="hsl(199,98%,57%)"
+                    fill={entry['New Test Cases Added'] > 0 ? "hsl(199,98%,57%)" : "transparent"}
                   />
                 ))}
               </Bar>
