@@ -472,7 +472,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-6 pb-4">
-          <ResponsiveContainer width="100%" height={400}>
+          <ResponsiveContainer width="100%" height={200}>
             <BarChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 80 }} barCategoryGap="30%">
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(222,47%,25%)" />
               <XAxis 
