@@ -145,22 +145,38 @@ namespace Api
 }`;
 }
 
-function generateMockCoverageData(sourceCode: string, type: 'old' | 'new'): Array<{lineNumber: number, content: string, status: 'uncovered' | 'covered-old' | 'covered-new'}> {
+function generateMockCoverageData(sourceCode: string, type: 'old' | 'new', coveragePercentage: number): Array<{lineNumber: number, content: string, status: 'uncovered' | 'covered-old' | 'covered-new'}> {
   const lines = sourceCode.split('\n');
+  const coverableLines: number[] = [];
+  
+  lines.forEach((content, index) => {
+    const lineNumber = index + 1;
+    const isCoverable = content.trim() && !content.trim().startsWith('//') && !content.trim().startsWith('using') && !content.trim().match(/^\s*[{}]\s*$/) && !content.trim().startsWith('namespace');
+    if (isCoverable) {
+      coverableLines.push(lineNumber);
+    }
+  });
+  
+  const numLinesToCover = Math.floor((coverableLines.length * coveragePercentage) / 100);
+  const coveredLineNumbers = new Set(coverableLines.slice(0, numLinesToCover));
+  
   return lines.map((content, index) => {
     const lineNumber = index + 1;
-    const isCoverabl = content.trim() && !content.trim().startsWith('//') && !content.trim().startsWith('using') && !content.trim().match(/^\s*[{}]\s*$/) && !content.trim().startsWith('namespace');
+    const isCoverable = coverableLines.includes(lineNumber);
     
-    if (!isCoverabl) {
+    if (!isCoverable) {
       return { lineNumber, content, status: 'uncovered' as const };
     }
     
     if (type === 'old') {
-      const isOldCovered = lineNumber % 3 !== 0;
-      return { lineNumber, content, status: isOldCovered ? 'covered-old' as const : 'uncovered' as const };
+      return { 
+        lineNumber, 
+        content, 
+        status: coveredLineNumbers.has(lineNumber) ? 'covered-old' as const : 'uncovered' as const 
+      };
     } else {
-      const isOldCovered = lineNumber % 3 !== 0;
-      const isNewCovered = lineNumber % 2 === 0;
+      const isOldCovered = coveredLineNumbers.has(lineNumber);
+      const isNewCovered = !isOldCovered && lineNumber % 2 === 0 && lineNumber > Math.max(...Array.from(coveredLineNumbers), 0);
       const status: 'uncovered' | 'covered-old' | 'covered-new' = isNewCovered ? 'covered-new' : isOldCovered ? 'covered-old' : 'uncovered';
       return { 
         lineNumber, 
@@ -353,6 +369,41 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
         </CardContent>
       </Card>
 
+      {data.fileReports?.[0]?.generatedTests && (() => {
+        const firstReport = data.fileReports[0];
+        const parsed = parseGeneratedTests(firstReport.generatedTests);
+        return parsed.aiAnalysis || parsed.summary ? (
+          <Card className="border-2 border-[hsl(43,96%,56%)]/40 bg-gradient-to-br from-[hsl(43,96%,56%)]/15 via-[hsl(43,96%,56%)]/10 to-[hsl(43,96%,56%)]/5 overflow-hidden relative shadow-xl">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-[hsl(43,96%,56%)]/20 to-transparent rounded-full blur-3xl"></div>
+            <CardHeader className="relative">
+              <CardTitle className="flex items-center gap-3 text-2xl text-[hsl(0,0%,100%)]">
+                <div className="p-2 bg-[hsl(43,96%,56%)] rounded-lg">
+                  <Sparkles className="h-6 w-6 text-[hsl(222,47%,10%)]" />
+                </div>
+                AI Analysis Summary
+              </CardTitle>
+              <CardDescription className="text-[hsl(0,0%,90%)] mt-2">
+                Key insights and recommendations from the comprehensive test coverage analysis
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="relative">
+              <div className="space-y-4">
+                {parsed.aiAnalysis && (
+                  <div className="p-4 bg-[hsl(222,47%,8%)]/60 backdrop-blur rounded-lg border border-[hsl(43,96%,56%)]/30">
+                    <p className="text-base leading-relaxed whitespace-pre-wrap text-[hsl(0,0%,95%)]">{parsed.aiAnalysis}</p>
+                  </div>
+                )}
+                {parsed.summary && (
+                  <div className="p-4 bg-[hsl(222,47%,8%)]/60 backdrop-blur rounded-lg border border-[hsl(43,96%,56%)]/30">
+                    <div className="text-base leading-relaxed whitespace-pre-wrap text-[hsl(0,0%,95%)]">{parsed.summary}</div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ) : null;
+      })()}
+
       <Card className="overflow-hidden border-[hsl(222,47%,18%)] bg-[hsl(222,47%,10%)]">
         <CardHeader className="bg-gradient-to-r from-[hsl(222,47%,12%)] to-[hsl(250,47%,12%)] border-b border-[hsl(222,47%,18%)]">
           <CardTitle className="flex items-center gap-2 text-[hsl(210,40%,98%)]">
@@ -364,57 +415,61 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
-          <ResponsiveContainer width="100%" height={420}>
+          <ResponsiveContainer width="100%" height={600}>
             <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 120 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(222,47%,20%)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(222,47%,25%)" />
               <XAxis 
                 dataKey="name" 
                 angle={-45} 
                 textAnchor="end" 
                 height={120}
-                tick={{ fill: 'hsl(210,40%,98%)', fontSize: 13 }}
-                stroke="hsl(215,20%,50%)"
+                tick={{ fill: 'hsl(0,0%,100%)', fontSize: 14, fontWeight: 500 }}
+                stroke="hsl(0,0%,70%)"
               />
               <YAxis 
-                tick={{ fill: 'hsl(210,40%,98%)', fontSize: 13 }} 
-                stroke="hsl(215,20%,50%)"
+                tick={{ fill: 'hsl(0,0%,100%)', fontSize: 14, fontWeight: 500 }} 
+                stroke="hsl(0,0%,70%)"
               />
               <Tooltip 
                 contentStyle={{ 
                   backgroundColor: 'hsl(222,47%,12%)', 
-                  border: '1px solid hsl(222,47%,25%)',
+                  border: '2px solid hsl(222,47%,30%)',
                   borderRadius: '8px',
-                  color: 'hsl(210,40%,98%)'
+                  color: 'hsl(0,0%,100%)',
+                  fontSize: '14px',
+                  fontWeight: 500
                 }}
-                labelStyle={{ color: 'hsl(210,40%,98%)' }}
+                labelStyle={{ color: 'hsl(0,0%,100%)', fontWeight: 600 }}
               />
               <Legend 
                 wrapperStyle={{ 
                   paddingTop: '20px',
-                  color: 'hsl(210,40%,98%)'
+                  color: 'hsl(0,0%,100%)',
+                  fontSize: '14px',
+                  fontWeight: 500
                 }}
               />
               <Bar 
                 dataKey="Test Cases Found" 
-                fill="hsl(162,73%,44%)"
+                fill="hsl(162,73%,55%)"
                 radius={[6, 6, 0, 0]}
               >
                 {chartData.map((entry: any, index: number) => (
                   <Cell 
                     key={`cell-found-${index}`}
-                    fill="hsl(162,73%,44%)"
+                    fill="hsl(162,73%,55%)"
                   />
                 ))}
               </Bar>
               <Bar 
                 dataKey="New Test Cases Added" 
-                fill="hsl(267,83%,65%)"
+                fill="hsl(267,83%,70%)"
                 radius={[6, 6, 0, 0]}
               >
                 {chartData.map((entry: any, index: number) => (
                   <Cell 
                     key={`cell-new-${index}`}
-                    fill="hsl(267,83%,65%)"
+                    fill="hsl(267,83%,70%)"
                   />
                 ))}
               </Bar>
@@ -599,7 +654,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                         </div>
                         <span className="text-xs text-[hsl(215,20%,65%)] ml-2 font-mono">{dialogData.testFile}</span>
                       </div>
-                      <ScrollArea className="max-h-96">
+                      <ScrollArea className={isFullscreen ? "h-[calc(100vh-400px)]" : "max-h-96"}>
                         <pre className="p-4 text-sm leading-relaxed">
                           <code className="text-[hsl(210,40%,98%)] font-mono">{parsed.codeBlock}</code>
                         </pre>
@@ -762,7 +817,7 @@ function SourceCodeView({ filePath, isFullscreen }: { filePath: string; isFullsc
 
 function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage }: { filePath: string; coverageType: 'old' | 'new'; isFullscreen: boolean; coveragePercentage: number }) {
   const sourceCode = generateMockSourceCode(filePath);
-  const coverageData = generateMockCoverageData(sourceCode, coverageType);
+  const coverageData = generateMockCoverageData(sourceCode, coverageType, coveragePercentage);
   const fileName = filePath.split('\\').pop() || filePath.split('/').pop() || 'Unknown.cs';
   
   return (
