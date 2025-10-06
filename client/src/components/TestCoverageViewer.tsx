@@ -922,16 +922,13 @@ function SourceCodeView({ filePath, isFullscreen }: { filePath: string; isFullsc
           <span className="font-mono text-sm text-[hsl(210,40%,98%)]">{fileName}</span>
         </div>
       </div>
-      <div className="flex-1 border-x border-b border-[hsl(222,47%,20%)] bg-[hsl(222,47%,6%)] overflow-y-scroll scrollbar-visible" style={{ 
-        scrollbarWidth: 'thin',
-        scrollbarColor: 'hsl(199,98%,57%) hsl(222,47%,12%)'
-      }}>
+      <ScrollArea className={`border-x border-b border-[hsl(222,47%,20%)] bg-[hsl(222,47%,6%)] ${isFullscreen ? 'max-h-[80vh]' : 'max-h-[60vh]'} scrollbar-visible`}>
         <div className="p-4">
           <pre className="text-sm leading-relaxed">
             <code className="text-[hsl(210,40%,98%)] font-mono">{sourceCode}</code>
           </pre>
         </div>
-      </div>
+      </ScrollArea>
     </div>
   );
 }
@@ -972,10 +969,7 @@ function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage
           </div>
         </div>
       </div>
-      <div className="flex-1 border-x border-b border-[hsl(222,47%,20%)] bg-[hsl(222,47%,6%)] overflow-y-scroll scrollbar-visible" style={{ 
-        scrollbarWidth: 'thin',
-        scrollbarColor: 'hsl(199,98%,57%) hsl(222,47%,12%)'
-      }}>
+      <ScrollArea className={`border-x border-b border-[hsl(222,47%,20%)] bg-[hsl(222,47%,6%)] ${isFullscreen ? 'max-h-[80vh]' : 'max-h-[60vh]'} scrollbar-visible`}>
         <div className="flex">
           <div className="flex-shrink-0 bg-[hsl(222,47%,8%)] border-r border-[hsl(222,47%,20%)]">
             {coverageData.map((line) => (
@@ -1014,7 +1008,7 @@ function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage
             </pre>
           </div>
         </div>
-      </div>
+      </ScrollArea>
     </div>
   );
 }
