@@ -40,43 +40,34 @@ class GitHubPusher {
     return response.json();
   }
 
-  private getAllFiles(dir: string, baseDir: string = dir): string[] {
-    const files: string[] = [];
-    const excludeDirs = ['.git', 'node_modules', 'dist', 'coverage', '.next', '.vercel', 'temp', 'build', '.cache'];
-    const excludePatterns = ['temp/', '.log', '.tmp', 'clone_', '.env', 'coverage/', '.nyc_output/', '.DS_Store'];
-    const excludeExtensions = ['.log', '.tmp', '.cache', '.lock'];
-
+  private async getChangedFiles(): Promise<string[]> {
+    const { execSync } = await import('child_process');
+    
     try {
-      const entries = readdirSync(dir, { withFileTypes: true });
+      // Get all files changed in recent commits AND working directory
+      const committedFiles = execSync('git diff --name-only HEAD~10 HEAD', { 
+        encoding: 'utf-8',
+        cwd: '/home/runner/workspace'
+      });
       
-      for (const entry of entries) {
-        const fullPath = join(dir, entry.name);
-        const relativePath = relative(baseDir, fullPath);
-        
-        // Skip excluded directories and patterns
-        if (excludeDirs.includes(entry.name) || 
-            excludePatterns.some(pattern => relativePath.includes(pattern)) ||
-            excludeExtensions.some(ext => entry.name.endsWith(ext))) {
-          continue;
-        }
-
-        if (entry.isDirectory()) {
-          files.push(...this.getAllFiles(fullPath, baseDir));
-        } else if (entry.isFile()) {
-          // Skip large files (>1MB) to keep payload manageable
-          const stats = statSync(fullPath);
-          if (stats.size < 1024 * 1024) {
-            files.push(relativePath);
-          } else {
-            console.log(`Skipping large file: ${relativePath} (${Math.round(stats.size / 1024)}KB)`);
-          }
-        }
-      }
+      const uncommittedFiles = execSync('git diff --name-only', { 
+        encoding: 'utf-8',
+        cwd: '/home/runner/workspace'
+      });
+      
+      const allFiles = new Set([
+        ...committedFiles.trim().split('\n').filter(f => f.length > 0),
+        ...uncommittedFiles.trim().split('\n').filter(f => f.length > 0)
+      ]);
+      
+      // Exclude attached_assets folder
+      const files = Array.from(allFiles).filter(f => !f.startsWith('attached_assets/'));
+      console.log(`📝 Found files (committed + uncommitted, excluding attached_assets):`, files);
+      return files;
     } catch (error) {
-      console.warn(`Warning: Could not read directory ${dir}:`, error);
+      console.error('Failed to get changed files from git:', error);
+      return [];
     }
-
-    return files;
   }
 
   private async getMainBranchOid(): Promise<string> {
@@ -248,11 +239,16 @@ class GitHubPusher {
     try {
       console.log('🚀 Starting GitHub push process...');
       
-      // Get all files to push
+      // Get ALL changed files dynamically from git
       const workspaceDir = '/home/runner/workspace';
-      const allFiles = this.getAllFiles(workspaceDir);
+      const allFiles = await this.getChangedFiles();
       
-      console.log(`📁 Found ${allFiles.length} files to push`);
+      if (allFiles.length === 0) {
+        console.log('📭 No files to push');
+        return;
+      }
+      
+      console.log(`📁 Pushing ${allFiles.length} changed files:`, allFiles);
       
       // Prepare file changes with base64 encoding
       const fileChanges: FileChange[] = [];
@@ -276,17 +272,22 @@ class GitHubPusher {
 
       console.log(`✅ Prepared ${fileChanges.length} files for push`);
 
-      // Get current main branch OID
-      const mainOid = await this.getMainBranchOid();
-      console.log('📍 Got main branch OID:', mainOid.substring(0, 8));
-
-      // Use existing branch specified by user
-      const branchName = 'feature-workflow-separation-2025-09-25T13-22-56';
-      console.log('🎯 Pushing to existing branch:', branchName);
+      // Use test coverage validation branch
+      const branchName = 'feature/test-coverage-validation';
+      console.log('🎯 Pushing to feature branch:', branchName);
       
-      // Get current branch OID instead of creating new branch
-      let currentOid = await this.getBranchOid(branchName);
-      console.log('📍 Got branch OID:', currentOid.substring(0, 8));
+      // Get the current OID of the branch
+      let currentOid: string;
+      try {
+        currentOid = await this.getBranchOid(branchName);
+        console.log('📍 Got branch OID:', currentOid.substring(0, 8));
+      } catch (error) {
+        // Branch doesn't exist, create it from main
+        console.log('📍 Branch does not exist, creating from main...');
+        const mainOid = await this.getMainBranchOid();
+        currentOid = await this.createBranch(branchName, mainOid);
+        console.log('📍 Created branch OID:', currentOid.substring(0, 8));
+      }
 
       // Commit files in batches
       const batchSize = 20; // Files per commit (smaller to stay under 45MB limit)
@@ -301,8 +302,8 @@ class GitHubPusher {
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i];
         const commitMessage = batches.length > 1 
-          ? `UI fixes and enhancements (batch ${i + 1}/${batches.length})`
-          : 'UI fixes: Dark theme colors, Migration Summary collapsible, descriptive text extraction';
+          ? `Update code changes (batch ${i + 1}/${batches.length})`
+          : 'Fix scrollbar visibility in test coverage UI components';
         
         currentOid = await this.commitFiles(branchName, batch, currentOid, commitMessage);
         console.log(`✅ Committed batch ${i + 1}/${batches.length} (${batch.length} files)`);

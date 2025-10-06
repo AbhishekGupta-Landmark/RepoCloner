@@ -180,15 +180,26 @@ def analyze_and_generate_tests(source_path: str, test_path: Optional[str], api_k
             generated_code = re.sub(pattern, replacement, generated_code, flags=re.IGNORECASE)
         
         result["generatedTestCode"] = generated_code
+        
+        # Ensure all optional fields have defaults
+        result.setdefault("summary", "")
+        result.setdefault("recommendations", "")
+        result.setdefault("keyImprovements", "")
+        result.setdefault("note", "")
+        result.setdefault("testCaseCategories", "")
+        
         return result
     
-    # Fallback if no valid JSON was found
-    print(f"WARNING: Failed to parse AI response as JSON. Response preview: {response[:200]}...")
+    # Final fallback
+    print(f"ERROR: All parsing strategies failed for {os.path.basename(source_path)}")
+    print(f"Response length: {len(response)} characters")
+    print(f"Response preview: {response[:500]}...")
+    
     return {
         "testCasesFound": 0,
         "newTestCasesAdded": 0,
-        "generatedTestCode": response,
-        "summary": "AI response parsing failed",
+        "generatedTestCode": response[:1000] + "..." if len(response) > 1000 else response,
+        "summary": "AI response parsing failed - check logs",
         "recommendations": "",
         "keyImprovements": "",
         "note": "",

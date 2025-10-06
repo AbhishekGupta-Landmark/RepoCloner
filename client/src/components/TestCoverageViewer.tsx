@@ -45,6 +45,11 @@ interface TestDetailsDialogData {
   type: 'existing' | 'new';
   count: number;
   tests: string;
+  summary?: string;
+  recommendations?: string | string[];
+  keyImprovements?: string | string[];
+  note?: string;
+  testCaseCategories?: string;
 }
 
 interface SourceCodeDialogData {
@@ -306,7 +311,12 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
       testFile: fileReport.testFile || 'No test file specified',
       type,
       count,
-      tests: fileReport.generatedTests || 'No test details available'
+      tests: fileReport.generatedTests || 'No test details available',
+      summary: fileReport.summary,
+      recommendations: fileReport.recommendations,
+      keyImprovements: fileReport.keyImprovements,
+      note: fileReport.note,
+      testCaseCategories: fileReport.testCaseCategories
     });
     setIsFullscreen(false);
   };
@@ -463,7 +473,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
         </CardHeader>
         <CardContent className="pt-6 pb-4">
           <ResponsiveContainer width="100%" height={400}>
-            <BarChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 80 }}>
+            <BarChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 80 }} barCategoryGap="30%">
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(222,47%,25%)" />
               <XAxis 
                 dataKey="name" 
@@ -492,7 +502,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
               />
               <Legend 
                 wrapperStyle={{ 
-                  paddingTop: '20px',
+                  paddingTop: '5px',
                   color: 'hsl(0,0%,100%)',
                   fontSize: '14px',
                   fontWeight: 500
@@ -502,6 +512,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                 dataKey="Test Cases Found" 
                 fill="hsl(162,73%,55%)"
                 radius={[6, 6, 0, 0]}
+                barSize={20}
                 activeBar={{ fill: 'hsl(162,73%,65%)', stroke: 'hsl(162,73%,75%)', strokeWidth: 2 }}
               >
                 {chartData.map((entry: any, index: number) => (
@@ -515,6 +526,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                 dataKey="New Test Cases Added" 
                 fill="hsl(199,98%,57%)"
                 radius={[6, 6, 0, 0]}
+                barSize={20}
                 activeBar={{ fill: 'hsl(199,98%,67%)', stroke: 'hsl(199,98%,77%)', strokeWidth: 2 }}
               >
                 {chartData.map((entry: any, index: number) => (
@@ -540,7 +552,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="w-full">
+          <ScrollArea className="w-full scrollbar-visible">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b-2 border-[hsl(267,83%,65%)]">
@@ -667,22 +679,101 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
           </DialogHeader>
           <Separator className="my-4 bg-[hsl(222,47%,20%)]" />
           <div className={`flex-1 overflow-hidden ${isFullscreen ? 'px-6 pb-6' : 'px-6 pb-6'}`}>
-            {dialogData?.tests && (() => {
+            {dialogData && (() => {
               const parsed = parseGeneratedTests(dialogData.tests);
+              const hasAnalysis = dialogData.summary || dialogData.recommendations || dialogData.keyImprovements || dialogData.note || dialogData.testCaseCategories;
+              
               return (
                 <div className="space-y-4 h-full flex flex-col">
-                  {parsed.aiAnalysis && (
-                    <Card className="bg-[hsl(199,98%,57%)]/10 border-[hsl(199,98%,57%)]/30 flex-shrink-0">
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-sm flex items-center gap-2 text-[hsl(210,40%,98%)]">
-                          <Sparkles className="h-4 w-4 text-[hsl(199,98%,57%)]" />
-                          AI Analysis
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap text-[hsl(215,20%,75%)]">{parsed.aiAnalysis}</p>
-                      </CardContent>
-                    </Card>
+                  {/* Show actual AI Analysis from data */}
+                  {hasAnalysis && (
+                    <div className="space-y-3 flex-shrink-0">
+                      {dialogData.summary && (
+                        <Card className="bg-[hsl(199,98%,57%)]/10 border-[hsl(199,98%,57%)]/30">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-sm flex items-center gap-2 text-[hsl(210,40%,98%)]">
+                              <Sparkles className="h-4 w-4 text-[hsl(199,98%,57%)]" />
+                              Summary
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap text-[hsl(215,20%,75%)]">{dialogData.summary}</p>
+                          </CardContent>
+                        </Card>
+                      )}
+                      
+                      {dialogData.recommendations && (
+                        <Card className="bg-[hsl(43,96%,56%)]/10 border-[hsl(43,96%,56%)]/30">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-sm flex items-center gap-2 text-[hsl(210,40%,98%)]">
+                              <Sparkles className="h-4 w-4 text-[hsl(43,96%,56%)]" />
+                              Recommendations
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            {Array.isArray(dialogData.recommendations) ? (
+                              <ul className="list-disc list-inside space-y-1">
+                                {dialogData.recommendations.map((rec, idx) => (
+                                  <li key={idx} className="text-sm text-[hsl(215,20%,75%)]">{rec}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-sm leading-relaxed whitespace-pre-wrap text-[hsl(215,20%,75%)]">{dialogData.recommendations}</p>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )}
+                      
+                      {dialogData.keyImprovements && (
+                        <Card className="bg-[hsl(162,73%,44%)]/10 border-[hsl(162,73%,44%)]/30">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-sm flex items-center gap-2 text-[hsl(210,40%,98%)]">
+                              <Sparkles className="h-4 w-4 text-[hsl(162,73%,44%)]" />
+                              Key Improvements
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            {Array.isArray(dialogData.keyImprovements) ? (
+                              <ul className="list-disc list-inside space-y-1">
+                                {dialogData.keyImprovements.map((imp, idx) => (
+                                  <li key={idx} className="text-sm text-[hsl(215,20%,75%)]">{imp}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-sm leading-relaxed whitespace-pre-wrap text-[hsl(215,20%,75%)]">{dialogData.keyImprovements}</p>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )}
+                      
+                      {dialogData.note && (
+                        <Card className="bg-[hsl(267,83%,65%)]/10 border-[hsl(267,83%,65%)]/30">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-sm flex items-center gap-2 text-[hsl(210,40%,98%)]">
+                              <Sparkles className="h-4 w-4 text-[hsl(267,83%,65%)]" />
+                              Note
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap text-[hsl(215,20%,75%)]">{dialogData.note}</p>
+                          </CardContent>
+                        </Card>
+                      )}
+                      
+                      {dialogData.testCaseCategories && (
+                        <Card className="bg-[hsl(250,83%,65%)]/10 border-[hsl(250,83%,65%)]/30">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-sm flex items-center gap-2 text-[hsl(210,40%,98%)]">
+                              <Sparkles className="h-4 w-4 text-[hsl(250,83%,65%)]" />
+                              Test Case Categories
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap text-[hsl(215,20%,75%)]">{dialogData.testCaseCategories}</p>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
                   )}
                   
                   {parsed.codeBlock && (
@@ -695,32 +786,11 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                         </div>
                         <span className="text-xs text-[hsl(215,20%,65%)] ml-2 font-mono">{dialogData.testFile}</span>
                       </div>
-                      <div className={`${isFullscreen ? "h-[calc(100vh-500px)]" : "h-96"} overflow-y-auto scrollbar-visible`} style={{ 
-                        scrollbarWidth: 'thin',
-                        scrollbarColor: 'hsl(199,98%,57%) hsl(222,47%,12%)'
-                      }}>
+                      <ScrollArea className={`${isFullscreen ? "h-[calc(100vh-500px)]" : "h-96"} scrollbar-visible`}>
                         <pre className="p-4 text-sm leading-relaxed">
                           <code className="text-[hsl(210,40%,98%)] font-mono">{parsed.codeBlock}</code>
                         </pre>
-                      </div>
-                    </div>
-                  )}
-
-                  {parsed.sections.length > 0 && (
-                    <div className="space-y-3 flex-shrink-0">
-                      {parsed.sections.map((section, idx) => (
-                        <Card key={idx} className="border-2 border-[hsl(43,96%,56%)]/50 bg-gradient-to-br from-[hsl(43,96%,56%)]/20 via-[hsl(43,96%,56%)]/15 to-[hsl(43,96%,56%)]/10 shadow-lg">
-                          <CardHeader className="pb-3 bg-[hsl(43,96%,56%)]/10 border-b border-[hsl(43,96%,56%)]/30">
-                            <CardTitle className="text-base flex items-center gap-2 text-[hsl(0,0%,100%)] font-semibold">
-                              <Sparkles className="h-5 w-5 text-[hsl(43,96%,56%)]" />
-                              {section.title}
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="pt-4">
-                            <div className="text-sm leading-relaxed whitespace-pre-wrap text-[hsl(0,0%,95%)] font-medium">{section.content}</div>
-                          </CardContent>
-                        </Card>
-                      ))}
+                      </ScrollArea>
                     </div>
                   )}
                 </div>
@@ -903,13 +973,12 @@ function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage
               <div 
                 key={line.lineNumber} 
                 className={`px-2 py-1 text-right text-xs font-mono border-l-4 ${
-                  line.status === 'covered-old' ? 'border-l-[hsl(162,73%,44%)] bg-[hsl(162,73%,44%)]/10' :
-                  line.status === 'covered-new' ? 'border-l-[hsl(199,98%,57%)] bg-[hsl(199,98%,57%)]/10' :
-                  'border-l-transparent'
+                  line.status === 'covered-old' ? 'border-l-[hsl(162,73%,44%)] bg-[hsl(162,73%,44%)]/50 text-[hsl(162,73%,85%)]' :
+                  line.status === 'covered-new' ? 'border-l-[hsl(199,98%,57%)] bg-[hsl(199,98%,57%)]/50 text-[hsl(199,98%,85%)]' :
+                  'border-l-transparent text-[hsl(215,20%,65%)]'
                 }`}
                 style={{ 
-                  width: '60px',
-                  color: 'hsl(215,20%,65%)'
+                  width: '60px'
                 }}
               >
                 {line.lineNumber}
@@ -922,8 +991,8 @@ function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage
                 <div 
                   key={line.lineNumber}
                   className={`${
-                    line.status === 'covered-old' ? 'bg-[hsl(162,73%,44%)]/5' :
-                    line.status === 'covered-new' ? 'bg-[hsl(199,98%,57%)]/5' :
+                    line.status === 'covered-old' ? 'bg-[hsl(162,73%,44%)]/50' :
+                    line.status === 'covered-new' ? 'bg-[hsl(199,98%,57%)]/50' :
                     line.status === 'uncovered' && line.content.trim() ? 'bg-[hsl(0,70%,50%)]/40' :
                     ''
                   }`}
