@@ -491,14 +491,15 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                 cursor={{ fill: 'hsl(222,47%,20%)', opacity: 0.3 }}
                 contentStyle={{ 
                   backgroundColor: 'hsl(222,47%,12%)', 
-                  border: '2px solid hsl(222,47%,30%)',
-                  borderRadius: '8px',
+                  border: '1px solid hsl(222,47%,30%)',
+                  borderRadius: '6px',
                   color: 'hsl(210,40%,98%)',
-                  fontSize: '14px',
-                  fontWeight: 500
+                  fontSize: '11px',
+                  fontWeight: 400,
+                  padding: '6px 8px'
                 }}
-                labelStyle={{ color: 'hsl(199,98%,67%)', fontWeight: 600 }}
-                itemStyle={{ color: 'hsl(210,40%,98%)' }}
+                labelStyle={{ color: 'hsl(199,98%,67%)', fontWeight: 500, fontSize: '11px' }}
+                itemStyle={{ color: 'hsl(210,40%,98%)', fontSize: '11px' }}
               />
               <Legend 
                 wrapperStyle={{ 
