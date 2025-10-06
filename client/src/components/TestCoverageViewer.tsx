@@ -2,8 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
   ChevronDown, 
   ChevronRight, 
@@ -13,8 +12,10 @@ import {
   PlusCircle,
   TrendingUp,
   Calendar,
-  BarChart3
+  BarChart3,
+  Table as TableIcon
 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 import type { TestCoverageReportData } from "@shared/schema";
 
 interface TestCoverageViewerProps {
@@ -28,8 +29,17 @@ interface TestCoverageViewerProps {
   };
 }
 
+interface TestDetailsDialogData {
+  file: string;
+  type: 'existing' | 'new';
+  count: number;
+  tests: string;
+}
+
 export default function TestCoverageViewer({ report }: TestCoverageViewerProps) {
   const data = report.structuredData || report.results?.testCoverageOutput?.parsedData;
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [dialogData, setDialogData] = useState<TestDetailsDialogData | null>(null);
   
   if (!data) {
     return (
@@ -44,6 +54,33 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
   const coveragePercentage = data.totalTestCasesAfterImprovements > 0
     ? Math.round((data.totalNewTestCasesAdded / data.totalTestCasesAfterImprovements) * 100)
     : 0;
+
+  // Prepare chart data
+  const chartData = data.fileReports?.map((fileReport: any) => ({
+    name: fileReport.file.split('\\').pop() || fileReport.file.split('/').pop() || fileReport.file,
+    fullPath: fileReport.file,
+    'Test Cases Found': fileReport.testCasesFound,
+    'New Test Cases Added': fileReport.newTestCasesAdded,
+    testFile: fileReport.testFile,
+    generatedTests: fileReport.generatedTests
+  })) || [];
+
+  const handleBarClick = (fileName: string) => {
+    setSelectedFile(selectedFile === fileName ? null : fileName);
+  };
+
+  const handleTestCountClick = (fileReport: any, type: 'existing' | 'new') => {
+    const count = type === 'existing' ? fileReport.testCasesFound : fileReport.newTestCasesAdded;
+    
+    if (count === 0) return;
+    
+    setDialogData({
+      file: fileReport.file,
+      type,
+      count,
+      tests: fileReport.generatedTests || 'No test details available'
+    });
+  };
 
   return (
     <div className="space-y-6" data-testid="test-coverage-viewer">
@@ -106,27 +143,220 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
         </CardContent>
       </Card>
 
-      {/* File-by-File Coverage */}
+      {/* Interactive Bar Chart */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
-            Detailed File Coverage
+            Test Case Counts per File
           </CardTitle>
           <CardDescription>
-            Test coverage breakdown for each source file
+            Click on bars to view file details
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {data.fileReports && data.fileReports.length > 0 ? (
-            data.fileReports.map((fileReport: any, index: number) => (
-              <FileReportCard key={index} fileReport={fileReport} index={index} />
-            ))
-          ) : (
-            <p className="text-muted-foreground text-center py-8">No file reports available</p>
-          )}
+        <CardContent>
+          <ResponsiveContainer width="100%" height={350}>
+            <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 100 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis 
+                dataKey="name" 
+                angle={-45} 
+                textAnchor="end" 
+                height={100}
+                tick={{ fill: 'currentColor', fontSize: 12 }}
+              />
+              <YAxis tick={{ fill: 'currentColor' }} />
+              <Tooltip 
+                contentStyle={{ 
+                  backgroundColor: 'hsl(var(--background))', 
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '6px'
+                }}
+              />
+              <Legend wrapperStyle={{ paddingTop: '20px' }} />
+              <Bar 
+                dataKey="Test Cases Found" 
+                fill="#10b981" 
+                onClick={(data) => handleBarClick(data.fullPath)}
+                cursor="pointer"
+              >
+                {chartData.map((entry: any, index: number) => (
+                  <Cell 
+                    key={`cell-${index}`}
+                    fill={selectedFile === entry.fullPath ? '#059669' : '#10b981'}
+                  />
+                ))}
+              </Bar>
+              <Bar 
+                dataKey="New Test Cases Added" 
+                fill="#a855f7"
+                onClick={(data) => handleBarClick(data.fullPath)}
+                cursor="pointer"
+              >
+                {chartData.map((entry: any, index: number) => (
+                  <Cell 
+                    key={`cell-${index}`}
+                    fill={selectedFile === entry.fullPath ? '#7e22ce' : '#a855f7'}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </CardContent>
       </Card>
+
+      {/* Interactive Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TableIcon className="h-5 w-5" />
+            Test Coverage Summary
+          </CardTitle>
+          <CardDescription>
+            Click on test counts to view details
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b-2 border-blue-600 dark:border-blue-400">
+                  <th className="text-left p-3 font-semibold bg-blue-50 dark:bg-blue-900/30">File</th>
+                  <th className="text-center p-3 font-semibold bg-blue-50 dark:bg-blue-900/30">Test Cases Found</th>
+                  <th className="text-center p-3 font-semibold bg-blue-50 dark:bg-blue-900/30">New Test Cases Added</th>
+                  <th className="text-center p-3 font-semibold bg-blue-50 dark:bg-blue-900/30">Coverage (%)</th>
+                  <th className="text-center p-3 font-semibold bg-blue-50 dark:bg-blue-900/30">New Test Coverage (%)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.fileReports?.map((fileReport: any, index: number) => {
+                  const totalTests = fileReport.testCasesFound + fileReport.newTestCasesAdded;
+                  const newTestPercentage = totalTests > 0 
+                    ? Math.round((fileReport.newTestCasesAdded / totalTests) * 100) 
+                    : 0;
+                  const isSelected = selectedFile === fileReport.file;
+                  
+                  return (
+                    <tr 
+                      key={index} 
+                      className={`border-b hover:bg-muted/50 transition-colors ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
+                      onClick={() => handleBarClick(fileReport.file)}
+                    >
+                      <td className="p-3 font-mono text-sm cursor-pointer">{fileReport.file}</td>
+                      <td 
+                        className="p-3 text-center cursor-pointer hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTestCountClick(fileReport, 'existing');
+                        }}
+                      >
+                        <Badge 
+                          variant="outline" 
+                          className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 cursor-pointer hover:bg-green-100 dark:hover:bg-green-800/30"
+                        >
+                          {fileReport.testCasesFound}
+                        </Badge>
+                      </td>
+                      <td 
+                        className="p-3 text-center cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTestCountClick(fileReport, 'new');
+                        }}
+                      >
+                        <Badge 
+                          variant="outline" 
+                          className="bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-800/30"
+                        >
+                          {fileReport.newTestCasesAdded}
+                        </Badge>
+                      </td>
+                      <td className="p-3 text-center font-semibold">100%</td>
+                      <td className="p-3 text-center font-semibold">{newTestPercentage}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Expandable File Details (when row/bar selected) */}
+      {selectedFile && data.fileReports && (
+        <Card className="border-2 border-blue-400 dark:border-blue-600 animate-in fade-in slide-in-from-top-2 duration-300">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <FileCode className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              {selectedFile}
+            </CardTitle>
+            <button
+              onClick={() => setSelectedFile(null)}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
+            >
+              ×
+            </button>
+          </CardHeader>
+          <CardContent>
+            {data.fileReports
+              .filter((fr: any) => fr.file === selectedFile)
+              .map((fileReport: any, idx: number) => (
+                <div key={idx} className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <Badge variant="outline" className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300">
+                      {fileReport.testCasesFound} existing tests
+                    </Badge>
+                    <Badge variant="outline" className="bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300">
+                      +{fileReport.newTestCasesAdded} new tests
+                    </Badge>
+                  </div>
+                  
+                  {fileReport.generatedTests && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-semibold flex items-center gap-2">
+                        <TestTube className="h-4 w-4" />
+                        Generated Test Cases
+                      </h4>
+                      <div className="relative rounded-lg overflow-hidden border bg-slate-950 dark:bg-slate-900">
+                        <pre className="p-4 overflow-x-auto text-xs leading-relaxed max-h-96">
+                          <code className="text-slate-100 dark:text-slate-200">
+                            {fileReport.generatedTests}
+                          </code>
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Test Details Dialog */}
+      <Dialog open={!!dialogData} onOpenChange={(open) => !open && setDialogData(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TestTube className="h-5 w-5" />
+              {dialogData?.type === 'existing' ? 'Existing' : 'New'} Test Cases
+            </DialogTitle>
+            <DialogDescription>
+              {dialogData?.file} - {dialogData?.count} {dialogData?.type === 'existing' ? 'existing' : 'new'} test{dialogData?.count !== 1 ? 's' : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4">
+            {dialogData?.tests && (
+              <div className="relative rounded-lg overflow-hidden border bg-slate-950 dark:bg-slate-900">
+                <pre className="p-4 overflow-x-auto text-xs leading-relaxed">
+                  <code className="text-slate-100 dark:text-slate-200">
+                    {dialogData.tests}
+                  </code>
+                </pre>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -158,88 +388,5 @@ function MetricCard({
       </div>
       <p className="text-3xl font-bold">{value}</p>
     </div>
-  );
-}
-
-// File Report Card Component
-function FileReportCard({ fileReport, index }: { fileReport: any; index: number }) {
-  const [isOpen, setIsOpen] = useState(false);
-  
-  const totalTests = fileReport.testCasesFound + fileReport.newTestCasesAdded;
-  const newTestPercentage = totalTests > 0 
-    ? Math.round((fileReport.newTestCasesAdded / totalTests) * 100) 
-    : 0;
-
-  return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen} data-testid={`collapsible-file-${index}`}>
-      <Card className={`border ${isOpen ? 'border-blue-400 dark:border-blue-600' : 'border-border'} transition-colors`}>
-        <CollapsibleTrigger asChild>
-          <Button
-            variant="ghost"
-            className="w-full p-4 h-auto hover:bg-muted/50"
-            data-testid={`button-toggle-file-${index}`}
-          >
-            <div className="w-full flex items-center justify-between">
-              <div className="flex items-center gap-3 text-left flex-1">
-                {isOpen ? (
-                  <ChevronDown className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                ) : (
-                  <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate" title={fileReport.file}>
-                    {fileReport.file}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate" title={fileReport.testFile}>
-                    Test: {fileReport.testFile || 'None'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 flex-shrink-0 ml-4">
-                <Badge variant="outline" className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300">
-                  {fileReport.testCasesFound} existing
-                </Badge>
-                <Badge variant="outline" className="bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300">
-                  +{fileReport.newTestCasesAdded} new
-                </Badge>
-                <div className="w-24 text-right">
-                  <div className="text-xs text-muted-foreground">Coverage</div>
-                  <div className="text-sm font-bold">{newTestPercentage}%</div>
-                </div>
-              </div>
-            </div>
-          </Button>
-        </CollapsibleTrigger>
-        
-        <CollapsibleContent>
-          <div className="p-4 pt-0 space-y-4 border-t">
-            {/* Mini Progress Bar */}
-            <div className="space-y-1">
-              <Progress value={newTestPercentage} className="h-2" />
-              <p className="text-xs text-muted-foreground">
-                {fileReport.newTestCasesAdded} new tests added to {totalTests} total tests
-              </p>
-            </div>
-
-            {/* Generated Test Code */}
-            {fileReport.generatedTests && (
-              <div className="space-y-2">
-                <h4 className="text-sm font-semibold flex items-center gap-2">
-                  <TestTube className="h-4 w-4" />
-                  Generated Test Cases
-                </h4>
-                <div className="relative rounded-lg overflow-hidden border bg-slate-950 dark:bg-slate-900">
-                  <pre className="p-4 overflow-x-auto text-xs leading-relaxed">
-                    <code className="text-slate-100 dark:text-slate-200">
-                      {fileReport.generatedTests}
-                    </code>
-                  </pre>
-                </div>
-              </div>
-            )}
-          </div>
-        </CollapsibleContent>
-      </Card>
-    </Collapsible>
   );
 }
