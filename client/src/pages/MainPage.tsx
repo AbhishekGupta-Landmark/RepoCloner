@@ -12,6 +12,7 @@ import LogsPanel from "@/components/LogsPanel";
 import SettingsPanel from "@/components/SettingsPanel";
 import RepositoryInput from "@/components/RepositoryInput";
 import TechnologyShowcase from "@/components/TechnologyShowcase";
+import TestCoveragePanel from "@/components/TestCoveragePanel";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppContext } from "@/context/AppContext";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -562,6 +563,26 @@ export default function MainPage() {
                           )}
                         </TabsTrigger>
                         <TabsTrigger 
+                          value="test-coverage" 
+                          className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth hover:bg-blue-500/10 hover:text-blue-500 relative overflow-hidden"
+                          data-testid="tab-test-coverage"
+                        >
+                          <motion.div
+                            whileHover={{ scale: 1.1, rotate: 5 }}
+                            transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                          >
+                            <Shield className="h-4 w-4" />
+                          </motion.div>
+                          Test Coverage and Validation
+                          {activeTab === "test-coverage" && (
+                            <motion.div
+                              className="absolute inset-0 bg-primary/5 -z-10"
+                              layoutId="activeMainTab"
+                              transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                            />
+                          )}
+                        </TabsTrigger>
+                        <TabsTrigger 
                           value="reports" 
                           className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth hover:bg-green-500/10 hover:text-green-500 relative overflow-hidden"
                           data-testid="tab-reports"
@@ -623,6 +644,10 @@ export default function MainPage() {
                           
                           <TabsContent value="analysis" className="h-full m-0">
                             <AnalysisPanel />
+                          </TabsContent>
+                          
+                          <TabsContent value="test-coverage" className="h-full m-0 overflow-y-auto">
+                            <TestCoveragePanel />
                           </TabsContent>
                           
                           <TabsContent value="reports" className="h-full m-0">

@@ -19,7 +19,7 @@ export default function ReportsPanel() {
   const [downloadingReports, setDownloadingReports] = useState<Set<string>>(new Set());
 
   // Fetch actual reports from the API
-  const { data: reports, isLoading } = useQuery<{ reports: AnalysisReport[] }>({
+  const { data: reports, isLoading } = useQuery<{ reports: AnalysisReport[], generatedReports?: Array<{id: string, fileName: string, type: string, createdAt: Date, size: number}> }>({
     queryKey: ['/api/analysis/reports', currentRepository?.id],
     enabled: !!currentRepository?.id // Only fetch when we have a repository
   });
@@ -79,6 +79,16 @@ export default function ReportsPanel() {
           title: 'Architecture Analysis Report',
           description: 'Software architecture patterns and design quality'
         };
+      case 'test-coverage-report':
+        return {
+          title: 'Test Coverage and Validation Report',
+          description: 'AI-powered test coverage analysis and recommendations'
+        };
+      case 'migration-report':
+        return {
+          title: 'Migration Analysis Report',
+          description: 'Kafka to Azure Service Bus migration analysis'
+        };
       default:
         return {
           title: 'Analysis Report',
@@ -123,7 +133,22 @@ export default function ReportsPanel() {
 
 
 
-  const displayReports = reports?.reports || [];
+  // Combine database reports and generated reports (from filesystem)
+  const dbReports = reports?.reports || [];
+  const genReports = (reports?.generatedReports || []).map(gr => ({
+    id: gr.id,
+    repositoryId: currentRepository?.id || '',
+    analysisType: gr.type,
+    results: { fileName: gr.fileName, fileSize: gr.size },
+    createdAt: gr.createdAt,
+    isGeneratedReport: true,
+    fileName: gr.fileName
+  }));
+  const displayReports = [...genReports, ...dbReports].sort((a, b) => {
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
 
   return (
     <div className="p-6 h-full flex flex-col">
@@ -283,9 +308,10 @@ export default function ReportsPanel() {
                         )}
                       </div>
                       
-                      {/* Download button for python-script reports with generated files */}
-                      {(report.analysisType === 'python-script' || report.analysisType === 'migration') && 
-                       results?.pythonScriptOutput?.generatedFiles?.length > 0 && 
+                      {/* Download button for reports with generated files or generated reports */}
+                      {(((report.analysisType === 'python-script' || report.analysisType === 'migration') && 
+                       results?.pythonScriptOutput?.generatedFiles?.length > 0) ||
+                       (report.analysisType === 'migration-report' || report.analysisType === 'test-coverage-report') && (report as any).fileName) && 
                        currentRepository?.id && (
                         <Button
                           variant="outline"
@@ -293,8 +319,11 @@ export default function ReportsPanel() {
                           disabled={downloadingReports.has(report.id)}
                           className="!text-white !border-white/30 hover:!bg-blue-600 hover:!border-blue-500 hover:!text-white bg-transparent"
                           onClick={async () => {
-                            const generatedFile = results.pythonScriptOutput.generatedFiles[0];
-                            const fileName = generatedFile.name;
+                            // Determine filename based on report type
+                            const fileName = (report as any).fileName || 
+                                           results.pythonScriptOutput?.generatedFiles?.[0]?.name;
+                            
+                            if (!fileName) return;
                             
                             setDownloadingReports(prev => new Set(prev).add(report.id));
                             
