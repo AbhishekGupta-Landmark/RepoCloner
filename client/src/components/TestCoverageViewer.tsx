@@ -100,14 +100,24 @@ function parseGeneratedTests(text: string): ParsedTestData {
   let codeBlock = restOfText;
   const sections: Array<{ title: string; content: string }> = [];
   
-  // Find all section matches
+  // Find all section matches - support multiple markdown formats
   const sectionMatches: Array<{ title: string; index: number }> = [];
   
   for (const header of sectionHeaders) {
-    const regex = new RegExp(`###?\\s*\\*\\*${header}.*?\\*\\*`, 'i');
-    const match = restOfText.match(regex);
-    if (match && match.index !== undefined) {
-      sectionMatches.push({ title: header, index: match.index });
+    // Try multiple patterns to match different markdown formats
+    const patterns = [
+      new RegExp(`###?\\s*\\*\\*${header}.*?\\*\\*`, 'i'),  // ## **Header**
+      new RegExp(`###?\\s+${header}:?`, 'i'),               // ## Header or ## Header:
+      new RegExp(`\\*\\*${header}:?\\*\\*`, 'i'),           // **Header:** or **Header**
+      new RegExp(`^${header}:?$`, 'im')                     // Header: or Header (line start)
+    ];
+    
+    for (const regex of patterns) {
+      const match = restOfText.match(regex);
+      if (match && match.index !== undefined) {
+        sectionMatches.push({ title: header, index: match.index });
+        break; // Found it, no need to try other patterns
+      }
     }
   }
   
@@ -856,13 +866,16 @@ function SourceCodeView({ filePath, isFullscreen }: { filePath: string; isFullsc
           <span className="font-mono text-sm text-[hsl(210,40%,98%)]">{fileName}</span>
         </div>
       </div>
-      <ScrollArea className="flex-1 border-x border-b border-[hsl(222,47%,20%)] bg-[hsl(222,47%,6%)]">
+      <div className="flex-1 border-x border-b border-[hsl(222,47%,20%)] bg-[hsl(222,47%,6%)] overflow-y-auto scrollbar-visible" style={{ 
+        scrollbarWidth: 'thin',
+        scrollbarColor: 'hsl(199,98%,57%) hsl(222,47%,12%)'
+      }}>
         <div className="p-4">
           <pre className="text-sm leading-relaxed">
             <code className="text-[hsl(210,40%,98%)] font-mono">{sourceCode}</code>
           </pre>
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
@@ -903,7 +916,10 @@ function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage
           </div>
         </div>
       </div>
-      <ScrollArea className="flex-1 border-x border-b border-[hsl(222,47%,20%)] bg-[hsl(222,47%,6%)]">
+      <div className="flex-1 border-x border-b border-[hsl(222,47%,20%)] bg-[hsl(222,47%,6%)] overflow-y-auto scrollbar-visible" style={{ 
+        scrollbarWidth: 'thin',
+        scrollbarColor: 'hsl(199,98%,57%) hsl(222,47%,12%)'
+      }}>
         <div className="flex">
           <div className="flex-shrink-0 bg-[hsl(222,47%,8%)] border-r border-[hsl(222,47%,20%)]">
             {coverageData.map((line) => (
@@ -931,7 +947,7 @@ function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage
                   className={`${
                     line.status === 'covered-old' ? 'bg-[hsl(162,73%,44%)]/5' :
                     line.status === 'covered-new' ? 'bg-[hsl(199,98%,57%)]/5' :
-                    line.status === 'uncovered' && line.content.trim() ? 'bg-[hsl(0,70%,50%)]/5' :
+                    line.status === 'uncovered' && line.content.trim() ? 'bg-[hsl(0,70%,50%)]/25' :
                     ''
                   }`}
                 >
@@ -941,7 +957,7 @@ function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage
             </pre>
           </div>
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
