@@ -13,7 +13,7 @@ export default function TestCoveragePanel() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Fetch latest test coverage report
-  const { data: reports, isLoading: reportsLoading } = useQuery<any>({
+  const { data: reports, isLoading: reportsLoading, isFetching: reportsFetching } = useQuery<any>({
     queryKey: ['/api/analysis/reports', currentRepository?.id],
     enabled: !!currentRepository?.id,
   });
@@ -55,8 +55,10 @@ export default function TestCoveragePanel() {
         throw error;
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports', currentRepository?.id] });
+    onSuccess: async () => {
+      // Wait for the query to refetch before clearing the analyzing state
+      await queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports', currentRepository?.id] });
+      await queryClient.refetchQueries({ queryKey: ['/api/analysis/reports', currentRepository?.id] });
       setIsAnalyzing(false);
     },
     onError: (error: any) => {
@@ -170,7 +172,7 @@ export default function TestCoveragePanel() {
         </CardContent>
       </Card>
 
-      {/* Show loading state when initially loading OR when analysis is running */}
+      {/* Show loading state when initially loading OR when analysis is running (includes refetch wait) */}
       {(reportsLoading && !latestTestCoverageReport) || isAnalyzing ? (
         <Card>
           <CardContent className="flex items-center justify-center py-8">
