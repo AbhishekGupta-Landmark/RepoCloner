@@ -494,12 +494,12 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                   border: '1px solid hsl(222,47%,30%)',
                   borderRadius: '4px',
                   color: 'hsl(210,40%,98%)',
-                  fontSize: '10px',
+                  fontSize: '11px',
                   fontWeight: 400,
                   padding: '4px 6px'
                 }}
-                labelStyle={{ color: 'hsl(199,98%,67%)', fontWeight: 500, fontSize: '10px' }}
-                itemStyle={{ color: 'hsl(210,40%,98%)', fontSize: '10px' }}
+                labelStyle={{ color: 'hsl(199,98%,67%)', fontWeight: 500, fontSize: '11px' }}
+                itemStyle={{ color: 'hsl(210,40%,98%)', fontSize: '11px' }}
               />
               <Legend 
                 wrapperStyle={{ 
