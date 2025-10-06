@@ -104,12 +104,15 @@ function parseGeneratedTests(text: string): ParsedTestData {
   const sectionMatches: Array<{ title: string; index: number }> = [];
   
   for (const header of sectionHeaders) {
+    // Escape special regex characters in header
+    const escapedHeader = header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
     // Try multiple patterns to match different markdown formats
     const patterns = [
-      new RegExp(`###?\\s*\\*\\*${header}.*?\\*\\*`, 'i'),  // ## **Header**
-      new RegExp(`###?\\s+${header}:?`, 'i'),               // ## Header or ## Header:
-      new RegExp(`\\*\\*${header}:?\\*\\*`, 'i'),           // **Header:** or **Header**
-      new RegExp(`^${header}:?$`, 'im')                     // Header: or Header (line start)
+      new RegExp(`###?\\s*\\*\\*${escapedHeader}[:\\-\\s]`, 'i'),  // ## **Header:** or ## **Header -
+      new RegExp(`\\*\\*${escapedHeader}[:\\-]?\\*\\*`, 'i'),      // **Header:** or **Header-** or **Header**
+      new RegExp(`^${escapedHeader}[:\\-]?\\s*$`, 'im'),           // Header: or Header- or Header (line start)
+      new RegExp(`^-\\s*\\*\\*${escapedHeader}[:\\-]`, 'im')       // - **Header: or - **Header-
     ];
     
     for (const regex of patterns) {
@@ -932,7 +935,7 @@ function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage
                 }`}
                 style={{ 
                   width: '60px',
-                  color: line.status !== 'uncovered' ? 'hsl(210,40%,98%)' : 'hsl(0,70%,50%)'
+                  color: 'hsl(215,20%,65%)'
                 }}
               >
                 {line.lineNumber}
@@ -947,7 +950,7 @@ function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage
                   className={`${
                     line.status === 'covered-old' ? 'bg-[hsl(162,73%,44%)]/5' :
                     line.status === 'covered-new' ? 'bg-[hsl(199,98%,57%)]/5' :
-                    line.status === 'uncovered' && line.content.trim() ? 'bg-[hsl(0,70%,50%)]/25' :
+                    line.status === 'uncovered' && line.content.trim() ? 'bg-[hsl(0,70%,50%)]/40' :
                     ''
                   }`}
                 >
