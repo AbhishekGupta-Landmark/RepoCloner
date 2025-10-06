@@ -686,8 +686,8 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
               
               return (
                 <div className="space-y-4 h-full flex flex-col">
-                  {/* Show actual AI Analysis from data */}
-                  {hasAnalysis && (
+                  {/* Show actual AI Analysis from data - Summary, Recommendations, Key Improvements ABOVE code */}
+                  {hasAnalysis && (dialogData.summary || dialogData.recommendations || dialogData.keyImprovements) && (
                     <div className="space-y-3 flex-shrink-0">
                       {dialogData.summary && (
                         <Card className="bg-[hsl(199,98%,57%)]/10 border-[hsl(199,98%,57%)]/30">
@@ -746,7 +746,33 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                           </CardContent>
                         </Card>
                       )}
-                      
+                    </div>
+                  )}
+                  
+                  {parsed.codeBlock && (
+                    <div className="relative rounded-lg overflow-hidden border-2 border-[hsl(162,73%,44%)]/50 bg-[hsl(222,47%,6%)] flex-shrink-0">
+                      <div className="bg-[hsl(222,47%,10%)] px-4 py-2 border-b border-[hsl(222,47%,20%)] flex items-center gap-2">
+                        <div className="flex gap-1.5">
+                          <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                          <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                          <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                        </div>
+                        <span className="text-xs text-[hsl(215,20%,65%)] ml-2 font-mono">{dialogData.testFile}</span>
+                      </div>
+                      <div className={`${isFullscreen ? "h-[calc(100vh-500px)]" : "h-96"} overflow-y-scroll scrollbar-visible`} style={{
+                        scrollbarWidth: 'thin',
+                        scrollbarColor: 'hsl(199,98%,57%) hsl(222,47%,12%)'
+                      }}>
+                        <pre className="p-4 text-sm leading-relaxed">
+                          <code className="text-[hsl(210,40%,98%)] font-mono">{parsed.codeBlock}</code>
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Note and Test Case Categories AFTER code block */}
+                  {hasAnalysis && (dialogData.note || dialogData.testCaseCategories) && (
+                    <div className="space-y-3 flex-shrink-0">
                       {dialogData.note && (
                         <Card className="bg-[hsl(267,83%,65%)]/10 border-[hsl(267,83%,65%)]/30">
                           <CardHeader className="pb-3">
@@ -774,24 +800,6 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                           </CardContent>
                         </Card>
                       )}
-                    </div>
-                  )}
-                  
-                  {parsed.codeBlock && (
-                    <div className="relative rounded-lg overflow-hidden border-2 border-[hsl(162,73%,44%)]/50 bg-[hsl(222,47%,6%)] flex-shrink-0">
-                      <div className="bg-[hsl(222,47%,10%)] px-4 py-2 border-b border-[hsl(222,47%,20%)] flex items-center gap-2">
-                        <div className="flex gap-1.5">
-                          <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                          <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                          <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                        </div>
-                        <span className="text-xs text-[hsl(215,20%,65%)] ml-2 font-mono">{dialogData.testFile}</span>
-                      </div>
-                      <ScrollArea className={`${isFullscreen ? "h-[calc(100vh-500px)]" : "h-96"} scrollbar-visible`}>
-                        <pre className="p-4 text-sm leading-relaxed">
-                          <code className="text-[hsl(210,40%,98%)] font-mono">{parsed.codeBlock}</code>
-                        </pre>
-                      </ScrollArea>
                     </div>
                   )}
                 </div>
