@@ -354,7 +354,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
               icon={<PlusCircle className="h-5 w-5" />}
               label="New Tests Added"
               value={data.totalNewTestCasesAdded}
-              color="purple"
+              color="blue"
             />
             <MetricCard
               icon={<TrendingUp className="h-5 w-5" />}
@@ -476,13 +476,13 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
               </Bar>
               <Bar 
                 dataKey="New Test Cases Added" 
-                fill="hsl(267,83%,70%)"
+                fill="hsl(199,98%,57%)"
                 radius={[6, 6, 0, 0]}
               >
                 {chartData.map((entry: any, index: number) => (
                   <Cell 
                     key={`cell-new-${index}`}
-                    fill="hsl(267,83%,70%)"
+                    fill="hsl(199,98%,57%)"
                   />
                 ))}
               </Bar>
@@ -552,7 +552,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                         </Badge>
                       </td>
                       <td 
-                        className="p-4 text-center hover:bg-[hsl(267,83%,65%)]/20 transition-colors cursor-pointer"
+                        className="p-4 text-center hover:bg-[hsl(199,98%,57%)]/20 transition-colors cursor-pointer"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleTestCountClick(fileReport, 'new');
@@ -560,7 +560,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                       >
                         <Badge 
                           variant="outline" 
-                          className="bg-[hsl(267,83%,65%)]/20 text-[hsl(267,83%,75%)] border-[hsl(267,83%,65%)] cursor-pointer hover:bg-[hsl(267,83%,65%)]/30 px-3 py-1 font-bold"
+                          className="bg-[hsl(199,98%,57%)]/20 text-[hsl(199,98%,67%)] border-[hsl(199,98%,57%)] cursor-pointer hover:bg-[hsl(199,98%,57%)]/30 px-3 py-1 font-bold"
                         >
                           {fileReport.newTestCasesAdded}
                         </Badge>
@@ -599,7 +599,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
             <div className="flex items-center justify-between">
               <div className="flex-1">
                 <DialogTitle className="flex items-center gap-2 text-xl text-[hsl(210,40%,98%)]">
-                  <TestTube className="h-6 w-6 text-[hsl(267,83%,65%)]" />
+                  <TestTube className="h-6 w-6 text-[hsl(199,98%,57%)]" />
                   {dialogData?.type === 'existing' ? 'Existing' : 'New'} Test Cases
                 </DialogTitle>
                 <DialogDescription className="space-y-2 text-[hsl(215,20%,65%)] mt-2">
@@ -612,7 +612,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                     <TestTube className="h-4 w-4" />
                     <span className="font-mono text-sm">{dialogData?.testFile}</span>
                   </div>
-                  <Badge variant="outline" className="mt-2 border-[hsl(267,83%,65%)] text-[hsl(267,83%,75%)]">
+                  <Badge variant="outline" className="mt-2 border-[hsl(199,98%,57%)] text-[hsl(199,98%,67%)]">
                     {dialogData?.count} test{dialogData?.count !== 1 ? 's' : ''}
                   </Badge>
                 </DialogDescription>
@@ -658,7 +658,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                   )}
                   
                   {parsed.codeBlock && (
-                    <div className="relative rounded-lg overflow-hidden border-2 border-[hsl(267,83%,65%)]/50 bg-[hsl(222,47%,6%)]">
+                    <div className="relative rounded-lg overflow-hidden border-2 border-[hsl(162,73%,44%)]/50 bg-[hsl(222,47%,6%)]">
                       <div className="bg-[hsl(222,47%,10%)] px-4 py-2 border-b border-[hsl(222,47%,20%)] flex items-center gap-2">
                         <div className="flex gap-1.5">
                           <div className="w-3 h-3 rounded-full bg-red-500"></div>
@@ -676,15 +676,15 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                   )}
 
                   {parsed.summary && (
-                    <Card className="bg-[hsl(43,96%,56%)]/10 border-[hsl(43,96%,56%)]/30">
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-sm flex items-center gap-2 text-[hsl(210,40%,98%)]">
-                          <FileText className="h-4 w-4 text-[hsl(43,96%,56%)]" />
+                    <Card className="border-2 border-[hsl(43,96%,56%)]/50 bg-gradient-to-br from-[hsl(43,96%,56%)]/20 via-[hsl(43,96%,56%)]/15 to-[hsl(43,96%,56%)]/10 shadow-lg">
+                      <CardHeader className="pb-3 bg-[hsl(43,96%,56%)]/10 border-b border-[hsl(43,96%,56%)]/30">
+                        <CardTitle className="text-base flex items-center gap-2 text-[hsl(0,0%,100%)] font-semibold">
+                          <Sparkles className="h-5 w-5 text-[hsl(43,96%,56%)]" />
                           Summary
                         </CardTitle>
                       </CardHeader>
-                      <CardContent>
-                        <div className="text-sm leading-relaxed whitespace-pre-wrap text-[hsl(215,20%,75%)]">{parsed.summary}</div>
+                      <CardContent className="pt-4">
+                        <div className="text-sm leading-relaxed whitespace-pre-wrap text-[hsl(0,0%,95%)] font-medium">{parsed.summary}</div>
                       </CardContent>
                     </Card>
                   )}
@@ -851,7 +851,7 @@ function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage
             </div>
             {coverageType === 'new' && (
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded bg-[hsl(267,83%,65%)]"></div>
+                <div className="w-3 h-3 rounded bg-[hsl(199,98%,57%)]"></div>
                 <span className="text-[hsl(215,20%,65%)]">Covered by New Tests</span>
               </div>
             )}
@@ -873,7 +873,7 @@ function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage
                 key={line.lineNumber} 
                 className={`px-2 py-1 text-right text-xs font-mono border-l-4 ${
                   line.status === 'covered-old' ? 'border-l-[hsl(162,73%,44%)] bg-[hsl(162,73%,44%)]/10' :
-                  line.status === 'covered-new' ? 'border-l-[hsl(267,83%,65%)] bg-[hsl(267,83%,65%)]/10' :
+                  line.status === 'covered-new' ? 'border-l-[hsl(199,98%,57%)] bg-[hsl(199,98%,57%)]/10' :
                   'border-l-transparent'
                 }`}
                 style={{ 
@@ -892,7 +892,7 @@ function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage
                   key={line.lineNumber}
                   className={`${
                     line.status === 'covered-old' ? 'bg-[hsl(162,73%,44%)]/5' :
-                    line.status === 'covered-new' ? 'bg-[hsl(267,83%,65%)]/5' :
+                    line.status === 'covered-new' ? 'bg-[hsl(199,98%,57%)]/5' :
                     line.status === 'uncovered' && line.content.trim() ? 'bg-[hsl(0,70%,50%)]/5' :
                     ''
                   }`}
