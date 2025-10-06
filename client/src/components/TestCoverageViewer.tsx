@@ -914,7 +914,7 @@ function SourceCodeView({ filePath, isFullscreen }: { filePath: string; isFullsc
           <span className="font-mono text-sm text-[hsl(210,40%,98%)]">{fileName}</span>
         </div>
       </div>
-      <div className="flex-1 border-x border-b border-[hsl(222,47%,20%)] bg-[hsl(222,47%,6%)] overflow-y-auto scrollbar-visible" style={{ 
+      <div className="flex-1 border-x border-b border-[hsl(222,47%,20%)] bg-[hsl(222,47%,6%)] overflow-y-scroll scrollbar-visible" style={{ 
         scrollbarWidth: 'thin',
         scrollbarColor: 'hsl(199,98%,57%) hsl(222,47%,12%)'
       }}>
@@ -964,7 +964,7 @@ function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage
           </div>
         </div>
       </div>
-      <div className="flex-1 border-x border-b border-[hsl(222,47%,20%)] bg-[hsl(222,47%,6%)] overflow-y-auto scrollbar-visible" style={{ 
+      <div className="flex-1 border-x border-b border-[hsl(222,47%,20%)] bg-[hsl(222,47%,6%)] overflow-y-scroll scrollbar-visible" style={{ 
         scrollbarWidth: 'thin',
         scrollbarColor: 'hsl(199,98%,57%) hsl(222,47%,12%)'
       }}>
