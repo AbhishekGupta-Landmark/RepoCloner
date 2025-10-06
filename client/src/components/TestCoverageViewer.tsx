@@ -689,6 +689,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                   filePath={sourceDialogData.file} 
                   coverageType="old" 
                   isFullscreen={isFullscreen}
+                  coveragePercentage={sourceDialogData.coveragePercentage || 0}
                 />
               )}
               {sourceDialogData.type === 'new-coverage' && (
@@ -696,6 +697,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                   filePath={sourceDialogData.file} 
                   coverageType="new" 
                   isFullscreen={isFullscreen}
+                  coveragePercentage={sourceDialogData.coveragePercentage || 0}
                 />
               )}
             </div>
@@ -758,14 +760,10 @@ function SourceCodeView({ filePath, isFullscreen }: { filePath: string; isFullsc
   );
 }
 
-function CoverageView({ filePath, coverageType, isFullscreen }: { filePath: string; coverageType: 'old' | 'new'; isFullscreen: boolean }) {
+function CoverageView({ filePath, coverageType, isFullscreen, coveragePercentage }: { filePath: string; coverageType: 'old' | 'new'; isFullscreen: boolean; coveragePercentage: number }) {
   const sourceCode = generateMockSourceCode(filePath);
   const coverageData = generateMockCoverageData(sourceCode, coverageType);
   const fileName = filePath.split('\\').pop() || filePath.split('/').pop() || 'Unknown.cs';
-  
-  const coveredLines = coverageData.filter(line => line.status !== 'uncovered').length;
-  const totalLines = coverageData.filter(line => line.content.trim()).length;
-  const coveragePercent = totalLines > 0 ? Math.round((coveredLines / totalLines) * 100) : 0;
   
   return (
     <div className="h-full flex flex-col">
@@ -791,7 +789,7 @@ function CoverageView({ filePath, coverageType, isFullscreen }: { filePath: stri
               <span className="text-[hsl(215,20%,65%)]">Uncovered</span>
             </div>
             <Badge variant="outline" className="border-[hsl(162,73%,44%)] text-[hsl(162,73%,60%)]">
-              {coveragePercent}% Coverage
+              {coveragePercentage}% Coverage
             </Badge>
           </div>
         </div>
