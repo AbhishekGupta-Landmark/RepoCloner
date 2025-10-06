@@ -65,8 +65,8 @@ def call_llm(messages: List[Dict], api_key: str, base_url: str) -> str:
     return resp.json()["choices"][0]["message"]["content"]
 
 
-def analyze_and_generate_tests(source_path: str, test_path: Optional[str], api_key: str, base_url: str, root_dir: str) -> str:
-    """Analyze source code and generate test cases using AI"""
+def analyze_and_generate_tests(source_path: str, test_path: Optional[str], api_key: str, base_url: str, root_dir: str) -> Dict:
+    """Analyze source code and generate test cases using AI - returns structured JSON"""
     source_code = read_file(source_path)
     test_code = read_file(test_path) if test_path else "No test file found."
     
@@ -82,16 +82,47 @@ def analyze_and_generate_tests(source_path: str, test_path: Optional[str], api_k
         f"Source file:\n{source_code}\n\n"
         f"Test file:\n{test_code}\n"
         "\n---\n"
-        "Additionally, after generating the tests, count the total number of test cases present, "
-        "count how many test cases are newly added (AI generated), and provide a summary report with these counts. "
-        "Format the summary as follows (replace N with the actual numbers):\n"
-        "- **Test Cases Found**: N\n"
-        "- **New Test Cases Added**: N\n"
-        "- **Summary**: <your summary here>\n"
+        "Count the existing test cases and newly generated test cases. "
+        "Respond ONLY with valid JSON in this exact format:\n"
+        "{\n"
+        '  "testCasesFound": <number>,\n'
+        '  "newTestCasesAdded": <number>,\n'
+        '  "generatedTestCode": "<complete C# test code>",\n'
+        '  "summary": "<brief summary>",\n'
+        '  "recommendations": "<recommendations for improving the code>",\n'
+        '  "keyImprovements": "<key improvements made>",\n'
+        '  "note": "<any important notes>",\n'
+        '  "testCaseCategories": "<categories of test cases generated>"\n'
+        "}\n"
+        "Do NOT include markdown formatting, only pure JSON."
     )
     
     messages = [{"role": "user", "content": prompt}]
-    return call_llm(messages, api_key, base_url)
+    response = call_llm(messages, api_key, base_url)
+    
+    # Parse JSON response
+    import json
+    import re
+    
+    # Try to extract JSON if wrapped in markdown code blocks
+    json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+    if json_match:
+        response = json_match.group(1)
+    
+    try:
+        return json.loads(response.strip())
+    except json.JSONDecodeError:
+        # Fallback if AI doesn't return valid JSON
+        return {
+            "testCasesFound": 0,
+            "newTestCasesAdded": 0,
+            "generatedTestCode": response,
+            "summary": "AI response parsing failed",
+            "recommendations": "",
+            "keyImprovements": "",
+            "note": "",
+            "testCaseCategories": ""
+        }
 
 
 def map_sources_to_tests(cs_files: List[str], test_files: List[str]) -> Dict[str, Optional[str]]:
@@ -108,47 +139,55 @@ def map_sources_to_tests(cs_files: List[str], test_files: List[str]) -> Dict[str
     return mapping
 
 
-def generate_markdown_report(report: List[Dict], output_path: str, repo_url: str, root_dir: str):
-    """Generate markdown test coverage report"""
+def generate_json_report(report: List[Dict], output_path: str, repo_url: str, root_dir: str):
+    """Generate JSON test coverage report"""
     import time
+    import json
+    
+    # Calculate totals
+    total_found = sum(entry['analysis']['testCasesFound'] for entry in report)
+    total_new = sum(entry['analysis']['newTestCasesAdded'] for entry in report)
+    
+    # Build file reports
+    file_reports = []
+    for entry in report:
+        source_rel = os.path.relpath(entry['source'], root_dir)
+        test_rel = os.path.relpath(entry['test'], root_dir) if entry['test'] else 'None'
+        analysis = entry['analysis']
+        
+        # Calculate coverage percentage (8 lines per test heuristic)
+        lines_in_file = len(read_file(entry['source']).split('\n'))
+        old_coverage = min(100, (analysis['testCasesFound'] * 8 * 100) // lines_in_file) if lines_in_file > 0 else 0
+        new_coverage = min(100, ((analysis['testCasesFound'] + analysis['newTestCasesAdded']) * 8 * 100) // lines_in_file) if lines_in_file > 0 else 0
+        
+        file_reports.append({
+            "file": source_rel,
+            "testFile": test_rel,
+            "testCasesFound": analysis['testCasesFound'],
+            "newTestCasesAdded": analysis['newTestCasesAdded'],
+            "generatedTests": analysis['generatedTestCode'],
+            "oldCoveragePercentage": old_coverage,
+            "newCoveragePercentage": new_coverage,
+            "summary": analysis.get('summary', ''),
+            "recommendations": analysis.get('recommendations', ''),
+            "keyImprovements": analysis.get('keyImprovements', ''),
+            "note": analysis.get('note', ''),
+            "testCaseCategories": analysis.get('testCaseCategories', '')
+        })
+    
+    # Build final report structure
+    report_data = {
+        "repository": repo_url,
+        "generatedAt": time.strftime('%Y-%m-%d %H:%M:%S'),
+        "totalFilesAnalyzed": len(report),
+        "totalOriginalTestCases": total_found,
+        "totalNewTestCasesAdded": total_new,
+        "totalTestCasesAfterImprovements": total_found + total_new,
+        "fileReports": file_reports
+    }
     
     with open(output_path, "w", encoding="utf-8") as f:
-        f.write("# AI Test Coverage Report\n\n")
-        f.write(f"**Repository:** {repo_url}\n\n")
-        f.write(f"**Generated:** {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-        f.write("---\n\n")
-        
-        # Summary section
-        total_found = 0
-        total_new = 0
-        for entry in report:
-            analysis = entry['generated_tests']
-            import re
-            found_match = re.search(r'\*\*Test Cases Found\*\*:\s*(\d+)', analysis)
-            new_match = re.search(r'\*\*New Test Cases Added\*\*:\s*(\d+)', analysis)
-            if found_match:
-                total_found += int(found_match.group(1))
-            if new_match:
-                total_new += int(new_match.group(1))
-        
-        f.write("## Summary\n\n")
-        f.write(f"- **Total Files Analyzed:** {len(report)}\n")
-        f.write(f"- **Total Original Test Cases:** {total_found}\n")
-        f.write(f"- **Total New Test Cases Added:** {total_new}\n")
-        f.write(f"- **Total Test Cases After Improvements:** {total_found + total_new}\n\n")
-        f.write("---\n\n")
-        
-        # File-by-file analysis
-        for entry in report:
-            source_rel = os.path.relpath(entry['source'], root_dir)
-            test_rel = os.path.relpath(entry['test'], root_dir) if entry['test'] else 'None'
-            
-            f.write(f"## {source_rel}\n")
-            f.write(f"**Test file:** {test_rel}\n\n")
-            f.write("### Analysis and Generated Tests\n")
-            f.write("```csharp\n")
-            f.write(entry['generated_tests'])
-            f.write("\n```\n\n")
+        json.dump(report_data, f, indent=2)
     
     print(f"✅ Test Coverage Report generated: {output_path}")
 
@@ -192,13 +231,13 @@ def main():
             print(f"🤖 Analyzing {idx}/{len(mapping)}: {os.path.relpath(src, root_dir)} ...")
             
             try:
-                generated_tests = analyze_and_generate_tests(src, test, args.api_key, args.base_url, root_dir)
+                analysis_result = analyze_and_generate_tests(src, test, args.api_key, args.base_url, root_dir)
                 test_path = test or os.path.join(os.path.dirname(src), os.path.basename(src).replace('.cs', 'Tests.cs'))
                 
                 report.append({
                     "source": src,
                     "test": test_path,
-                    "generated_tests": generated_tests
+                    "analysis": analysis_result
                 })
             except Exception as e:
                 error_msg = str(e)
@@ -209,14 +248,14 @@ def main():
                 # Continue with other files even if one fails
                 continue
         
-        # Generate markdown report
+        # Generate JSON report
         import time
         analysis_id = str(int(time.time() * 1000))
-        md_report = os.path.join(root_dir, f"test-coverage-report-{analysis_id}.md")
+        json_report = os.path.join(root_dir, f"test-coverage-report-{analysis_id}.json")
         
-        generate_markdown_report(report, md_report, args.repo_url, root_dir)
+        generate_json_report(report, json_report, args.repo_url, root_dir)
         
-        print(f"✅ Analysis complete. Generated report: {md_report}")
+        print(f"✅ Analysis complete. Generated report: {json_report}")
         
     except Exception as e:
         # Catch all errors including network/VPN failures

@@ -275,11 +275,19 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
     );
   }
 
-  const coveragePercentage = data.totalTestCasesAfterImprovements > 0
-    ? Math.round((data.totalNewTestCasesAdded / data.totalTestCasesAfterImprovements) * 100)
+  // Calculate weighted average coverage based on file coverage percentages
+  const coveragePercentage = data.fileReports && data.fileReports.length > 0
+    ? Math.round(
+        data.fileReports.reduce((sum: number, report: any) => 
+          sum + (report.newCoveragePercentage || 0), 0
+        ) / data.fileReports.length
+      )
     : 0;
 
-  const chartData = data.fileReports?.map((fileReport: any) => ({
+  // Filter out files with no test data to avoid empty bars in chart
+  const chartData = data.fileReports?.filter((report: any) => 
+    report.testCasesFound > 0 || report.newTestCasesAdded > 0
+  ).map((fileReport: any) => ({
     name: fileReport.file.split('\\').pop() || fileReport.file.split('/').pop() || fileReport.file,
     fullPath: fileReport.file,
     'Test Cases Found': fileReport.testCasesFound,
@@ -489,20 +497,20 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
             Interactive visualization of test coverage across files
           </CardDescription>
         </CardHeader>
-        <CardContent className="pt-6">
-          <ResponsiveContainer width="100%" height={600}>
-            <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 120 }}>
+        <CardContent className="pt-6 pb-4">
+          <ResponsiveContainer width="100%" height={400}>
+            <BarChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 80 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(222,47%,25%)" />
               <XAxis 
                 dataKey="name" 
                 angle={-45} 
                 textAnchor="end" 
-                height={120}
-                tick={{ fill: 'hsl(0,0%,100%)', fontSize: 14, fontWeight: 500 }}
+                height={80}
+                tick={{ fill: 'hsl(0,0%,100%)', fontSize: 13, fontWeight: 500 }}
                 stroke="hsl(0,0%,70%)"
               />
               <YAxis 
-                tick={{ fill: 'hsl(0,0%,100%)', fontSize: 14, fontWeight: 500 }} 
+                tick={{ fill: 'hsl(0,0%,100%)', fontSize: 13, fontWeight: 500 }} 
                 stroke="hsl(0,0%,70%)"
               />
               <Tooltip 
@@ -510,11 +518,12 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                   backgroundColor: 'hsl(222,47%,12%)', 
                   border: '2px solid hsl(222,47%,30%)',
                   borderRadius: '8px',
-                  color: 'hsl(0,0%,100%)',
+                  color: 'hsl(210,40%,98%)',
                   fontSize: '14px',
                   fontWeight: 500
                 }}
-                labelStyle={{ color: 'hsl(0,0%,100%)', fontWeight: 600 }}
+                labelStyle={{ color: 'hsl(199,98%,67%)', fontWeight: 600 }}
+                itemStyle={{ color: 'hsl(210,40%,98%)' }}
               />
               <Legend 
                 wrapperStyle={{ 
