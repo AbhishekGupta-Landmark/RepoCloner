@@ -1665,9 +1665,12 @@ export async function registerRoutes(app: Application): Promise<Server> {
         
         // Execute test coverage Python script
         const { execSync } = await import('child_process');
+        const os = await import('os');
         const scriptPath = path.join(__dirname, '../scripts/test-coverage-and-validation/test_coverage_analyzer.py');
         
-        const command = `python3 "${scriptPath}" --repo-path "${repository.localPath}" --repo-url "${repository.url}" --api-key "${aiSettings.apiKey}" --base-url "${aiSettings.apiEndpointUrl}"`;
+        // Use 'python' on Windows, 'python3' on Unix-like systems
+        const pythonCmd = os.platform() === 'win32' ? 'python' : 'python3';
+        const command = `${pythonCmd} "${scriptPath}" --repo-path "${repository.localPath}" --repo-url "${repository.url}" --api-key "${aiSettings.apiKey}" --base-url "${aiSettings.apiEndpointUrl}"`;
         
         broadcastLog('INFO', `Running test coverage analyzer: ${scriptPath}`);
         
@@ -1688,6 +1691,20 @@ export async function registerRoutes(app: Application): Promise<Server> {
           stderr = error.stderr?.toString() || error.message;
           stdout = error.stdout?.toString() || '';
           broadcastLog('ERROR', `Test coverage analysis failed: ${stderr}`);
+          
+          // Check if Python is not found
+          if (stderr.includes('Python was not found') || stderr.includes('python: not found') || stderr.includes('command not found')) {
+            const installInstructions = os.platform() === 'win32' 
+              ? 'Please install Python from https://www.python.org/downloads/ or the Microsoft Store. Make sure to check "Add Python to PATH" during installation.'
+              : 'Please install Python 3 using your package manager (e.g., apt install python3, brew install python3)';
+              
+            return res.status(500).json({
+              success: false,
+              error: `Python is not installed or not in PATH. ${installInstructions}`,
+              exitCode,
+              pythonNotFound: true
+            });
+          }
           
           return res.status(500).json({
             success: false,
