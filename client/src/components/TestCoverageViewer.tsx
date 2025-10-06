@@ -488,7 +488,7 @@ export default function TestCoverageViewer({ report }: TestCoverageViewerProps) 
                 stroke="hsl(0,0%,70%)"
               />
               <Tooltip 
-                cursor={{ fill: 'hsl(222,47%,20%)', opacity: 0.3 }}
+                cursor={{ fill: 'hsl(222,47%,20%)', opacity: 0.3, width: 60 }}
                 contentStyle={{ 
                   backgroundColor: 'hsl(222,47%,12%)', 
                   border: '1px solid hsl(222,47%,30%)',
