@@ -64,6 +64,15 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
         ? `/api/reports/${repositoryId}/structured?analysisType=${encodeURIComponent(analysisType)}`
         : `/api/reports/${repositoryId}/structured`;
       const response = await fetch(url);
+      
+      // Check content type to ensure we're getting JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Expected JSON but got:', contentType, text.substring(0, 200));
+        throw new Error(`Server returned ${contentType || 'non-JSON'} instead of JSON`);
+      }
+      
       if (!response.ok) {
         throw new Error('Failed to fetch structured migration data');
       }
