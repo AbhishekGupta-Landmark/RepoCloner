@@ -35,24 +35,20 @@ export function useAnalysis() {
       // Build cache key with analysisType included
       const cacheKey = ['structured-report', repositoryId, analysisTypeId || 'all'];
       
-      // Immediate cache update for successful analysis (only when success is true)
+      // Store successful analysis result in cache (only when success is true)
       if (data.success !== false && data.structuredData) {
         queryClient.setQueryData(cacheKey, {
-          status: 'completed',
+          status: 'ready',
           structuredData: data.structuredData,
           reportId: data.reportId,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          analysisType: analysisTypeId
         });
       }
       
-      // Then refetch to ensure data consistency
-      await queryClient.refetchQueries({ 
-        queryKey: cacheKey, 
-        type: 'active', 
-        exact: true 
-      });
-      
+      // Invalidate reports list to refresh
       queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/repositories'] });
       
       toast({
         title: "Migration Analysis Complete",
@@ -65,23 +61,19 @@ export function useAnalysis() {
       // Build cache key with analysisType included
       const cacheKey = ['structured-report', repositoryId, analysisTypeId || 'all'];
       
-      // Immediate cache update for failed analysis - this will trigger the main screen error display
+      // Store failed analysis in cache - this will trigger the main screen error display
       queryClient.setQueryData(cacheKey, {
         status: 'failed',
         error: error.message || "Analysis failed",
         structuredData: null,
         reportId: null,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        analysisType: analysisTypeId
       });
       
-      // Then refetch to get actual server response
-      await queryClient.refetchQueries({ 
-        queryKey: cacheKey, 
-        type: 'active', 
-        exact: true 
-      });
-      
+      // Invalidate reports list
       queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/repositories'] });
       
       // Error is displayed on main screen - no toast needed
     }
