@@ -115,11 +115,13 @@ export function useAnalysis() {
       // CRITICAL FIX: Always invalidate cache after successful analysis
       queryClient.invalidateQueries({ queryKey: ['structured-report', repositoryId] });
       queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/repositories'] }); // Refresh repository list to get updated lastReportId
       return true;
     } catch (error) {
       // CRITICAL FIX: Also invalidate cache on failure
       queryClient.invalidateQueries({ queryKey: ['structured-report', repositoryId] });
       queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/repositories'] }); // Refresh repository list to get updated lastReportId
       return false;
     }
   };
