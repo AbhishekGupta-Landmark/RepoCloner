@@ -5,7 +5,7 @@ import re
 import json
 import sys
 import argparse
-from typing import List, Dict
+from typing import List, Dict, Any, Union
 from openai import AzureOpenAI
 
 # ========== Configuration ==========
@@ -212,6 +212,100 @@ def get_snippet_from_file(file_path: str, max_chars: int) -> str:
     except Exception as e:
         return ""
 
+def parse_json_response(content: str) -> Dict:
+    """Robust JSON parsing for AI responses."""
+    content = content.strip()
+    
+    # Strategy 1: Direct JSON parse
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        pass
+    
+    # Strategy 2: Extract from markdown code blocks
+    if "```json" in content or "```" in content:
+        match = re.search(r'```(?:json)?\s*\n(.*?)\n```', content, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except json.JSONDecodeError:
+                pass
+    
+    # Strategy 3: Find JSON object in text
+    try:
+        decoder = json.JSONDecoder()
+        idx = content.find('{')
+        if idx != -1:
+            obj, _ = decoder.raw_decode(content[idx:])
+            return obj
+    except (json.JSONDecodeError, ValueError):
+        pass
+    
+    return {}
+
+def ask_gpt4_for_migration_code(file_path: str, code_content: str, client: AzureOpenAI, model: str) -> Dict[str, Union[str, List[str]]]:
+    """Ask GPT-4 to generate actual migration code for Kafka to Azure Service Bus.
+    Returns a dict with:
+    {
+      "migrated_code": "...",
+      "description": "...",
+      "key_changes": [...]
+    }
+    """
+    
+    prompt = f"""You are an expert C# developer specializing in Kafka to Azure Service Bus migrations.
+
+I will give you a C# file that uses Apache Kafka (Confluent.Kafka). Your task is to:
+1. Analyze the code carefully
+2. Generate the EXACT migrated code replacing Kafka with Azure Service Bus
+3. Return ONLY valid JSON with this structure:
+
+{{
+  "migrated_code": "the actual migrated C# code here",
+  "description": "brief description of what was migrated",
+  "key_changes": ["change 1", "change 2", "change 3"]
+}}
+
+File: {file_path}
+
+Code:
+```csharp
+{code_content}
+```
+
+IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should contain actual working C# code."""
+
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            temperature=0,
+            messages=[
+                {"role": "system", "content": "You are a code migration expert. Always return valid JSON only."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=2000
+        )
+
+        content = resp.choices[0].message.content
+        if content is None:
+            return {"migrated_code": "", "description": "AI returned no response", "key_changes": []}
+        
+        content = content.strip()
+        
+        # Try parsing JSON with our robust parser
+        result = parse_json_response(content)
+        if result and "migrated_code" in result:
+            return {
+                "migrated_code": result.get("migrated_code", ""),
+                "description": result.get("description", "Migration generated"),
+                "key_changes": result.get("key_changes", [])
+            }
+        else:
+            return {"migrated_code": "", "description": "Failed to parse AI response", "key_changes": []}
+            
+    except Exception as e:
+        return {"migrated_code": "", "description": f"Error: {str(e)}", "key_changes": []}
+
 # ========== .csproj NuGet Parsing ==========
 
 def parse_csproj_nugets(csproj_file: str) -> List[Dict[str,str]]:
@@ -414,31 +508,40 @@ def main():
                 "summary": explanation
             })
             
-            # Generate diff for this file
-            diff_content = f"""--- a/{file_path}
-+++ b/{file_path}
-@@ Migration Required @@
--// Kafka implementation ({role})
-+// Azure Service Bus implementation
-+using Azure.Messaging.ServiceBus;
-+
-+// Replace Kafka {role} with Service Bus equivalent:
-+// - Remove Confluent.Kafka package reference
-+// - Add Azure.Messaging.ServiceBus package
-+// - Update connection configuration
-+// - Migrate message producers/consumers to ServiceBus{("Client" if role == "producer" else "Receiver")}
-"""
+            # Get actual file content and generate real migration code with AI
+            full_path = os.path.join(root_dir, file_path)
+            file_content = get_snippet_from_file(full_path, 4000)  # Larger snippet for migration
             
-            transformed_report["diffs"].append({
-                "file": file_path,
-                "diff": diff_content,
-                "description": f"Migration guide for {role}: {explanation}",
-                "key_changes": [
-                    f"Replace Kafka {role} with Azure Service Bus",
-                    "Update NuGet packages",
-                    "Modify connection configuration"
-                ]
-            })
+            if file_content.strip():
+                migration_result = ask_gpt4_for_migration_code(file_path, file_content, client, args.model)
+                
+                migrated_code = migration_result.get("migrated_code", "")
+                description = migration_result.get("description", f"Migration guide for {role}")
+                key_changes = migration_result.get("key_changes", [f"Replace Kafka {role} with Azure Service Bus"])
+                
+                # Generate actual diff with real code
+                diff_content = f"""--- a/{file_path}
++++ b/{file_path}
+@@ {description} @@
+-{file_content[:500]}...
++{migrated_code[:500] if migrated_code else '// Migration code generation failed'}...
+"""
+                
+                transformed_report["diffs"].append({
+                    "file": file_path,
+                    "diff": diff_content,
+                    "description": description,
+                    "key_changes": key_changes if key_changes else [f"Replace Kafka {role} with Azure Service Bus"],
+                    "migrated_code": migrated_code  # Full migrated code
+                })
+            else:
+                # Fallback if file can't be read
+                transformed_report["diffs"].append({
+                    "file": file_path,
+                    "diff": f"--- a/{file_path}\n+++ b/{file_path}\n@@ File not readable @@",
+                    "description": f"Could not read file for migration",
+                    "key_changes": [f"Replace Kafka {role} with Azure Service Bus"]
+                })
     
     # Add keyword-detected files to inventory if AI didn't find them
     # But don't label them as "manual detection" - just show them as detected
@@ -450,21 +553,40 @@ def main():
                 "summary": "Contains Kafka API usage"
             })
             
-            # Generate diff for detected files
-            diff_content = f"""--- a/{file}
-+++ b/{file}
-@@ Kafka Migration Required @@
--// Kafka implementation
-+// Migrate to Azure Service Bus
-+using Azure.Messaging.ServiceBus;
-"""
+            # Get actual file content and generate real migration code with AI
+            full_path = os.path.join(root_dir, file)
+            file_content = get_snippet_from_file(full_path, 4000)
             
-            transformed_report["diffs"].append({
-                "file": file,
-                "diff": diff_content,
-                "description": "Kafka to Azure Service Bus migration required",
-                "key_changes": ["Replace Kafka with Azure Service Bus", "Update connection configuration"]
-            })
+            if file_content.strip():
+                migration_result = ask_gpt4_for_migration_code(file, file_content, client, args.model)
+                
+                migrated_code = migration_result.get("migrated_code", "")
+                description = migration_result.get("description", "Kafka to Azure Service Bus migration")
+                key_changes = migration_result.get("key_changes", ["Replace Kafka with Azure Service Bus"])
+                
+                # Generate actual diff with real code
+                diff_content = f"""--- a/{file}
++++ b/{file}
+@@ {description} @@
+-{file_content[:500]}...
++{migrated_code[:500] if migrated_code else '// Migration code generation failed'}...
+"""
+                
+                transformed_report["diffs"].append({
+                    "file": file,
+                    "diff": diff_content,
+                    "description": description,
+                    "key_changes": key_changes if key_changes else ["Replace Kafka with Azure Service Bus"],
+                    "migrated_code": migrated_code
+                })
+            else:
+                # Fallback
+                transformed_report["diffs"].append({
+                    "file": file,
+                    "diff": f"--- a/{file}\n+++ b/{file}\n@@ File not readable @@",
+                    "description": "Could not read file for migration",
+                    "key_changes": ["Replace Kafka with Azure Service Bus"]
+                })
     
     # Add NuGet package changes as diffs
     for change in report.get("csproj_changes", []):
