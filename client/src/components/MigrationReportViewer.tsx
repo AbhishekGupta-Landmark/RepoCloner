@@ -47,6 +47,8 @@ interface MigrationReportViewerProps {
 }
 
 export function MigrationReportViewer({ repositoryId }: MigrationReportViewerProps) {
+  const [keyChangesOpen, setKeyChangesOpen] = useState(true);
+  
   // Get analysis functions and loading state
   const { analyzeCode, isLoading } = useAnalysis();
   
@@ -262,7 +264,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
 
       {/* Key Changes Section */}
       {uniqueKeyChanges.length > 0 && (
-        <Collapsible defaultOpen={true}>
+        <Collapsible open={keyChangesOpen} onOpenChange={setKeyChangesOpen}>
           <Card className="border-yellow-200 dark:border-yellow-800" data-testid="section-key-changes">
             <CardHeader>
               <CollapsibleTrigger asChild>
@@ -277,7 +279,7 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
                       Critical modifications required for Kafka to Azure Service Bus migration
                     </CardDescription>
                   </div>
-                  <ChevronDown className="h-5 w-5 text-yellow-600 dark:text-yellow-400 transition-transform" />
+                  <ChevronDown className={`h-5 w-5 text-yellow-600 dark:text-yellow-400 transition-transform duration-200 ${keyChangesOpen ? 'rotate-180' : ''}`} />
                 </div>
               </CollapsibleTrigger>
             </CardHeader>

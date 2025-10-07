@@ -115,7 +115,7 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
         const stats = diff.stats;
         
         return (
-          <Card key={index} className="border border-slate-200 dark:border-slate-600">
+          <Card key={diff.file} className="border border-slate-200 dark:border-slate-600">
             <Collapsible 
               open={isExpanded}
               onOpenChange={() => toggleFile(diff.file)}
@@ -213,17 +213,19 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
                                 <div
                                   key={lineIndex}
                                   className={cn(
-                                    'flex items-start gap-2 px-4 py-1 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors',
+                                    'flex items-start px-4 py-1 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors',
                                     getLineTypeClass(line.type)
                                   )}
                                   data-testid={`diff-line-${line.type}`}
                                 >
-                                  <div className="flex items-center gap-2 min-w-16 text-xs text-slate-600 dark:text-slate-200 select-none font-mono">
-                                    {getLineTypeIcon(line.type)}
-                                    <span className="w-8 text-right">
+                                  <div className="flex items-center gap-1 mr-3 text-xs text-slate-600 dark:text-slate-200 select-none font-mono">
+                                    <div className="w-3 flex items-center justify-center">
+                                      {getLineTypeIcon(line.type)}
+                                    </div>
+                                    <span className="w-10 text-right tabular-nums">
                                       {line.old_line || ''}
                                     </span>
-                                    <span className="w-8 text-right">
+                                    <span className="w-10 text-right tabular-nums">
                                       {line.new_line || ''}
                                     </span>
                                   </div>
