@@ -400,11 +400,13 @@ def main():
     }
     
     # Map GPT4 kafka results to inventory AND diffs
+    ai_found_files = []
     for item in report.get("gpt4_kafka_results", []):
         if item.get("uses_kafka") == "yes" or item.get("uses_kafka") == "maybe":
             file_path = item.get("file", "")
             role = item.get("role", "unknown")
             explanation = item.get("explanation", "")
+            ai_found_files.append(file_path)
             
             transformed_report["inventory"].append({
                 "file": file_path,
@@ -436,6 +438,33 @@ def main():
                     "Update NuGet packages",
                     "Modify connection configuration"
                 ]
+            })
+    
+    # FALLBACK: If AI found NO files but manual detection did, use manual detection
+    # This prevents completely empty reports when AI fails
+    if len(ai_found_files) == 0 and len(report.get("manual_kafka_files", [])) > 0:
+        print(f"⚠️ WARNING: AI analysis found no Kafka usage, falling back to keyword detection for {len(report['manual_kafka_files'])} files", file=sys.stderr)
+        for file in report.get("manual_kafka_files", []):
+            transformed_report["inventory"].append({
+                "file": file,
+                "kafka_apis": ["Kafka API"],
+                "summary": "Detected via keyword analysis (AI analysis found no usage)"
+            })
+            
+            # Generate basic diff for manually detected files
+            diff_content = f"""--- a/{file}
++++ b/{file}
+@@ Kafka Migration Required @@
+-// Kafka implementation detected
++// Migrate to Azure Service Bus
++using Azure.Messaging.ServiceBus;
+"""
+            
+            transformed_report["diffs"].append({
+                "file": file,
+                "diff": diff_content,
+                "description": "Kafka keywords detected - review for migration to Azure Service Bus",
+                "key_changes": ["Review Kafka usage", "Plan Service Bus migration"]
             })
     
     # Add NuGet package changes as diffs
@@ -477,6 +506,10 @@ def main():
         diffs_count = len(transformed_report.get("diffs", []))
         f.write(f"- **Files with Kafka usage:** {inventory_count}\n")
         f.write(f"- **Migration changes required:** {diffs_count}\n\n")
+        
+        # Show warning if using fallback
+        if len(ai_found_files) == 0 and len(report.get("manual_kafka_files", [])) > 0:
+            f.write("> ⚠️ **Note:** AI analysis did not detect Kafka usage. Results below are from keyword-based detection. Consider reviewing AI configuration or model selection for more accurate analysis.\n\n")
         
         # GPT-4 analysis results
         if report.get("gpt4_kafka_results"):

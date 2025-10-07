@@ -30,12 +30,7 @@ export default function AnalysisPanel() {
   
   const analysisTypes = analysisTypesData?.types || [];
   
-  // Set default analysis type when types are loaded
-  useEffect(() => {
-    if (analysisTypes.length > 0 && !selectedAnalysisTypeId) {
-      setSelectedAnalysisTypeId(analysisTypes[0].id);
-    }
-  }, [analysisTypes, selectedAnalysisTypeId]);
+  // No auto-selection - user must explicitly choose analysis type
   
   const handleAnalysisTypeChange = (typeId: string) => {
     setSelectedAnalysisTypeId(typeId);
@@ -49,10 +44,11 @@ export default function AnalysisPanel() {
   const isAnalyzing = isLoading || isMutating > 0;
 
   const handleAnalysis = async () => {
-    if (!currentRepository?.id) {
+    if (!currentRepository?.id || !selectedAnalysisTypeId) {
       return;
     }
     
+    // Use the current dropdown value directly to avoid stale state
     await analyzeCode(currentRepository.id, selectedAnalysisTypeId);
   };
 
@@ -140,12 +136,12 @@ export default function AnalysisPanel() {
           <div className="flex-1">
             <label className="block text-sm font-medium mb-2">Analysis Type</label>
             <Select 
-              value={selectedAnalysisTypeId} 
+              value={selectedAnalysisTypeId || undefined} 
               onValueChange={handleAnalysisTypeChange}
               disabled={isLoadingTypes || analysisTypes.length === 0}
             >
               <SelectTrigger data-testid="select-analysis-type">
-                <SelectValue placeholder={isLoadingTypes ? "Loading..." : "Select analysis type"} />
+                <SelectValue placeholder={isLoadingTypes ? "Loading..." : "Choose analysis type..."} />
               </SelectTrigger>
               <SelectContent>
                 {analysisTypes.map((type) => (
