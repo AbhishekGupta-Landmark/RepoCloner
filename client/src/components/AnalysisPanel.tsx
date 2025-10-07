@@ -30,7 +30,7 @@ export default function AnalysisPanel() {
   const analysisTypes = analysisTypesData?.types || [];
   
   // Check if report exists for selected analysis type (for button text)
-  const { data: existingReport } = useQuery({
+  const { data: existingReport } = useQuery<{ structuredData?: any; status?: string }>({
     queryKey: ['structured-report', currentRepository?.id, selectedAnalysisTypeId],
     enabled: !!currentRepository?.id && !!selectedAnalysisTypeId,
     staleTime: 0, // Always check for latest
