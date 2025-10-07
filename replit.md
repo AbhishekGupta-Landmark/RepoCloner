@@ -13,17 +13,28 @@ This project is an interactive web-based application designed to clone Git repos
 ## System Architecture
 The application features a multi-panel UI for repository cloning, file tree visualization, and AI analysis. The frontend is built with React, TypeScript, TanStack Query, and Tailwind CSS, focusing on a responsive grid layout, equal-height components, and enhanced text wrapping. The backend, an Express.js application with TypeScript, acts as a bridge to a C# compatible backend structure, employing an extensible provider pattern for Git services. Authentication is session-based, supporting multiple providers. For storage, an in-memory solution (MemStorage) is used. The system includes a dynamic analysis types system, allowing new AI analysis capabilities to be added by simply placing Python scripts in a designated directory. A significant feature is the AI-powered "Initial Test Coverage and Validation" analysis, which uses Python scripts to generate detailed test coverage reports in JSON format, providing file-level metrics, new test cases added, and generated test code previews. Robust JSON parsing with validation ensures data integrity from AI responses, handling various edge cases. All AI configuration is strictly managed through the UI, with no fallback constants or environment variables for critical AI settings.
 
-## Recent Changes
-- 2025-10-07: **SMART FALLBACK SYSTEM** - Direct push to main (USER REQUESTED FIX ✅)
-  - **ISSUE**: After removing all fallbacks, reports became empty when AI analysis failed/returned no results
-  - **SOLUTION**: Implemented smart fallback for Quick Migration Analysis (default2.py)
-  - **How It Works**: 
-    1. AI analysis runs first and attempts to detect Kafka usage
-    2. If AI finds files → Use AI results (proper analysis with roles/explanations)
-    3. If AI finds NOTHING but keyword detection found files → Use keyword detection with clear warning
-  - **User Experience**: Reports show data with clear labeling when fallback is used
-  - **Warning Messages**: "⚠️ AI analysis did not detect Kafka usage. Results below are from keyword-based detection."
-  - **Code Analysis (default.py)**: Still has NO fallback - fails cleanly without AI
+## Recent Changes  
+- 2025-10-07: **REPOSITORY CLEANUP COMPLETED** - Direct push to main
+  - **Removed**: attached_assets/ folder (192 files) from main branch via GitHub API
+  - **Updated .gitignore**: Added .local/, *.log, __pycache__/, *.py[cod], .pytest_cache/, .coverage, .env.local
+  - **Created**: server/scripts/deleteFilesFromGit.ts for bulk file deletion from remote repository
+  - **Verified**: No development-only files remain in repository, application runs without issues
+  - **Result**: Clean repository ready for deployment, ~192 unnecessary files removed from git history
+
+- 2025-10-07: **RESTORED ORIGINAL QUICK MIGRATION LOGIC** - Direct push to main (USER CRITICAL FIX 🚨)
+  - **ISSUE**: Attempted "smart fallback" broke the working Quick Migration Analysis
+  - **PROBLEM**: Reports became nearly empty (only NuGet changes, no Kafka files)
+  - **ROOT CAUSE**: Changed logic to only show manual detection when AI found ZERO files
+  - **SOLUTION**: Restored original behavior - manual detection ALWAYS shows (unless AI already found those files)
+  - **How It Works Now**: 
+    1. AI analyzes files and shows results (if uses_kafka = "yes"/"maybe")
+    2. Manual keyword detection shows files not already found by AI
+    3. Both results displayed in separate sections of the report
+  - **Result**: Quick Migration Analysis works exactly like before - full reports with data
+
+- 2025-10-07: **REMOVED FALLBACK FROM CODE ANALYSIS** - Direct push to main
+  - **Code Analysis (default.py)**: Removed static analysis fallback - fails cleanly without AI
+  - **Reason**: Prevents misleading "fake" reports when AI analysis fails
 
 - 2025-10-07: **FIXED DROPDOWN STATE SYNC BUG** - Direct push to main (USER CRITICAL FIX 🚨)
   - **ISSUE**: UI showed "Quick Migration Analysis" selected but executed "default" analysis
