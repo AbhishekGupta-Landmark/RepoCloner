@@ -94,6 +94,16 @@ export default function ReportsPanel() {
           title: 'Quick Migration Analysis Report',
           description: 'Kafka to Azure Service Bus migration analysis'
         };
+      case 'default':
+        return {
+          title: 'Migration Analysis Report',
+          description: 'Kafka to Azure Service Bus migration analysis'
+        };
+      case 'quick-migration-1':
+        return {
+          title: 'Quick Migration Analysis Report',
+          description: 'Kafka to Azure Service Bus migration analysis'
+        };
       default:
         // Don't show unrecognized report types - they might be internal/duplicate entries
         return null;

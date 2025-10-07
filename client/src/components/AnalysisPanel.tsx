@@ -29,8 +29,14 @@ export default function AnalysisPanel() {
   
   const analysisTypes = analysisTypesData?.types || [];
   
-  // Simply show the viewer when an analysis type is selected
-  // Let MigrationReportViewer handle its own loading/error/empty states
+  // Check if report exists for selected analysis type (for button text)
+  const { data: existingReport } = useQuery({
+    queryKey: ['structured-report', currentRepository?.id, selectedAnalysisTypeId],
+    enabled: !!currentRepository?.id && !!selectedAnalysisTypeId,
+    staleTime: 0, // Always check for latest
+  });
+  
+  const hasExistingReport = !!(existingReport?.structuredData);
   
   // Reset selection when repository changes
   useEffect(() => {
@@ -120,7 +126,7 @@ export default function AnalysisPanel() {
                   >
                     <Brain className="h-4 w-4" />
                   </motion.div>
-                  Analyze Code
+                  {hasExistingReport ? 'Re-Analyze Code' : 'Analyze Code'}
                 </motion.div>
               )}
             </AnimatePresence>
