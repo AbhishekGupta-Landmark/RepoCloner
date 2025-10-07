@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useIsMutating } from '@tanstack/react-query';
+import { queryClient } from '@/lib/queryClient';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -56,6 +57,12 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
   // Track global analysis mutations (works across all components)
   const isMutating = useIsMutating({ mutationKey: ['analysis'] });
   const isAnalyzing = isLoading || isMutating > 0;
+  
+  // CRITICAL FIX: Clear stale error cache when analysis type changes
+  useEffect(() => {
+    const queryKey = ['structured-report', repositoryId, analysisType || 'all'];
+    queryClient.removeQueries({ queryKey, exact: true });
+  }, [repositoryId, analysisType]);
   
   const { data, isLoading: isQueryLoading, error, refetch } = useQuery({
     queryKey: ['structured-report', repositoryId, analysisType || 'all'],

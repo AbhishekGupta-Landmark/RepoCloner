@@ -112,8 +112,11 @@ export function useAnalysis() {
   const analyzeCode = async (repositoryId: string, analysisTypeId?: string): Promise<boolean> => {
     try {
       await analysisMutation.mutateAsync({ repositoryId, analysisTypeId });
-      // CRITICAL FIX: Always invalidate cache after successful analysis
-      // Invalidate all structured reports for this repository (all analysis types)
+      // CRITICAL FIX: Reset queries with the EXACT key to clear stale error states
+      const queryKey = ['structured-report', repositoryId, analysisTypeId || 'all'];
+      await queryClient.resetQueries({ queryKey });
+      
+      // Also invalidate all related queries
       queryClient.invalidateQueries({ 
         predicate: (query) => 
           Array.isArray(query.queryKey) && 
@@ -124,7 +127,10 @@ export function useAnalysis() {
       queryClient.invalidateQueries({ queryKey: ['/api/repositories'] });
       return true;
     } catch (error) {
-      // CRITICAL FIX: Also invalidate cache on failure
+      // CRITICAL FIX: Reset on failure too to clear error states
+      const queryKey = ['structured-report', repositoryId, analysisTypeId || 'all'];
+      await queryClient.resetQueries({ queryKey });
+      
       queryClient.invalidateQueries({ 
         predicate: (query) => 
           Array.isArray(query.queryKey) && 
