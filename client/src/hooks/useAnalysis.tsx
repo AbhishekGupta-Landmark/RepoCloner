@@ -28,13 +28,16 @@ export function useAnalysis() {
       return data;
     },
     onSuccess: async (data, variables: { repositoryId: string; analysisTypeId?: string }) => {
-      const { repositoryId } = variables;
+      const { repositoryId, analysisTypeId } = variables;
       // Store the full Python result for structured data access
       setAnalysisResult(data.pythonResult);
       
+      // Build cache key with analysisType included
+      const cacheKey = ['structured-report', repositoryId, analysisTypeId || 'all'];
+      
       // Immediate cache update for successful analysis (only when success is true)
       if (data.success !== false && data.structuredData) {
-        queryClient.setQueryData(['structured-report', repositoryId], {
+        queryClient.setQueryData(cacheKey, {
           status: 'completed',
           structuredData: data.structuredData,
           reportId: data.reportId,
@@ -44,7 +47,7 @@ export function useAnalysis() {
       
       // Then refetch to ensure data consistency
       await queryClient.refetchQueries({ 
-        queryKey: ['structured-report', repositoryId], 
+        queryKey: cacheKey, 
         type: 'active', 
         exact: true 
       });
@@ -57,9 +60,13 @@ export function useAnalysis() {
       });
     },
     onError: async (error: any, variables: { repositoryId: string; analysisTypeId?: string }) => {
-      const { repositoryId } = variables;
+      const { repositoryId, analysisTypeId } = variables;
+      
+      // Build cache key with analysisType included
+      const cacheKey = ['structured-report', repositoryId, analysisTypeId || 'all'];
+      
       // Immediate cache update for failed analysis - this will trigger the main screen error display
-      queryClient.setQueryData(['structured-report', repositoryId], {
+      queryClient.setQueryData(cacheKey, {
         status: 'failed',
         error: error.message || "Analysis failed",
         structuredData: null,
@@ -69,7 +76,7 @@ export function useAnalysis() {
       
       // Then refetch to get actual server response
       await queryClient.refetchQueries({ 
-        queryKey: ['structured-report', repositoryId], 
+        queryKey: cacheKey, 
         type: 'active', 
         exact: true 
       });
