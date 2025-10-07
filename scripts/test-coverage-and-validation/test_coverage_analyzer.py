@@ -309,6 +309,7 @@ def main():
         mapping = map_sources_to_tests(cs_files, test_files)
         
         report = []
+        failed_files = []
         for idx, (src, test) in enumerate(mapping.items(), 1):
             print(f"🤖 Analyzing {idx}/{len(mapping)}: {os.path.relpath(src, root_dir)} ...")
             
@@ -322,6 +323,7 @@ def main():
                     "analysis": analysis_result
                 })
             except Exception as e:
+                failed_files.append(src)
                 error_msg = str(e)
                 if "connection" in error_msg.lower() or "network" in error_msg.lower() or "timeout" in error_msg.lower():
                     print(f"ERROR: Network connection failed. Please check your VPN connection and try again. Details: {e}", file=sys.stderr)
@@ -329,6 +331,12 @@ def main():
                     print(f"ERROR: AI API call failed for {src}: {e}", file=sys.stderr)
                 # Continue with other files even if one fails
                 continue
+        
+        # CRITICAL: If ALL files failed, exit with error instead of creating empty report
+        if len(failed_files) > 0 and len(report) == 0:
+            print(f"ERROR: All {len(failed_files)} files failed to analyze. This usually indicates AI configuration issues (wrong API key, endpoint, or permissions).", file=sys.stderr)
+            print(f"ERROR: Please check your AI settings and try again.", file=sys.stderr)
+            sys.exit(1)
         
         # Generate JSON report
         import time
