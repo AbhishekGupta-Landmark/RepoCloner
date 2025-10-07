@@ -48,17 +48,8 @@ export default function AnalysisPanel() {
 
   const handleAnalysis = async () => {
     if (!currentRepository?.id || !selectedAnalysisTypeId) {
-      console.error('Analysis cannot start - missing requirements:', { 
-        repositoryId: currentRepository?.id, 
-        selectedAnalysisTypeId 
-      });
       return;
     }
-    
-    console.log('🚀 Starting analysis with:', { 
-      repositoryId: currentRepository.id, 
-      selectedAnalysisTypeId 
-    });
     
     setHasRunAnalysis(true);
     // Use the current dropdown value directly to avoid stale state
