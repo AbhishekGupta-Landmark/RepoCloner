@@ -110,7 +110,9 @@ export function useAnalysis() {
   });
 
   const analyzeCode = async (repositoryId: string, analysisTypeId?: string): Promise<boolean> => {
+    console.log('📡 useAnalysis.analyzeCode called with:', { repositoryId, analysisTypeId });
     try {
+      console.log('📤 Sending mutation with:', { repositoryId, analysisTypeId });
       await analysisMutation.mutateAsync({ repositoryId, analysisTypeId });
       // CRITICAL FIX: Always invalidate cache after successful analysis
       queryClient.invalidateQueries({ queryKey: ['structured-report', repositoryId] });

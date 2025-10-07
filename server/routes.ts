@@ -1380,6 +1380,8 @@ export async function registerRoutes(app: Application): Promise<Server> {
       // Frontend sends analysisTypeId, backend uses analysisType
       const { repositoryId, analysisTypeId, analysisType } = req.body;
       
+      broadcastLog('DEBUG', `Analysis run request received - repositoryId: ${repositoryId}, analysisTypeId: "${analysisTypeId}", analysisType: "${analysisType}"`);
+      
       if (!repositoryId) {
         return res.status(400).json({ error: "Repository ID is required" });
       }
