@@ -1879,7 +1879,9 @@ export async function registerRoutes(app: Application): Promise<Server> {
           
           // Look for migration report files and test coverage reports
           const files = await fs.promises.readdir(repoPath);
-          const migrationReports = files.filter(file => file.startsWith('migration-report-') && file.endsWith('.md'));
+          const migrationReports = files.filter(file => 
+            (file.startsWith('migration-report-') || file === 'migration-report.md') && file.endsWith('.md')
+          );
           const quickMigrationReports = files.filter(file => file.startsWith('quick-migration-report-') && file.endsWith('.md'));
           const testCoverageReports = files.filter(file => file.startsWith('test-coverage-report-') && file.endsWith('.json'));
           
