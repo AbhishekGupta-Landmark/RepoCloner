@@ -65,6 +65,10 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
         : `/api/reports/${repositoryId}/structured`;
       const response = await fetch(url);
       
+      if (!response.ok) {
+        throw new Error('Failed to fetch structured migration data');
+      }
+      
       // Check content type to ensure we're getting JSON
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
@@ -73,9 +77,6 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
         throw new Error(`Server returned ${contentType || 'non-JSON'} instead of JSON`);
       }
       
-      if (!response.ok) {
-        throw new Error('Failed to fetch structured migration data');
-      }
       return response.json();
     },
     enabled: !!repositoryId,
@@ -86,8 +87,7 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
       return currentData?.status === 'ready' || currentData?.status === 'completed' || currentData?.status === 'no_analysis' ? false : 5000;
     },
     staleTime: 0, // Always consider data stale to ensure fresh fetches
-    retry: 2, // Retry failed requests to overcome transient errors
-    retryDelay: 1000 // Wait 1s between retries
+    retry: false // Don't retry to avoid showing stale errors
   });
   
   // Show loading state when initially loading OR when analysis is running
@@ -102,12 +102,29 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
     );
   }
 
+  // Handle fetch errors - never show HTML parsing errors to user
   if (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // HTML parsing errors mean no report exists yet - show friendly prompt
+    if (errorMessage.includes('<!DOCTYPE') || errorMessage.includes('HTML') || errorMessage.includes('non-JSON')) {
+      return (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
+            <h3 className="text-lg font-medium mb-2">Ready to Analyze</h3>
+            <p className="text-sm text-muted-foreground">Click the "Analyze Code" button above to start the analysis</p>
+          </CardContent>
+        </Card>
+      );
+    }
+    
+    // Real error - show it
     return (
       <Card>
         <CardContent className="py-8">
           <p className="text-red-500 text-center">
-            Failed to load migration report: {error instanceof Error ? error.message : 'Unknown error'}
+            {errorMessage}
           </p>
         </CardContent>
       </Card>
