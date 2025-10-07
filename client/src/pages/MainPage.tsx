@@ -564,7 +564,12 @@ export default function MainPage() {
                         </TabsTrigger>
                         <TabsTrigger 
                           value="test-coverage" 
-                          className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth hover:bg-blue-500/10 hover:text-blue-500 relative overflow-hidden"
+                          disabled={!currentRepository}
+                          className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden ${
+                            !currentRepository 
+                              ? 'opacity-50 cursor-not-allowed' 
+                              : 'hover:bg-blue-500/10 hover:text-blue-500'
+                          }`}
                           data-testid="tab-test-coverage"
                         >
                           <motion.div
