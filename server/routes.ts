@@ -1499,12 +1499,16 @@ export async function registerRoutes(app: Application): Promise<Server> {
           broadcastLog('INFO', "Creating Python script report...");
           
           try {
+            // Use the actual script path from the selected analysis type
+            const scriptPath = analysisTypeInfo?.scriptPath || path.join(__dirname, '../scripts/default.py');
+            broadcastLog('INFO', `Using script path for report: ${scriptPath}`);
+            
             reportId = await pythonScriptService.createPythonScriptReport(
               repository.id,
               repository.url,
               repository.localPath,
               pythonResult,
-              path.join(__dirname, '../scripts/default.py'),
+              scriptPath, // Use actual script path, not hardcoded
               storage,
               analysisTypeLabel // Pass analysis type label from registry lookup
             );
