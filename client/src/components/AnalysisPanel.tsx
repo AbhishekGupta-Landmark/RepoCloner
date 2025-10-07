@@ -190,12 +190,19 @@ export default function AnalysisPanel() {
               </Card>
             </div>
           </div>
-        ) : selectedAnalysisTypeId && currentRepository?.id ? (
-          // Always show MigrationReportViewer when analysis type is selected - it handles its own states
+        ) : hasRunAnalysis && selectedAnalysisTypeId && currentRepository?.id ? (
+          // Only show MigrationReportViewer AFTER analysis has been run
           <MigrationReportViewer 
             key={currentRepository.id} 
             repositoryId={currentRepository.id} 
           />
+        ) : selectedAnalysisTypeId ? (
+          // Show message to run analysis after selecting type
+          <div className="text-center py-12 text-muted-foreground" data-testid="analysis-ready">
+            <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
+            <h3 className="text-lg font-medium mb-2">Ready to Analyze</h3>
+            <p className="text-sm mb-4">Click the "Analyze Code" button above to start the analysis</p>
+          </div>
         ) : null}
       </ScrollArea>
     </div>

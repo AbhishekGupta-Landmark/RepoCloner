@@ -95,10 +95,8 @@ export default function ReportsPanel() {
           description: 'Kafka to Azure Service Bus migration analysis'
         };
       default:
-        return {
-          title: 'Analysis Report',
-          description: 'Code analysis results'
-        };
+        // Don't show unrecognized report types - they might be internal/duplicate entries
+        return null;
     }
   };
 
@@ -287,6 +285,9 @@ export default function ReportsPanel() {
               const reportInfo = getReportInfo(report.analysisType, results);
               const metrics = getMetrics(results as AnalysisResult);
               const createdAt = report.createdAt ? new Date(report.createdAt).toISOString() : new Date().toISOString();
+              
+              // Skip reports with unrecognized types (reportInfo is null)
+              if (!reportInfo) return null;
               
               return (
                 <Card key={report.id} data-testid={`report-${report.id}`}>
