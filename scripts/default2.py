@@ -438,31 +438,6 @@ def main():
                 ]
             })
     
-    # Map manual kafka files to inventory if not already present
-    for file in report.get("manual_kafka_files", []):
-        if not any(item["file"] == file for item in transformed_report["inventory"]):
-            transformed_report["inventory"].append({
-                "file": file,
-                "kafka_apis": ["manual detection"],
-                "summary": "Detected via keyword matching"
-            })
-            
-            # Generate diff for manually detected files
-            diff_content = f"""--- a/{file}
-+++ b/{file}
-@@ Kafka Migration Required @@
--// Kafka implementation detected
-+// Migrate to Azure Service Bus
-+using Azure.Messaging.ServiceBus;
-"""
-            
-            transformed_report["diffs"].append({
-                "file": file,
-                "diff": diff_content,
-                "description": "Kafka usage detected - migration to Azure Service Bus recommended",
-                "key_changes": ["Review Kafka usage", "Plan Service Bus migration"]
-            })
-    
     # Add NuGet package changes as diffs
     for change in report.get("csproj_changes", []):
         csproj_file = change.get("file", "")
@@ -502,14 +477,6 @@ def main():
         diffs_count = len(transformed_report.get("diffs", []))
         f.write(f"- **Files with Kafka usage:** {inventory_count}\n")
         f.write(f"- **Migration changes required:** {diffs_count}\n\n")
-        
-        # Manual detection results
-        if report.get("manual_kafka_files"):
-            f.write("### Manual Keyword Detection\n\n")
-            f.write("Files detected via keyword matching:\n\n")
-            for file in report["manual_kafka_files"]:
-                f.write(f"- `{file}`\n")
-            f.write("\n")
         
         # GPT-4 analysis results
         if report.get("gpt4_kafka_results"):
