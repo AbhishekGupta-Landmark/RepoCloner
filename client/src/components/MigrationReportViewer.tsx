@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileText, Code, BarChart3, Loader2, AlertTriangle, GitBranch, Code2, CheckCircle, ChevronDown, RotateCw } from 'lucide-react';
+import { FileText, Code, BarChart3, Loader2, AlertTriangle, GitBranch, Code2, CheckCircle, ChevronDown, RotateCw, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAnalysis } from '@/hooks/useAnalysis';
 import DiffViewer from '@/components/ui/DiffViewer';
