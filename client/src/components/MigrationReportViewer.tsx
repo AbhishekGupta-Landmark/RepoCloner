@@ -84,7 +84,9 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
       const currentData = query.state.data as any;
       return currentData?.status === 'ready' || currentData?.status === 'completed' ? false : 5000;
     },
-    staleTime: 0 // Always consider data stale to ensure fresh fetches
+    staleTime: 0, // Always consider data stale to ensure fresh fetches
+    retry: 2, // Retry failed requests to overcome transient errors
+    retryDelay: 1000 // Wait 1s between retries
   });
   
   // Show loading state when initially loading OR when analysis is running
