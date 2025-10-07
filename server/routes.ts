@@ -2023,58 +2023,74 @@ export async function registerRoutes(app: Application): Promise<Server> {
   app.get('/api/reports/:repositoryId/structured', async (req, res) => {
     try {
       const { repositoryId } = req.params;
+      const { analysisType } = req.query;
       
-      // CRITICAL FIX: First check repository's lastReportId
-      const repository = await storage.getRepository(repositoryId);
+      // Get all reports for this repository
+      const allReports = await storage.getAnalysisReportsByRepository(repositoryId);
       
-      if (repository?.lastReportId) {
-        try {
-          const latestReport = await storage.getAnalysisReport(repository.lastReportId);
-          if (latestReport) {
-            broadcastLog('INFO', `Using repository's lastReportId: ${repository.lastReportId}`);
-            
-            // Check if it's a failed report
-            const pythonOutput = (latestReport.results as any)?.pythonScriptOutput;
-            if (pythonOutput?.error || pythonOutput?.exitCode !== 0 || !pythonOutput?.parsedMigrationData) {
-              const errorMessage = pythonOutput?.error || 'Analysis failed to generate migration data';
-              
-              res.json({ 
-                structuredData: null,
-                status: 'failed',
-                error: errorMessage,
-                reportId: latestReport.id,
-                createdAt: latestReport.createdAt
-              });
-              return;
-            }
-            
-            // It's a successful report with structured data
-            if (pythonOutput?.parsedMigrationData) {
-              res.json({
-                structuredData: pythonOutput.parsedMigrationData,
-                status: 'ready',
-                reportId: latestReport.id,
-                createdAt: latestReport.createdAt
-              });
-              return;
-            }
-          }
-        } catch (reportError) {
-          broadcastLog('WARN', `Could not fetch report ${repository.lastReportId}: ${reportError instanceof Error ? reportError.message : 'Unknown error'}`);
-        }
+      // Filter by analysis type if provided
+      let relevantReports = allReports;
+      if (analysisType && typeof analysisType === 'string') {
+        relevantReports = allReports.filter(report => report.analysisType === analysisType);
       }
       
-      // NO FALLBACK - If repository.lastReportId doesn't exist or couldn't be fetched,
-      // return no_analysis status to show error screen
-      res.json({ 
+      // Sort by creation date (most recent first) and get the latest
+      const latestReport = relevantReports.sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )[0];
+      
+      if (!latestReport) {
+        // No report found for this repository/type combination
+        return res.json({ 
+          structuredData: null, 
+          status: 'no_analysis',
+          error: analysisType 
+            ? `No ${analysisType} analysis report found for this repository`
+            : 'No analysis report found for this repository'
+        });
+      }
+      
+      broadcastLog('INFO', `Found report ${latestReport.id} for repository ${repositoryId}${analysisType ? ` with type ${analysisType}` : ''}`);
+      
+      // Check if it's a failed report
+      const pythonOutput = (latestReport.results as any)?.pythonScriptOutput;
+      if (pythonOutput?.error || pythonOutput?.exitCode !== 0 || !pythonOutput?.parsedMigrationData) {
+        const errorMessage = pythonOutput?.error || 'Analysis failed to generate migration data';
+        
+        return res.json({ 
+          structuredData: null,
+          status: 'failed',
+          error: errorMessage,
+          reportId: latestReport.id,
+          createdAt: latestReport.createdAt,
+          analysisType: latestReport.analysisType
+        });
+      }
+      
+      // It's a successful report with structured data
+      if (pythonOutput?.parsedMigrationData) {
+        return res.json({
+          structuredData: pythonOutput.parsedMigrationData,
+          status: 'ready',
+          reportId: latestReport.id,
+          createdAt: latestReport.createdAt,
+          analysisType: latestReport.analysisType
+        });
+      }
+      
+      // Fallback if no structured data
+      return res.json({ 
         structuredData: null, 
-        status: 'no_analysis',
-        error: 'No analysis report found for this repository'
+        status: 'no_data',
+        error: 'Report exists but contains no structured data'
       });
       
     } catch (error) {
       console.error('Error fetching structured migration data:', error);
-      res.status(500).json({ error: 'Failed to fetch structured migration data' });
+      res.status(500).json({ 
+        error: 'Failed to fetch structured migration data',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 

@@ -113,15 +113,26 @@ export function useAnalysis() {
     try {
       await analysisMutation.mutateAsync({ repositoryId, analysisTypeId });
       // CRITICAL FIX: Always invalidate cache after successful analysis
-      queryClient.invalidateQueries({ queryKey: ['structured-report', repositoryId] });
+      // Invalidate all structured reports for this repository (all analysis types)
+      queryClient.invalidateQueries({ 
+        predicate: (query) => 
+          Array.isArray(query.queryKey) && 
+          query.queryKey[0] === 'structured-report' && 
+          query.queryKey[1] === repositoryId 
+      });
       queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/repositories'] }); // Refresh repository list to get updated lastReportId
+      queryClient.invalidateQueries({ queryKey: ['/api/repositories'] });
       return true;
     } catch (error) {
       // CRITICAL FIX: Also invalidate cache on failure
-      queryClient.invalidateQueries({ queryKey: ['structured-report', repositoryId] });
+      queryClient.invalidateQueries({ 
+        predicate: (query) => 
+          Array.isArray(query.queryKey) && 
+          query.queryKey[0] === 'structured-report' && 
+          query.queryKey[1] === repositoryId 
+      });
       queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/repositories'] }); // Refresh repository list to get updated lastReportId
+      queryClient.invalidateQueries({ queryKey: ['/api/repositories'] });
       return false;
     }
   };

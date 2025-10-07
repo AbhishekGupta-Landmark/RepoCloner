@@ -29,15 +29,15 @@ export default function AnalysisPanel() {
   
   const analysisTypes = analysisTypesData?.types || [];
   
-  // Check if we have cached analysis results (for persistence across navigation)
+  // Check if we have cached analysis results for the selected type (for persistence across navigation)
   const { data: cachedAnalysis } = useQuery<{ reportId?: string; status?: string; structuredData?: any }>({
-    queryKey: ['structured-report', currentRepository?.id],
-    enabled: !!currentRepository?.id,
+    queryKey: ['structured-report', currentRepository?.id, selectedAnalysisTypeId || 'all'],
+    enabled: !!currentRepository?.id && !!selectedAnalysisTypeId,
     staleTime: Infinity, // Keep cached until invalidated
   });
   
-  // Derive hasRunAnalysis from cache (not local state)
-  const hasRunAnalysis = !!(cachedAnalysis?.reportId || currentRepository?.lastReportId);
+  // Derive hasRunAnalysis from cache for the selected analysis type
+  const hasRunAnalysis = !!(cachedAnalysis?.reportId && cachedAnalysis?.status === 'ready');
   
   // Reset selection when repository changes
   useEffect(() => {
@@ -127,7 +127,7 @@ export default function AnalysisPanel() {
                   >
                     <Brain className="h-4 w-4" />
                   </motion.div>
-                  Analyze Code
+                  {hasRunAnalysis ? 'Re-Analyze Code' : 'Analyze Code'}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -200,8 +200,9 @@ export default function AnalysisPanel() {
         ) : hasRunAnalysis && currentRepository?.id ? (
           // Show MigrationReportViewer if cached analysis exists (persists across navigation)
           <MigrationReportViewer 
-            key={currentRepository.id} 
-            repositoryId={currentRepository.id} 
+            key={`${currentRepository.id}-${selectedAnalysisTypeId}`}
+            repositoryId={currentRepository.id}
+            analysisType={selectedAnalysisTypeId}
           />
         ) : selectedAnalysisTypeId ? (
           // Show message to run analysis after selecting type (only if no previous results)

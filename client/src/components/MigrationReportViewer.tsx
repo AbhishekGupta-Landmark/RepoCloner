@@ -44,9 +44,10 @@ interface MigrationReportData {
 
 interface MigrationReportViewerProps {
   repositoryId: string;
+  analysisType?: string;
 }
 
-export function MigrationReportViewer({ repositoryId }: MigrationReportViewerProps) {
+export function MigrationReportViewer({ repositoryId, analysisType }: MigrationReportViewerProps) {
   const [keyChangesOpen, setKeyChangesOpen] = useState(true);
   
   // Get analysis functions and loading state
@@ -57,9 +58,12 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
   const isAnalyzing = isLoading || isMutating > 0;
   
   const { data, isLoading: isQueryLoading, error, refetch } = useQuery({
-    queryKey: ['structured-report', repositoryId],
+    queryKey: ['structured-report', repositoryId, analysisType || 'all'],
     queryFn: async () => {
-      const response = await fetch(`/api/reports/${repositoryId}/structured`);
+      const url = analysisType 
+        ? `/api/reports/${repositoryId}/structured?analysisType=${encodeURIComponent(analysisType)}`
+        : `/api/reports/${repositoryId}/structured`;
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error('Failed to fetch structured migration data');
       }
