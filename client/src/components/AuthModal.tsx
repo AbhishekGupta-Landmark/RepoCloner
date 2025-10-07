@@ -154,7 +154,7 @@ export default function AuthModal({ open, onOpenChange }: AuthModalProps) {
                         className={`w-full justify-start gap-3 hover-lift transition-smooth group relative overflow-hidden ${
                           selectedProvider === provider.id 
                             ? "border-primary bg-primary/10 text-primary" 
-                            : "hover:bg-muted hover:border-muted-foreground/20"
+                            : "text-foreground hover:bg-muted hover:border-muted-foreground/20"
                         }`}
                         onClick={() => setSelectedProvider(provider.id)}
                         data-testid={`button-provider-${provider.id}`}

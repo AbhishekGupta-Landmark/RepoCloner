@@ -82,7 +82,7 @@ export default function AnalysisPanel() {
     <div className="h-full flex flex-col">
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">AI Code Analysis</h2>
+          <h2 className="text-lg font-semibold text-foreground">AI Code Analysis</h2>
           <Button 
             onClick={handleAnalysis}
             disabled={isAnalyzing || !currentRepository || !isCodeAnalysisEnabled || !selectedAnalysisTypeId}
@@ -144,7 +144,7 @@ export default function AnalysisPanel() {
         
         <div className="flex gap-4">
           <div className="flex-1">
-            <label className="block text-sm font-medium mb-2">Analysis Type</label>
+            <label className="block text-sm font-medium mb-2 text-foreground">Analysis Type</label>
             <Select 
               value={selectedAnalysisTypeId || undefined} 
               onValueChange={handleAnalysisTypeChange}

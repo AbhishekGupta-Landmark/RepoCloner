@@ -212,7 +212,7 @@ export default function ReportsPanel() {
   return (
     <div className="p-6 h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-semibold">Analysis Reports</h2>
+        <h2 className="text-lg font-semibold text-foreground">Analysis Reports</h2>
       </div>
       
       <Tabs defaultValue="reports" className="h-full flex flex-col">
