@@ -199,14 +199,14 @@ export default function AnalysisPanel() {
               </Card>
             </div>
           </div>
-        ) : hasRunAnalysis && selectedAnalysisTypeId && currentRepository?.id ? (
-          // Only show MigrationReportViewer AFTER analysis has been run
+        ) : (hasRunAnalysis || currentRepository?.lastReportId) && selectedAnalysisTypeId && currentRepository?.id ? (
+          // Show MigrationReportViewer if analysis was run OR if previous results exist
           <MigrationReportViewer 
             key={currentRepository.id} 
             repositoryId={currentRepository.id} 
           />
         ) : selectedAnalysisTypeId ? (
-          // Show message to run analysis after selecting type
+          // Show message to run analysis after selecting type (only if no previous results)
           <div className="text-center py-12 text-muted-foreground" data-testid="analysis-ready">
             <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
             <h3 className="text-lg font-medium mb-2">Ready to Analyze</h3>
