@@ -28,6 +28,13 @@ GPT4_SNIPPET_MAX_CHARS = 2000
 
 def scan_project_files(root_dir: str) -> Dict[str, List[str]]:
     """Scan and classify project files."""
+    # Exclude generated report files (don't send our own reports to AI)
+    EXCLUDED_REPORT_PATTERNS = (
+        "migration-report-", 
+        "quick-migration-report-", 
+        "test-coverage-report-"
+    )
+    
     files = {
         "cs_files": [],
         "csproj_files": [],
@@ -42,6 +49,11 @@ def scan_project_files(root_dir: str) -> Dict[str, List[str]]:
             full = os.path.join(dirpath, fname)
             # Store relative paths (not absolute Windows paths)
             relative = os.path.relpath(full, root_dir)
+            
+            # Skip generated report files
+            if fname.lower().endswith('.md') and any(fname.startswith(pattern) for pattern in EXCLUDED_REPORT_PATTERNS):
+                continue
+            
             if fname.lower().endswith(".cs"):
                 files["cs_files"].append(relative)
                 if "test" in fname.lower() or "tests" in dirpath.lower():

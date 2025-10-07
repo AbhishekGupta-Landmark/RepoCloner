@@ -150,6 +150,13 @@ def get_updated_state_with_code_chunks(state: RepoAnalysisState) -> RepoAnalysis
     repo_path = state["repo_path"]
     chunks = []
     EXCLUDED_EXTENSIONS = (".png", ".jpg", ".exe", ".dll", ".bin")
+    
+    # Exclude generated report files (don't send our own reports to AI)
+    EXCLUDED_REPORT_PATTERNS = (
+        "migration-report-", 
+        "quick-migration-report-", 
+        "test-coverage-report-"
+    )
 
     max_chunk_size = 4000
     for root, dirs, files in os.walk(repo_path):
@@ -158,6 +165,10 @@ def get_updated_state_with_code_chunks(state: RepoAnalysisState) -> RepoAnalysis
         for f in files:
             path = os.path.join(root, f)
             if f.lower().endswith(EXCLUDED_EXTENSIONS):
+                continue
+            
+            # Skip generated report files
+            if f.lower().endswith('.md') and any(f.startswith(pattern) for pattern in EXCLUDED_REPORT_PATTERNS):
                 continue
             try:
                 with open(path, "rb") as test_fp:
