@@ -20,7 +20,6 @@ interface AnalysisType {
 
 export default function AnalysisPanel() {
   const [selectedAnalysisTypeId, setSelectedAnalysisTypeId] = useState<string>("");
-  const [analysisType, setAnalysisType] = useState("migration");
   const [hasRunAnalysis, setHasRunAnalysis] = useState(false);
   const { currentRepository, isCodeAnalysisEnabled } = useAppContext();
   
@@ -39,7 +38,6 @@ export default function AnalysisPanel() {
   
   const handleAnalysisTypeChange = (typeId: string) => {
     setSelectedAnalysisTypeId(typeId);
-    setAnalysisType("migration"); // Keep for compatibility
   };
   
   const { analyzeCode, analysisResult, isLoading } = useAnalysis();
@@ -192,8 +190,8 @@ export default function AnalysisPanel() {
               </Card>
             </div>
           </div>
-        ) : analysisType === 'migration' && currentRepository?.id ? (
-          // Always show MigrationReportViewer - it handles its own states (no data, failed, success)
+        ) : selectedAnalysisTypeId && currentRepository?.id ? (
+          // Always show MigrationReportViewer when analysis type is selected - it handles its own states
           <MigrationReportViewer 
             key={currentRepository.id} 
             repositoryId={currentRepository.id} 
