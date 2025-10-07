@@ -1077,7 +1077,8 @@ export class PythonScriptService {
     pythonResult: PythonExecutionResult,
     scriptPath: string,
     storage: any,
-    analysisTypeLabel?: string
+    analysisTypeLabel?: string,
+    analysisTypeId?: string
   ): Promise<string | undefined> {
     try {
       broadcastLog('INFO', `📊 Processing Python script results for structured report...`);
@@ -1117,13 +1118,10 @@ export class PythonScriptService {
         
         broadcastLog('INFO', `✅ Successfully parsed migration data: ${parsedMigrationData.code_diffs?.length || 0} diffs, ${parsedMigrationData.kafka_inventory?.length || 0} files with Kafka`);
         
-        // Determine analysis type based on report filename
-        let reportAnalysisType: string;
-        if (migrationReportFile.name.startsWith('quick-migration')) {
-          reportAnalysisType = 'quick-migration-report';
-        } else {
-          reportAnalysisType = 'migration-report';
-        }
+        // CRITICAL FIX: Use the actual analysisTypeId from the dropdown selection
+        // instead of deriving from filename (which caused mismatch between frontend query and backend storage)
+        const reportAnalysisType = analysisTypeId || 'default';
+        broadcastLog('INFO', `📝 Storing report with analysisType: ${reportAnalysisType}`);
         
         // Create analysis report in database and return its ID
         const report = await storage.createAnalysisReport({

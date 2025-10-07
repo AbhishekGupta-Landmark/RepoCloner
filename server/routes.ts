@@ -1505,7 +1505,8 @@ export async function registerRoutes(app: Application): Promise<Server> {
             pythonResult,
             scriptPath,
             storage,
-            analysisTypeLabel
+            analysisTypeLabel,
+            selectedAnalysisTypeId
           );
           broadcastLog('INFO', `Migration analysis report created with ID: ${reportId}`);
         } catch (reportError) {
