@@ -1495,6 +1495,8 @@ export async function registerRoutes(app: Application): Promise<Server> {
 
         // Create Python script report if migration-report.md was generated
         let reportId: string | undefined = undefined;
+        broadcastLog('INFO', `🔍 DEBUG: pythonResult.generatedFiles = ${JSON.stringify(pythonResult.generatedFiles)}`);
+        broadcastLog('INFO', `🔍 DEBUG: Has generatedFiles? ${!!pythonResult.generatedFiles}, Length: ${pythonResult.generatedFiles?.length || 0}`);
         if (pythonResult.generatedFiles && pythonResult.generatedFiles.length > 0) {
           broadcastLog('INFO', "Creating Python script report...");
           
