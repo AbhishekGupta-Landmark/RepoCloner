@@ -138,7 +138,9 @@ export default function ReportsPanel() {
 
   // Combine database reports and generated reports (from filesystem)
   const dbReports = reports?.reports || [];
-  const genReports = (reports?.generatedReports || []).map(gr => ({
+  const generatedReportsFromFS = reports?.generatedReports || [];
+  
+  const genReports = generatedReportsFromFS.map(gr => ({
     id: gr.id,
     repositoryId: currentRepository?.id || '',
     analysisType: gr.type,
@@ -168,7 +170,30 @@ export default function ReportsPanel() {
     return true;
   });
   
-  const displayReports = [...genReports, ...filteredDbReports].sort((a, b) => {
+  // CRITICAL: Only show reports that have actual files (prevent empty entries)
+  const reportsWithFiles = [...genReports, ...filteredDbReports].filter(report => {
+    // Generated reports always have files (they come from filesystem)
+    if ('isGeneratedReport' in report && report.isGeneratedReport) {
+      return true;
+    }
+    
+    // For DB reports, check if file exists in generatedReports OR has downloadUrl
+    const results = report.results as any;
+    if (results?.fileName) {
+      const hasFile = generatedReportsFromFS.some(gr => gr.fileName === results.fileName);
+      if (hasFile) return true;
+    }
+    
+    // Check for downloadUrl or other file indicators
+    if (results?.downloadUrl || results?.reportPath) {
+      return true;
+    }
+    
+    // No file found - don't show this entry
+    return false;
+  });
+  
+  const displayReports = reportsWithFiles.sort((a, b) => {
     const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
     return dateB - dateA;

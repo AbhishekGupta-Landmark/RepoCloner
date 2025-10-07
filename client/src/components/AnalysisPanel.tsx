@@ -20,7 +20,6 @@ interface AnalysisType {
 
 export default function AnalysisPanel() {
   const [selectedAnalysisTypeId, setSelectedAnalysisTypeId] = useState<string>("");
-  const [hasRunAnalysis, setHasRunAnalysis] = useState(false);
   const { currentRepository, isCodeAnalysisEnabled } = useAppContext();
   
   // Load analysis types from API
@@ -30,9 +29,18 @@ export default function AnalysisPanel() {
   
   const analysisTypes = analysisTypesData?.types || [];
   
-  // Reset hasRunAnalysis when repository changes
+  // Check if we have cached analysis results (for persistence across navigation)
+  const { data: cachedAnalysis } = useQuery<{ reportId?: string; status?: string; structuredData?: any }>({
+    queryKey: ['structured-report', currentRepository?.id],
+    enabled: !!currentRepository?.id,
+    staleTime: Infinity, // Keep cached until invalidated
+  });
+  
+  // Derive hasRunAnalysis from cache (not local state)
+  const hasRunAnalysis = !!(cachedAnalysis?.reportId || currentRepository?.lastReportId);
+  
+  // Reset selection when repository changes
   useEffect(() => {
-    setHasRunAnalysis(false);
     setSelectedAnalysisTypeId("");
   }, [currentRepository?.id]);
   
@@ -51,8 +59,7 @@ export default function AnalysisPanel() {
       return;
     }
     
-    setHasRunAnalysis(true);
-    // Use the current dropdown value directly to avoid stale state
+    // No need to set hasRunAnalysis - it's derived from cached data now
     await analyzeCode(currentRepository.id, selectedAnalysisTypeId);
   };
 
@@ -190,8 +197,8 @@ export default function AnalysisPanel() {
               </Card>
             </div>
           </div>
-        ) : (hasRunAnalysis || currentRepository?.lastReportId) && selectedAnalysisTypeId && currentRepository?.id ? (
-          // Show MigrationReportViewer if analysis was run OR if previous results exist
+        ) : hasRunAnalysis && currentRepository?.id ? (
+          // Show MigrationReportViewer if cached analysis exists (persists across navigation)
           <MigrationReportViewer 
             key={currentRepository.id} 
             repositoryId={currentRepository.id} 
