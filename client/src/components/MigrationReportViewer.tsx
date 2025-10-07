@@ -103,7 +103,20 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
   }
 
   // Handle different analysis states
-  if (!data?.structuredData) {
+  if (!data || !data.structuredData) {
+    // No analysis run yet - show prompt
+    if (data?.status === 'no_analysis' || !data) {
+      return (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
+            <h3 className="text-lg font-medium mb-2">Ready to Analyze</h3>
+            <p className="text-sm text-muted-foreground">Click the "Analyze Code" button above to start the analysis</p>
+          </CardContent>
+        </Card>
+      );
+    }
+    
     // Analysis failed - show error message
     if (data?.status === 'failed') {
       return (

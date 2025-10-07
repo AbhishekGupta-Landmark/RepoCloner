@@ -29,15 +29,8 @@ export default function AnalysisPanel() {
   
   const analysisTypes = analysisTypesData?.types || [];
   
-  // Check if we have cached analysis results for the selected type (for persistence across navigation)
-  const { data: cachedAnalysis } = useQuery<{ reportId?: string; status?: string; structuredData?: any }>({
-    queryKey: ['structured-report', currentRepository?.id, selectedAnalysisTypeId || 'all'],
-    enabled: !!currentRepository?.id && !!selectedAnalysisTypeId,
-    staleTime: Infinity, // Keep cached until invalidated
-  });
-  
-  // Derive hasRunAnalysis from cache for the selected analysis type
-  const hasRunAnalysis = !!(cachedAnalysis?.reportId && cachedAnalysis?.status === 'ready');
+  // Simply show the viewer when an analysis type is selected
+  // Let MigrationReportViewer handle its own loading/error/empty states
   
   // Reset selection when repository changes
   useEffect(() => {
@@ -127,7 +120,7 @@ export default function AnalysisPanel() {
                   >
                     <Brain className="h-4 w-4" />
                   </motion.div>
-                  {hasRunAnalysis ? 'Re-Analyze Code' : 'Analyze Code'}
+                  Analyze Code
                 </motion.div>
               )}
             </AnimatePresence>
@@ -197,20 +190,14 @@ export default function AnalysisPanel() {
               </Card>
             </div>
           </div>
-        ) : hasRunAnalysis && currentRepository?.id ? (
-          // Show MigrationReportViewer if cached analysis exists (persists across navigation)
+        ) : selectedAnalysisTypeId && currentRepository?.id ? (
+          // Show MigrationReportViewer when analysis type is selected
+          // It handles its own loading/error/no-data states
           <MigrationReportViewer 
             key={`${currentRepository.id}-${selectedAnalysisTypeId}`}
             repositoryId={currentRepository.id}
             analysisType={selectedAnalysisTypeId}
           />
-        ) : selectedAnalysisTypeId ? (
-          // Show message to run analysis after selecting type (only if no previous results)
-          <div className="text-center py-12 text-muted-foreground" data-testid="analysis-ready">
-            <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
-            <h3 className="text-lg font-medium mb-2">Ready to Analyze</h3>
-            <p className="text-sm mb-4">Click the "Analyze Code" button above to start the analysis</p>
-          </div>
         ) : null}
       </ScrollArea>
     </div>
