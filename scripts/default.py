@@ -167,9 +167,10 @@ def get_updated_state_with_code_chunks(state: RepoAnalysisState) -> RepoAnalysis
             if f.lower().endswith(EXCLUDED_EXTENSIONS):
                 continue
             
-            # Skip generated report files
-            if f.lower().endswith('.md') and any(f.startswith(pattern) for pattern in EXCLUDED_REPORT_PATTERNS):
-                continue
+            # Skip generated report files (both .md and .json)
+            if any(f.startswith(pattern) for pattern in EXCLUDED_REPORT_PATTERNS):
+                if f.lower().endswith(('.md', '.json')):
+                    continue
             try:
                 with open(path, "rb") as test_fp:
                     start = test_fp.read(1024)

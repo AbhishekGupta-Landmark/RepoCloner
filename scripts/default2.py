@@ -50,9 +50,10 @@ def scan_project_files(root_dir: str) -> Dict[str, List[str]]:
             # Store relative paths (not absolute Windows paths)
             relative = os.path.relpath(full, root_dir)
             
-            # Skip generated report files
-            if fname.lower().endswith('.md') and any(fname.startswith(pattern) for pattern in EXCLUDED_REPORT_PATTERNS):
-                continue
+            # Skip generated report files (both .md and .json)
+            if any(fname.startswith(pattern) for pattern in EXCLUDED_REPORT_PATTERNS):
+                if fname.lower().endswith(('.md', '.json')):
+                    continue
             
             if fname.lower().endswith(".cs"):
                 files["cs_files"].append(relative)
