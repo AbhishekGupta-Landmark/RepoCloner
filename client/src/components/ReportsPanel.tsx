@@ -151,12 +151,21 @@ export default function ReportsPanel() {
   }));
   
   // Filter out database reports that have matching generated report files to avoid duplicates
-  const genReportTypes = new Set(genReports.map(r => r.analysisType));
+  // Match based on timestamp proximity (within 5 seconds) to be more precise
   const filteredDbReports = dbReports.filter(dbReport => {
-    // If this is a migration or python-script type that also has a generated file, exclude the DB entry
-    if ((dbReport.analysisType === 'migration' || dbReport.analysisType === 'python-script') && 
-        (genReportTypes.has('migration-report') || genReportTypes.has('quick-migration-report') || genReportTypes.has('test-coverage-report'))) {
-      return false;
+    if (dbReport.analysisType === 'migration' || dbReport.analysisType === 'python-script') {
+      const dbTime = dbReport.createdAt ? new Date(dbReport.createdAt).getTime() : 0;
+      
+      // Check if there's a generated file created around the same time
+      const hasMatchingGenFile = genReports.some(genReport => {
+        const genTime = genReport.createdAt ? new Date(genReport.createdAt).getTime() : 0;
+        const timeDiff = Math.abs(dbTime - genTime);
+        return timeDiff < 5000; // Within 5 seconds = same analysis
+      });
+      
+      if (hasMatchingGenFile) {
+        return false; // Filter out - this DB entry has a matching file
+      }
     }
     return true;
   });
