@@ -1493,31 +1493,24 @@ export async function registerRoutes(app: Application): Promise<Server> {
           });
         }
 
-        // Create Python script report if migration-report.md was generated
+        // Create Python script report - always attempt if Python succeeded
         let reportId: string | undefined = undefined;
-        broadcastLog('INFO', `🔍 DEBUG: pythonResult.generatedFiles = ${JSON.stringify(pythonResult.generatedFiles)}`);
-        broadcastLog('INFO', `🔍 DEBUG: Has generatedFiles? ${!!pythonResult.generatedFiles}, Length: ${pythonResult.generatedFiles?.length || 0}`);
-        if (pythonResult.generatedFiles && pythonResult.generatedFiles.length > 0) {
-          broadcastLog('INFO', "Creating Python script report...");
+        try {
+          const scriptPath = analysisTypeInfo?.scriptPath || path.join(__dirname, '../scripts/default.py');
           
-          try {
-            // Use the actual script path from the selected analysis type
-            const scriptPath = analysisTypeInfo?.scriptPath || path.join(__dirname, '../scripts/default.py');
-            broadcastLog('INFO', `Using script path for report: ${scriptPath}`);
-            
-            reportId = await pythonScriptService.createPythonScriptReport(
-              repository.id,
-              repository.url,
-              repository.localPath,
-              pythonResult,
-              scriptPath, // Use actual script path, not hardcoded
-              storage,
-              analysisTypeLabel // Pass analysis type label from registry lookup
-            );
-            broadcastLog('INFO', `Python script report created with ID: ${reportId}`);
-          } catch (reportError) {
-            broadcastLog('WARN', `Failed to create Python script report: ${reportError}`);
-          }
+          reportId = await pythonScriptService.createPythonScriptReport(
+            repository.id,
+            repository.url,
+            repository.localPath,
+            pythonResult,
+            scriptPath,
+            storage,
+            analysisTypeLabel
+          );
+          broadcastLog('INFO', `Migration analysis report created with ID: ${reportId}`);
+        } catch (reportError) {
+          broadcastLog('ERROR', `Failed to create migration analysis report: ${reportError}`);
+          // If report creation fails, still update repository without reportId
         }
 
         // Update repository with analysis timestamp and report ID
