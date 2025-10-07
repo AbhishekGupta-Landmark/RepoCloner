@@ -363,7 +363,7 @@ export default function ReportsPanel() {
                       {/* Download button for reports with generated files or generated reports */}
                       {(((report.analysisType === 'python-script' || report.analysisType === 'migration') && 
                        results?.pythonScriptOutput?.generatedFiles?.length > 0) ||
-                       (report.analysisType === 'migration-report' || report.analysisType === 'test-coverage-report') && (report as any).fileName) && 
+                       (report.analysisType === 'migration-report' || report.analysisType === 'test-coverage-report' || report.analysisType === 'quick-migration-report') && (report as any).fileName) && 
                        currentRepository?.id && (
                         <Button
                           variant="outline"
