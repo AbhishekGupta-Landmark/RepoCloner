@@ -82,7 +82,8 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
     // Only poll when analysis might be in progress, stop when completed
     refetchInterval: (query) => {
       const currentData = query.state.data as any;
-      return currentData?.status === 'ready' || currentData?.status === 'completed' ? false : 5000;
+      // Stop polling if we have a ready report or if there's no analysis yet
+      return currentData?.status === 'ready' || currentData?.status === 'completed' || currentData?.status === 'no_analysis' ? false : 5000;
     },
     staleTime: 0, // Always consider data stale to ensure fresh fetches
     retry: 2, // Retry failed requests to overcome transient errors

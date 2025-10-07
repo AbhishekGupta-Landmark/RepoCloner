@@ -111,32 +111,27 @@ export function useAnalysis() {
 
   const analyzeCode = async (repositoryId: string, analysisTypeId?: string): Promise<boolean> => {
     try {
-      await analysisMutation.mutateAsync({ repositoryId, analysisTypeId });
-      // CRITICAL FIX: Reset queries with the EXACT key to clear stale error states
+      // CRITICAL FIX: Clear stale cache BEFORE running analysis
       const queryKey = ['structured-report', repositoryId, analysisTypeId || 'all'];
       await queryClient.resetQueries({ queryKey });
       
-      // Also invalidate all related queries
+      // Also invalidate all related queries before running analysis
       queryClient.invalidateQueries({ 
         predicate: (query) => 
           Array.isArray(query.queryKey) && 
           query.queryKey[0] === 'structured-report' && 
           query.queryKey[1] === repositoryId 
       });
+      
+      // Now run the analysis with clean cache
+      await analysisMutation.mutateAsync({ repositoryId, analysisTypeId });
+      
+      // Invalidate caches after successful analysis
       queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
       queryClient.invalidateQueries({ queryKey: ['/api/repositories'] });
       return true;
     } catch (error) {
-      // CRITICAL FIX: Reset on failure too to clear error states
-      const queryKey = ['structured-report', repositoryId, analysisTypeId || 'all'];
-      await queryClient.resetQueries({ queryKey });
-      
-      queryClient.invalidateQueries({ 
-        predicate: (query) => 
-          Array.isArray(query.queryKey) && 
-          query.queryKey[0] === 'structured-report' && 
-          query.queryKey[1] === repositoryId 
-      });
+      // On failure, still invalidate to ensure clean state
       queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
       queryClient.invalidateQueries({ queryKey: ['/api/repositories'] });
       return false;
