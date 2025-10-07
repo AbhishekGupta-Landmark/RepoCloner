@@ -1880,6 +1880,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
           // Look for migration report files and test coverage reports
           const files = await fs.promises.readdir(repoPath);
           const migrationReports = files.filter(file => file.startsWith('migration-report-') && file.endsWith('.md'));
+          const quickMigrationReports = files.filter(file => file.startsWith('quick-migration-report-') && file.endsWith('.md'));
           const testCoverageReports = files.filter(file => file.startsWith('test-coverage-report-') && file.endsWith('.json'));
           
           for (const reportFile of migrationReports) {
@@ -1889,6 +1890,18 @@ export async function registerRoutes(app: Application): Promise<Server> {
               id: reportFile.replace('.md', ''),
               fileName: reportFile,
               type: 'migration-report',
+              createdAt: stats.birthtime,
+              size: stats.size
+            });
+          }
+          
+          for (const reportFile of quickMigrationReports) {
+            const filePath = path.join(repoPath, reportFile);
+            const stats = await fs.promises.stat(filePath);
+            generatedReports.push({
+              id: reportFile.replace('.md', ''),
+              fileName: reportFile,
+              type: 'quick-migration-report',
               createdAt: stats.birthtime,
               size: stats.size
             });

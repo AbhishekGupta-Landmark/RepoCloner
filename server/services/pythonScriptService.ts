@@ -258,7 +258,7 @@ export class PythonScriptService {
         const fs = await import('fs');
         const files = await fs.promises.readdir(repositoryPath);
         const migrationReports = files.filter(file => 
-          file.startsWith('migration-report') && file.endsWith('.md')
+          (file.startsWith('migration-report') || file.startsWith('quick-migration-report')) && file.endsWith('.md')
         );
         
         if (migrationReports.length > 0) {

@@ -89,6 +89,11 @@ export default function ReportsPanel() {
           title: 'Migration Analysis Report',
           description: 'Kafka to Azure Service Bus migration analysis'
         };
+      case 'quick-migration-report':
+        return {
+          title: 'Quick Migration Analysis Report',
+          description: 'Kafka to Azure Service Bus migration analysis'
+        };
       default:
         return {
           title: 'Analysis Report',
