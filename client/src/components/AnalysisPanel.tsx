@@ -21,6 +21,7 @@ interface AnalysisType {
 export default function AnalysisPanel() {
   const [selectedAnalysisTypeId, setSelectedAnalysisTypeId] = useState<string>("");
   const [analysisType, setAnalysisType] = useState("migration");
+  const [hasRunAnalysis, setHasRunAnalysis] = useState(false);
   const { currentRepository, isCodeAnalysisEnabled } = useAppContext();
   
   // Load analysis types from API
@@ -30,7 +31,11 @@ export default function AnalysisPanel() {
   
   const analysisTypes = analysisTypesData?.types || [];
   
-  // No auto-selection - user must explicitly choose analysis type
+  // Reset hasRunAnalysis when repository changes
+  useEffect(() => {
+    setHasRunAnalysis(false);
+    setSelectedAnalysisTypeId("");
+  }, [currentRepository?.id]);
   
   const handleAnalysisTypeChange = (typeId: string) => {
     setSelectedAnalysisTypeId(typeId);
@@ -48,6 +53,7 @@ export default function AnalysisPanel() {
       return;
     }
     
+    setHasRunAnalysis(true);
     // Use the current dropdown value directly to avoid stale state
     await analyzeCode(currentRepository.id, selectedAnalysisTypeId);
   };
@@ -75,7 +81,7 @@ export default function AnalysisPanel() {
           <h2 className="text-lg font-semibold">AI Code Analysis</h2>
           <Button 
             onClick={handleAnalysis}
-            disabled={isAnalyzing || !currentRepository || !isCodeAnalysisEnabled}
+            disabled={isAnalyzing || !currentRepository || !isCodeAnalysisEnabled || !selectedAnalysisTypeId}
             data-testid="button-analyze-code"
             variant="default"
             className="hover-lift transition-smooth group relative overflow-hidden text-white font-medium"
@@ -156,45 +162,47 @@ export default function AnalysisPanel() {
       </div>
       
       <ScrollArea className="flex-1 p-4">
-        {analysisType === 'migration' && currentRepository?.id ? (
-          // Show MigrationReportViewer only when repository is selected
+        {!currentRepository ? (
+          <div className="text-center py-12 text-muted-foreground" data-testid="analysis-no-repo">
+            <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
+            <h3 className="text-lg font-medium mb-2">No Repository Selected</h3>
+            <p className="text-sm mb-4">Clone a repository to start code analysis</p>
+          </div>
+        ) : !selectedAnalysisTypeId ? (
+          <div className="text-center py-12 text-muted-foreground" data-testid="analysis-no-type">
+            <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
+            <h3 className="text-lg font-medium mb-2">Select Analysis Type</h3>
+            <p className="text-sm mb-4">Choose an analysis type from the dropdown above, then click "Analyze Code"</p>
+            <div className="grid grid-cols-2 gap-4 max-w-md mx-auto mt-6">
+              <Card className="p-3">
+                <GitCompare className="h-6 w-6 text-primary mb-2" />
+                <p className="text-xs font-medium">Migration Analysis</p>
+              </Card>
+              <Card className="p-3">
+                <Code className="h-6 w-6 text-green-500 mb-2" />
+                <p className="text-xs font-medium">Code Quality</p>
+              </Card>
+              <Card className="p-3">
+                <Shield className="h-6 w-6 text-yellow-500 mb-2" />
+                <p className="text-xs font-medium">Security Scan</p>
+              </Card>
+              <Card className="p-3">
+                <Brain className="h-6 w-6 text-purple-500 mb-2" />
+                <p className="text-xs font-medium">Quick Analysis</p>
+              </Card>
+            </div>
+          </div>
+        ) : analysisType === 'migration' && currentRepository?.id && hasRunAnalysis ? (
+          // Show MigrationReportViewer only after user has clicked Analyze Code
           <MigrationReportViewer 
             key={currentRepository.id} 
             repositoryId={currentRepository.id} 
           />
-        ) : analysisType === 'migration' ? (
-          // Show setup state when no repository selected
-          <div className="text-center py-12 text-muted-foreground" data-testid="migration-setup-state">
-            <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
-            <h3 className="text-lg font-medium mb-2">Migration Analysis Setup</h3>
-            <p className="text-sm mb-4">Clone a repository first to analyze Kafka → Azure Service Bus migration</p>
-            <p className="text-xs text-muted-foreground">
-              Use the Repository Explorer to clone a repository containing Kafka code
-            </p>
-          </div>
         ) : (
-          <div className="text-center py-12 text-muted-foreground" data-testid="analysis-empty-state">
+          <div className="text-center py-12 text-muted-foreground" data-testid="analysis-ready">
             <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
-            <h3 className="text-lg font-medium mb-2">Ready for Analysis</h3>
-            <p className="text-sm mb-4">Clone a repository and click "Analyze Code" to get AI-powered insights</p>
-            <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
-              <Card className="p-3">
-                <CheckCircle className="h-6 w-6 text-primary mb-2" />
-                <p className="text-xs font-medium">Code Quality</p>
-              </Card>
-              <Card className="p-3">
-                <Shield className="h-6 w-6 text-green-500 mb-2" />
-                <p className="text-xs font-medium">Security Scan</p>
-              </Card>
-              <Card className="p-3">
-                <Wrench className="h-6 w-6 text-yellow-500 mb-2" />
-                <p className="text-xs font-medium">Performance</p>
-              </Card>
-              <Card className="p-3">
-                <Brain className="h-6 w-6 text-purple-500 mb-2" />
-                <p className="text-xs font-medium">Architecture</p>
-              </Card>
-            </div>
+            <h3 className="text-lg font-medium mb-2">Ready to Analyze</h3>
+            <p className="text-sm">Click "Analyze Code" to start the analysis</p>
           </div>
         )}
       </ScrollArea>

@@ -149,7 +149,19 @@ export default function ReportsPanel() {
     isGeneratedReport: true,
     fileName: gr.fileName
   }));
-  const displayReports = [...genReports, ...dbReports].sort((a, b) => {
+  
+  // Filter out database reports that have matching generated report files to avoid duplicates
+  const genReportTypes = new Set(genReports.map(r => r.analysisType));
+  const filteredDbReports = dbReports.filter(dbReport => {
+    // If this is a migration or python-script type that also has a generated file, exclude the DB entry
+    if ((dbReport.analysisType === 'migration' || dbReport.analysisType === 'python-script') && 
+        (genReportTypes.has('migration-report') || genReportTypes.has('quick-migration-report') || genReportTypes.has('test-coverage-report'))) {
+      return false;
+    }
+    return true;
+  });
+  
+  const displayReports = [...genReports, ...filteredDbReports].sort((a, b) => {
     const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
     return dateB - dateA;
