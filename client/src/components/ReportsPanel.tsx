@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, Clock, Loader2, Download } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FileText, Clock, Loader2, Download, Eye, Maximize2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAppContext } from "@/context/AppContext";
 import { AnalysisReport, AnalysisResult } from "@shared/schema";
@@ -17,6 +18,8 @@ export default function ReportsPanel() {
   const { currentRepository } = useAppContext();
   const { toast } = useToast();
   const [downloadingReports, setDownloadingReports] = useState<Set<string>>(new Set());
+  const [viewingReport, setViewingReport] = useState<{ id: string, fileName: string } | null>(null);
+  const [reportContent, setReportContent] = useState<string>('');
 
   // Fetch actual reports from the API
   const { data: reports, isLoading } = useQuery<{ reports: AnalysisReport[], generatedReports?: Array<{id: string, fileName: string, type: string, createdAt: Date, size: number}> }>({
@@ -142,6 +145,34 @@ export default function ReportsPanel() {
     if (diffInMinutes < 60) return `${diffInMinutes} minutes ago`;
     if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)} hours ago`;
     return `${Math.floor(diffInMinutes / 1440)} days ago`;
+  };
+
+  const handleViewReport = async (reportId: string, fileName: string) => {
+    if (!currentRepository?.id) return;
+    
+    try {
+      const viewUrl = `/api/analysis/reports/${encodeURIComponent(currentRepository.id)}/download/${encodeURIComponent(fileName)}`;
+      const response = await fetch(viewUrl);
+      
+      if (!response.ok) {
+        toast({
+          title: "Failed to load report",
+          description: "Could not retrieve report content",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      const content = await response.text();
+      setReportContent(content);
+      setViewingReport({ id: reportId, fileName });
+    } catch (error) {
+      toast({
+        title: "Error loading report",
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: "destructive",
+      });
+    }
   };
 
 
@@ -370,17 +401,34 @@ export default function ReportsPanel() {
                         )}
                       </div>
                       
-                      {/* Download button for reports with generated files or generated reports */}
-                      {(((report.analysisType === 'python-script' || report.analysisType === 'migration') && 
+                      {/* View and Download buttons for reports with generated files or generated reports */}
+                      {((((report.analysisType === 'python-script' || report.analysisType === 'migration') && 
                        results?.pythonScriptOutput?.generatedFiles?.length > 0) ||
-                       (report.analysisType === 'migration-report' || report.analysisType === 'test-coverage-report' || report.analysisType === 'quick-migration-report') && (report as any).fileName) && 
-                       currentRepository?.id && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={downloadingReports.has(report.id)}
-                          className="!text-white !border-white/30 hover:!bg-blue-600 hover:!border-blue-500 hover:!text-white bg-transparent"
-                          onClick={async () => {
+                       ((report.analysisType === 'migration-report' || report.analysisType === 'test-coverage-report' || report.analysisType === 'quick-migration-report') && (report as any).fileName)) && 
+                       currentRepository?.id) && (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="!text-white !border-white/30 hover:!bg-blue-600 hover:!border-blue-500 hover:!text-white bg-transparent"
+                            onClick={() => {
+                              const fileName = (report as any).fileName || 
+                                             results.pythonScriptOutput?.generatedFiles?.[0]?.name;
+                              if (fileName) {
+                                handleViewReport(report.id, fileName);
+                              }
+                            }}
+                            data-testid={`view-report-${report.id}`}
+                          >
+                            <Eye className="h-3 w-3 mr-1" />
+                            View
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={downloadingReports.has(report.id)}
+                            className="!text-white !border-white/30 hover:!bg-blue-600 hover:!border-blue-500 hover:!text-white bg-transparent"
+                            onClick={async () => {
                             // Determine filename based on report type
                             const fileName = (report as any).fileName || 
                                            results.pythonScriptOutput?.generatedFiles?.[0]?.name;
@@ -454,6 +502,7 @@ export default function ReportsPanel() {
                           )}
                           {downloadingReports.has(report.id) ? 'Downloading...' : 'Download'}
                         </Button>
+                        </div>
                       )}
                     </div>
                   </CardContent>
@@ -466,6 +515,40 @@ export default function ReportsPanel() {
         </TabsContent>
 
       </Tabs>
+
+      {/* Report Viewer Dialog */}
+      <Dialog open={!!viewingReport} onOpenChange={(open) => !open && setViewingReport(null)}>
+        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-foreground">
+                {viewingReport?.fileName || 'Report'}
+              </DialogTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const elem = document.querySelector('[role="dialog"]') as HTMLElement;
+                  if (elem && document.fullscreenElement !== elem) {
+                    elem.requestFullscreen();
+                  } else if (document.fullscreenElement) {
+                    document.exitFullscreen();
+                  }
+                }}
+                className="!text-foreground !border-border hover:!bg-accent"
+                data-testid="maximize-dialog"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </DialogHeader>
+          <ScrollArea className="flex-1 mt-4">
+            <pre className="text-sm text-foreground font-mono whitespace-pre-wrap break-words p-4 bg-muted rounded-lg">
+              {reportContent}
+            </pre>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
