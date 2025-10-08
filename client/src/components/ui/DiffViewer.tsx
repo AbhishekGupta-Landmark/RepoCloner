@@ -32,6 +32,7 @@ interface DiffStats {
 interface CodeDiff {
   file: string;
   diff_content: string;
+  migrated_code?: string;
   language: string;
   description?: string;
   key_changes?: string[];
@@ -195,6 +196,31 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
                     </div>
                   )}
                   
+                  {/* Migrated Code section */}
+                  {diff.migrated_code && diff.migrated_code.trim() && (
+                    <div className="px-4 py-3 bg-green-50 dark:bg-green-950/30 border-b border-green-200 dark:border-green-800">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-semibold text-green-800 dark:text-green-200">Migrated Code:</h4>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyDiff(diff.migrated_code || '', diff.file);
+                          }}
+                          className="text-green-800 dark:text-green-200 border-green-300 dark:border-green-700 hover:bg-green-100 dark:hover:bg-green-900"
+                        >
+                          <Copy className="h-3 w-3 mr-1" />
+                          Copy Code
+                        </Button>
+                      </div>
+                      <pre className="bg-white dark:bg-slate-900 p-3 rounded border border-green-200 dark:border-green-800 overflow-x-auto">
+                        <code className="text-xs text-slate-800 dark:text-slate-200 font-mono whitespace-pre">
+                          {diff.migrated_code}
+                        </code>
+                      </pre>
+                    </div>
+                  )}
                   
                   <div className="bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-600">
                     {diff.hunks && diff.hunks.length > 0 ? (

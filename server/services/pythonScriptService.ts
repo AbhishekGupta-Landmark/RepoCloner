@@ -663,6 +663,7 @@ export class PythonScriptService {
           const codeDiffs = (jsonData.diffs || []).map((item: any) => ({
             file: item.file,
             diff_content: item.diff || '',
+            migrated_code: item.migrated_code || '',  // Include full migrated code
             description: item.description || '',
             key_changes: item.key_changes || [],
             language: this.inferLanguageFromFile(item.file),

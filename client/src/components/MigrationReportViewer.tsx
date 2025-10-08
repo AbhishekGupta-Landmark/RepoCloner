@@ -19,6 +19,7 @@ interface KafkaUsageItem {
 interface CodeDiff {
   file: string;
   diff_content: string;
+  migrated_code?: string;
   language: string;
   hunks?: any[];
   stats?: any;
