@@ -518,8 +518,8 @@ export default function ReportsPanel() {
 
       {/* Report Viewer Dialog */}
       <Dialog open={!!viewingReport} onOpenChange={(open) => !open && setViewingReport(null)}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-6xl h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
               <DialogTitle className="text-foreground">
                 {viewingReport?.fileName || 'Report'}
@@ -542,11 +542,13 @@ export default function ReportsPanel() {
               </Button>
             </div>
           </DialogHeader>
-          <ScrollArea className="flex-1 mt-4">
-            <pre className="text-sm text-foreground font-mono whitespace-pre-wrap break-words p-4 bg-muted rounded-lg">
-              {reportContent}
-            </pre>
-          </ScrollArea>
+          <div className="flex-1 mt-4 overflow-hidden">
+            <ScrollArea className="h-full">
+              <pre className="text-sm text-foreground font-mono whitespace-pre-wrap break-words p-4 bg-muted rounded-lg">
+                {reportContent}
+              </pre>
+            </ScrollArea>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
