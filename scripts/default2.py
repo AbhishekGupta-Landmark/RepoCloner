@@ -5,6 +5,7 @@ import re
 import json
 import sys
 import argparse
+import difflib
 from typing import List, Dict, Any, Union
 from openai import AzureOpenAI
 
@@ -152,6 +153,36 @@ def manual_detect_kafka(content: str) -> bool:
         if kw in content:
             return True
     return False
+
+def generate_unified_diff(original_content: str, migrated_content: str, file_path: str) -> str:
+    """
+    Generate proper unified diff format from original and migrated code.
+    Returns unified diff string showing line-by-line changes.
+    """
+    if not original_content or not migrated_content:
+        return f"--- a/{file_path}\n+++ b/{file_path}\n@@ No content available for diff @@"
+    
+    # Split content into lines
+    original_lines = original_content.splitlines(keepends=True)
+    migrated_lines = migrated_content.splitlines(keepends=True)
+    
+    # Generate unified diff
+    diff = difflib.unified_diff(
+        original_lines,
+        migrated_lines,
+        fromfile=f"a/{file_path}",
+        tofile=f"b/{file_path}",
+        lineterm=''
+    )
+    
+    # Join diff lines
+    diff_content = '\n'.join(diff)
+    
+    # If no diff (identical files), return a placeholder
+    if not diff_content.strip():
+        return f"--- a/{file_path}\n+++ b/{file_path}\n@@ Files are identical @@"
+    
+    return diff_content
 
 # ========== GPT‑4 Assisted Detection ==========
 
@@ -532,13 +563,8 @@ def main():
                 description = migration_result.get("description", f"Migration guide for {role}")
                 key_changes = migration_result.get("key_changes", [f"Replace Kafka {role} with Azure Service Bus"])
                 
-                # Generate actual diff with real code
-                diff_content = f"""--- a/{file_path}
-+++ b/{file_path}
-@@ {description} @@
--{file_content[:500]}...
-+{migrated_code[:500] if migrated_code else '// Migration code generation failed'}...
-"""
+                # Generate proper unified diff with real code
+                diff_content = generate_unified_diff(file_content, migrated_code, file_path)
                 
                 transformed_report["diffs"].append({
                     "file": file_path,
@@ -577,13 +603,8 @@ def main():
                 description = migration_result.get("description", "Kafka to Azure Service Bus migration")
                 key_changes = migration_result.get("key_changes", ["Replace Kafka with Azure Service Bus"])
                 
-                # Generate actual diff with real code
-                diff_content = f"""--- a/{file}
-+++ b/{file}
-@@ {description} @@
--{file_content[:500]}...
-+{migrated_code[:500] if migrated_code else '// Migration code generation failed'}...
-"""
+                # Generate proper unified diff with real code
+                diff_content = generate_unified_diff(file_content, migrated_code, file)
                 
                 transformed_report["diffs"].append({
                     "file": file,
