@@ -32,6 +32,7 @@ interface DiffStats {
 interface CodeDiff {
   file: string;
   diff_content: string;
+  migrated_code?: string;
   language: string;
   description?: string;
   key_changes?: string[];
@@ -47,6 +48,8 @@ interface DiffViewerProps {
 
 const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
+  const [expandedMigratedCode, setExpandedMigratedCode] = useState<Set<string>>(new Set());
+  const [expandedDiffSection, setExpandedDiffSection] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   const toggleFile = (fileName: string) => {
@@ -57,6 +60,26 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
       newExpanded.add(fileName);
     }
     setExpandedFiles(newExpanded);
+  };
+
+  const toggleMigratedCode = (fileName: string) => {
+    const newExpanded = new Set(expandedMigratedCode);
+    if (newExpanded.has(fileName)) {
+      newExpanded.delete(fileName);
+    } else {
+      newExpanded.add(fileName);
+    }
+    setExpandedMigratedCode(newExpanded);
+  };
+
+  const toggleDiffSection = (fileName: string) => {
+    const newExpanded = new Set(expandedDiffSection);
+    if (newExpanded.has(fileName)) {
+      newExpanded.delete(fileName);
+    } else {
+      newExpanded.add(fileName);
+    }
+    setExpandedDiffSection(newExpanded);
   };
 
   const copyDiff = async (content: string, fileName: string) => {
@@ -115,7 +138,7 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
         const stats = diff.stats;
         
         return (
-          <Card key={index} className="border border-slate-200 dark:border-slate-600">
+          <Card key={diff.file} className="border border-slate-200 dark:border-slate-600">
             <Collapsible 
               open={isExpanded}
               onOpenChange={() => toggleFile(diff.file)}
@@ -195,8 +218,65 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
                     </div>
                   )}
                   
+                  {/* Migrated Code section - Collapsible */}
+                  {diff.migrated_code && diff.migrated_code.trim() && (
+                    <Collapsible 
+                      open={expandedMigratedCode.has(diff.file)}
+                      onOpenChange={() => toggleMigratedCode(diff.file)}
+                    >
+                      <div className="px-4 py-3 bg-green-50 dark:bg-green-950/30 border-b border-green-200 dark:border-green-800">
+                        <CollapsibleTrigger asChild>
+                          <div className="flex items-center justify-between cursor-pointer mb-2">
+                            <div className="flex items-center gap-2">
+                              {expandedMigratedCode.has(diff.file) ? (
+                                <ChevronDown className="h-4 w-4 text-green-800 dark:text-green-200" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-green-800 dark:text-green-200" />
+                              )}
+                              <h4 className="text-sm font-semibold text-green-800 dark:text-green-200">Migrated Code</h4>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyDiff(diff.migrated_code || '', diff.file);
+                              }}
+                              className="text-green-800 dark:text-green-200 border-green-300 dark:border-green-700 hover:bg-green-100 dark:hover:bg-green-900"
+                            >
+                              <Copy className="h-3 w-3 mr-1" />
+                              Copy Code
+                            </Button>
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <pre className="bg-white dark:bg-slate-900 p-3 rounded border border-green-200 dark:border-green-800 overflow-x-auto mt-2">
+                            <code className="text-xs text-slate-800 dark:text-slate-200 font-mono whitespace-pre">
+                              {diff.migrated_code}
+                            </code>
+                          </pre>
+                        </CollapsibleContent>
+                      </div>
+                    </Collapsible>
+                  )}
                   
-                  <div className="bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-600">
+                  {/* File Changes section - Collapsible */}
+                  <Collapsible 
+                    open={expandedDiffSection.has(diff.file)}
+                    onOpenChange={() => toggleDiffSection(diff.file)}
+                  >
+                    <div className="bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-600">
+                      <CollapsibleTrigger asChild>
+                        <div className="flex items-center gap-2 px-4 py-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                          {expandedDiffSection.has(diff.file) ? (
+                            <ChevronDown className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+                          )}
+                          <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">File Changes</h4>
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
                     {diff.hunks && diff.hunks.length > 0 ? (
                       // Structured diff view
                       <div className="font-mono text-sm">
@@ -213,17 +293,19 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
                                 <div
                                   key={lineIndex}
                                   className={cn(
-                                    'flex items-start gap-2 px-4 py-1 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors',
+                                    'flex items-start px-4 py-1 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors',
                                     getLineTypeClass(line.type)
                                   )}
                                   data-testid={`diff-line-${line.type}`}
                                 >
-                                  <div className="flex items-center gap-2 min-w-16 text-xs text-slate-600 dark:text-slate-200 select-none font-mono">
-                                    {getLineTypeIcon(line.type)}
-                                    <span className="w-8 text-right">
+                                  <div className="flex items-center gap-1 mr-3 text-xs text-slate-600 dark:text-slate-200 select-none font-mono">
+                                    <div className="w-3 flex items-center justify-center">
+                                      {getLineTypeIcon(line.type)}
+                                    </div>
+                                    <span className="w-10 text-right tabular-nums">
                                       {line.old_line || ''}
                                     </span>
-                                    <span className="w-8 text-right">
+                                    <span className="w-10 text-right tabular-nums">
                                       {line.new_line || ''}
                                     </span>
                                   </div>
@@ -267,7 +349,9 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
                         })}
                       </div>
                     )}
-                  </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
                 </CardContent>
               </CollapsibleContent>
             </Collapsible>

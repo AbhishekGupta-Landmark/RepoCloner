@@ -129,6 +129,105 @@ function switchActiveAccount(req: Express['request'], accountId: string): boolea
   return true;
 }
 
+// Parse test coverage report from markdown
+async function parseTestCoverageReport(content: string, repoUrl: string) {
+  const lines = content.split('\n');
+  const fileReports: any[] = [];
+  
+  let currentFile = '';
+  let currentTestFile = '';
+  let currentTests = '';
+  let inCodeBlock = false;
+  let testCasesFound = 0;
+  let newTestCasesAdded = 0;
+  
+  // Extract summary stats
+  let totalFilesAnalyzed = 0;
+  let totalOriginalTestCases = 0;
+  let totalNewTestCasesAdded = 0;
+  let totalTestCasesAfterImprovements = 0;
+  let generatedAt = '';
+  
+  for (const line of lines) {
+    // Extract summary stats
+    const filesMatch = line.match(/\*\*Total Files Analyzed:\*\*\s+(\d+)/);
+    const originalMatch = line.match(/\*\*Total Original Test Cases:\*\*\s+(\d+)/);
+    const newMatch = line.match(/\*\*Total New Test Cases Added:\*\*\s+(\d+)/);
+    const totalMatch = line.match(/\*\*Total Test Cases After Improvements:\*\*\s+(\d+)/);
+    const dateMatch = line.match(/\*\*Generated:\*\*\s+(.+)/);
+    
+    if (filesMatch) totalFilesAnalyzed = parseInt(filesMatch[1]);
+    if (originalMatch) totalOriginalTestCases = parseInt(originalMatch[1]);
+    if (newMatch) totalNewTestCasesAdded = parseInt(newMatch[1]);
+    if (totalMatch) totalTestCasesAfterImprovements = parseInt(totalMatch[1]);
+    if (dateMatch) generatedAt = dateMatch[1];
+    
+    // Extract file-level data
+    if (line.startsWith('## ') && !line.includes('Summary')) {
+      // Save previous file if exists
+      if (currentFile) {
+        fileReports.push({
+          file: currentFile,
+          testFile: currentTestFile,
+          testCasesFound,
+          newTestCasesAdded,
+          generatedTests: currentTests
+        });
+      }
+      
+      currentFile = line.substring(3).trim();
+      currentTests = '';
+      testCasesFound = 0;
+      newTestCasesAdded = 0;
+      inCodeBlock = false;
+    }
+    
+    if (line.startsWith('**Test file:**')) {
+      currentTestFile = line.replace('**Test file:**', '').trim();
+    }
+    
+    const foundMatch = line.match(/\*\*Test Cases Found\*\*:\s+(\d+)/);
+    const addedMatch = line.match(/\*\*New Test Cases Added\*\*:\s+(\d+)/);
+    
+    if (foundMatch) testCasesFound = parseInt(foundMatch[1]);
+    if (addedMatch) newTestCasesAdded = parseInt(addedMatch[1]);
+    
+    if (line.includes('```csharp')) {
+      inCodeBlock = true;
+      continue;
+    }
+    if (line.includes('```') && inCodeBlock) {
+      inCodeBlock = false;
+      continue;
+    }
+    if (inCodeBlock) {
+      currentTests += line + '\n';
+    }
+  }
+  
+  // Save last file
+  if (currentFile) {
+    fileReports.push({
+      file: currentFile,
+      testFile: currentTestFile,
+      testCasesFound,
+      newTestCasesAdded,
+      generatedTests: currentTests
+    });
+  }
+  
+  return {
+    title: 'AI Test Coverage Report',
+    repositoryUrl: repoUrl,
+    generatedAt,
+    totalFilesAnalyzed,
+    totalOriginalTestCases,
+    totalNewTestCasesAdded,
+    totalTestCasesAfterImprovements,
+    fileReports
+  };
+}
+
 function accountToPublic(account: OAuthAccount): OAuthAccountPublic {
   return {
     id: account.id,
@@ -148,6 +247,7 @@ import { openaiService } from "./services/openaiService";
 import { ReportBuilder, type ExportFormat } from "./services/reportBuilder";
 import { pythonScriptService } from "./services/pythonScriptService";
 import { enhancedTechnologyDetectionService } from "./services/enhancedTechnologyDetection";
+import { analysisRegistry } from "./services/analysisRegistry";
 import { insertRepositorySchema, insertAnalysisReportSchema, insertAISettingsSchema, AuthCredentials, AnalysisRequest } from "@shared/schema";
 import { z } from "zod";
 import { randomUUID } from "crypto";
@@ -1278,8 +1378,8 @@ export async function registerRoutes(app: Application): Promise<Server> {
   app.post("/api/analysis/run", async (req, res) => {
     broadcastLog('INFO', '🚀 Analysis run endpoint called');
     try {
-      const { repositoryId } = req.body;
-      broadcastLog('INFO', `🚀 Repository ID: ${repositoryId}`);
+      // Frontend sends analysisTypeId, backend uses analysisType
+      const { repositoryId, analysisTypeId, analysisType } = req.body;
       
       if (!repositoryId) {
         broadcastLog('ERROR', '🚀 No repository ID provided');
@@ -1308,31 +1408,47 @@ export async function registerRoutes(app: Application): Promise<Server> {
         });
       }
 
-      // Execute Python script for migration analysis
-      broadcastLog('INFO', `🚀 Executing Python script for migration analysis: ${repository.name}`);
+      // Use analysisTypeId (from frontend) or analysisType (for backward compatibility), default to 'default'
+      const selectedAnalysisTypeId = analysisTypeId || analysisType || 'default';
+      
+      // Look up the analysis type info from registry to get the label
+      const analysisTypeInfo = await analysisRegistry.getTypeById(selectedAnalysisTypeId);
+      const analysisTypeLabel = analysisTypeInfo?.label || 'Migration Analysis';
+      
+      broadcastLog('INFO', `Executing Python script for migration analysis: ${repository.name} (type: ${selectedAnalysisTypeId}, label: ${analysisTypeLabel})`);
 
       try {
         // Fetch AI settings from storage to pass to Python script
-        let aiSettings = await storage.getAISettingsForScript();
-        broadcastLog('INFO', `🚀 AI Settings loaded: ${aiSettings ? 'YES' : 'NO'}`);
-        if (aiSettings) {
-          broadcastLog('INFO', `🚀 AI Model: ${aiSettings.model}, API Key present: ${!!aiSettings.apiKey}`);
-        }
+        const aiSettings = await storage.getAISettingsForScript();
         
-        // CRITICAL FIX: If no AI settings configured, use environment variables
+        // AI settings are REQUIRED - no fallbacks allowed
         if (!aiSettings || !aiSettings.apiKey) {
-          const epamApiKey = process.env.EPAM_AI_API_KEY;
-          if (epamApiKey) {
-            broadcastLog('INFO', 'Using EPAM AI API key from environment variable');
-            aiSettings = {
-              apiKey: epamApiKey,
-              model: 'claude-3-5-haiku@20241022', // Default EPAM model
-              apiEndpointUrl: 'https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions',
-              apiVersion: '2024-02-15-preview'
-            } as any;
-          } else {
-            broadcastLog('WARN', 'No EPAM_AI_API_KEY environment variable found');
+          broadcastLog('ERROR', 'AI settings not configured - analysis cannot proceed');
+          
+          // Create a failed report so error is displayed properly
+          try {
+            const failedReport = await storage.createAnalysisReport({
+              repositoryId: repository.id,
+              analysisType: 'migration' as any,
+              results: {
+                pythonScriptOutput: {
+                  exitCode: -1,
+                  error: 'AI settings are required to perform migration analysis. Please configure AI settings first.',
+                  stderr: 'AI settings not configured',
+                  generatedFiles: [],
+                  parsedMigrationData: null
+                }
+              }
+            });
+            await storage.updateRepositoryAnalysis(repository.id, new Date(), failedReport.id);
+          } catch (reportError) {
+            broadcastLog('ERROR', `Failed to create AI settings error report: ${reportError}`);
           }
+          
+          return res.status(400).json({
+            success: false,
+            error: 'AI settings are required to perform migration analysis. Please configure AI settings first.'
+          });
         }
         
         // Execute Python script
@@ -1341,7 +1457,8 @@ export async function registerRoutes(app: Application): Promise<Server> {
           repository.localPath,
           repository.url,
           repository.id,
-          aiSettings
+          aiSettings,
+          selectedAnalysisTypeId
         );
         broadcastLog('INFO', `🚀 Python script completed. Success: ${pythonResult.success}`);
 
@@ -1383,24 +1500,25 @@ export async function registerRoutes(app: Application): Promise<Server> {
           });
         }
 
-        // Create Python script report if migration-report.md was generated
+        // Create Python script report - always attempt if Python succeeded
         let reportId: string | undefined = undefined;
-        if (pythonResult.generatedFiles && pythonResult.generatedFiles.length > 0) {
-          broadcastLog('INFO', "Creating Python script report...");
+        try {
+          const scriptPath = analysisTypeInfo?.scriptPath || path.join(__dirname, '../scripts/default.py');
           
-          try {
-            reportId = await pythonScriptService.createPythonScriptReport(
-              repository.id,
-              repository.url,
-              repository.localPath,
-              pythonResult,
-              path.join(__dirname, '../scripts/default.py'),
-              storage
-            );
-            broadcastLog('INFO', `Python script report created with ID: ${reportId}`);
-          } catch (reportError) {
-            broadcastLog('WARN', `Failed to create Python script report: ${reportError}`);
-          }
+          reportId = await pythonScriptService.createPythonScriptReport(
+            repository.id,
+            repository.url,
+            repository.localPath,
+            pythonResult,
+            scriptPath,
+            storage,
+            analysisTypeLabel,
+            selectedAnalysisTypeId
+          );
+          broadcastLog('INFO', `Migration analysis report created with ID: ${reportId}`);
+        } catch (reportError) {
+          broadcastLog('ERROR', `Failed to create migration analysis report: ${reportError}`);
+          // If report creation fails, still update repository without reportId
         }
 
         // Update repository with analysis timestamp and report ID
@@ -1511,6 +1629,160 @@ export async function registerRoutes(app: Application): Promise<Server> {
     }
   });
 
+  // Test Coverage Analysis endpoint
+  app.post("/api/analysis/test-coverage", async (req, res) => {
+    try {
+      const { repositoryId } = req.body;
+      
+      if (!repositoryId) {
+        return res.status(400).json({ error: "Repository ID is required" });
+      }
+
+      const repository = await storage.getRepository(repositoryId);
+      if (!repository) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+
+      // Check if repository is cloned
+      if (repository.cloneStatus !== 'cloned') {
+        return res.status(400).json({ 
+          error: "Repository must be cloned before running test coverage analysis." 
+        });
+      }
+
+      if (!repository.localPath) {
+        return res.status(400).json({ 
+          error: "Repository local path not found. Please re-clone the repository." 
+        });
+      }
+
+      broadcastLog('INFO', `Executing test coverage analysis for repository: ${repository.name}`);
+
+      try {
+        // Fetch AI settings
+        const aiSettings = await storage.getAISettingsForScript();
+        
+        if (!aiSettings || !aiSettings.apiKey) {
+          broadcastLog('ERROR', 'AI settings not configured - test coverage analysis cannot proceed');
+          return res.status(400).json({
+            success: false,
+            error: 'AI settings are required to perform test coverage analysis. Please configure AI settings first.'
+          });
+        }
+        
+        // Execute test coverage Python script
+        const { execSync } = await import('child_process');
+        const os = await import('os');
+        const scriptPath = path.join(__dirname, '../scripts/test-coverage-and-validation/test_coverage_analyzer.py');
+        
+        // Use 'python' on Windows, 'python3' on Unix-like systems
+        const pythonCmd = os.platform() === 'win32' ? 'python' : 'python3';
+        const command = `${pythonCmd} "${scriptPath}" --repo-path "${repository.localPath}" --repo-url "${repository.url}" --api-key "${aiSettings.apiKey}" --base-url "${aiSettings.apiEndpointUrl}"`;
+        
+        broadcastLog('INFO', `Running test coverage analyzer: ${scriptPath}`);
+        
+        let stdout = '';
+        let stderr = '';
+        let exitCode = 0;
+        
+        try {
+          stdout = execSync(command, {
+            encoding: 'utf-8',
+            timeout: 600000, // 10 minutes
+            cwd: repository.localPath,
+            env: { ...process.env }
+          });
+          broadcastLog('INFO', 'Test coverage analysis completed successfully');
+        } catch (error: any) {
+          exitCode = error.status || -1;
+          stderr = error.stderr?.toString() || error.message;
+          stdout = error.stdout?.toString() || '';
+          broadcastLog('ERROR', `Test coverage analysis failed: ${stderr}`);
+          
+          // Check if Python is not found
+          if (stderr.includes('Python was not found') || stderr.includes('python: not found') || stderr.includes('command not found')) {
+            const installInstructions = os.platform() === 'win32' 
+              ? 'Please install Python from https://www.python.org/downloads/ or the Microsoft Store. Make sure to check "Add Python to PATH" during installation.'
+              : 'Please install Python 3 using your package manager (e.g., apt install python3, brew install python3)';
+              
+            return res.status(500).json({
+              success: false,
+              error: `Python is not installed or not in PATH. ${installInstructions}`,
+              exitCode,
+              pythonNotFound: true
+            });
+          }
+          
+          return res.status(500).json({
+            success: false,
+            error: stderr || 'Test coverage analysis failed',
+            exitCode
+          });
+        }
+        
+        // Find generated test coverage report (JSON format)
+        const fs = await import('fs');
+        const files = await fs.promises.readdir(repository.localPath);
+        const testCoverageReports = files.filter(file => file.startsWith('test-coverage-report-') && file.endsWith('.json'));
+        
+        if (testCoverageReports.length === 0) {
+          broadcastLog('WARN', 'No test coverage report generated');
+          return res.status(500).json({
+            success: false,
+            error: 'No test coverage report was generated'
+          });
+        }
+        
+        const reportFile = testCoverageReports[testCoverageReports.length - 1]; // Get the latest
+        const reportPath = path.join(repository.localPath, reportFile);
+        
+        broadcastLog('INFO', `Test coverage report generated: ${reportFile}`);
+        
+        // Store test coverage report in database - now reading JSON directly
+        const reportContent = await fs.promises.readFile(reportPath, 'utf-8');
+        const parsedData = JSON.parse(reportContent);
+        
+        const report = await storage.createAnalysisReport({
+          repositoryId: repository.id,
+          analysisType: 'test-coverage',
+          results: {
+            testCoverageOutput: {
+              exitCode: 0,
+              stdout,
+              stderr,
+              reportFile,
+              parsedData
+            }
+          },
+          structuredData: parsedData
+        });
+        
+        await storage.updateRepositoryAnalysis(repository.id, new Date(), report.id);
+        
+        res.json({
+          success: true,
+          reportId: report.id,
+          reportFile,
+          data: parsedData
+        });
+        
+      } catch (error: any) {
+        const errorMessage = error.message || 'Test coverage analysis failed';
+        broadcastLog('ERROR', `Test coverage analysis error: ${errorMessage}`);
+        
+        res.status(500).json({
+          success: false,
+          error: errorMessage
+        });
+      }
+      
+    } catch (error: any) {
+      const errorMessage = error.message || 'Test coverage analysis failed';
+      broadcastLog('ERROR', `Test coverage analysis error: ${errorMessage}`);
+      res.status(500).json({ error: errorMessage });
+    }
+  });
+
   app.get("/api/repositories", async (req, res) => {
     try {
       const repositories = await storage.getAllRepositories();
@@ -1521,6 +1793,18 @@ export async function registerRoutes(app: Application): Promise<Server> {
   });
 
   // Analysis routes
+  // Get available analysis types
+  app.get("/api/analysis/types", async (req, res) => {
+    try {
+      const types = await analysisRegistry.getAllTypes();
+      res.json({ types });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to retrieve analysis types";
+      broadcastLog('ERROR', `Failed to retrieve analysis types: ${errorMessage}`);
+      res.status(500).json({ error: errorMessage });
+    }
+  });
+
   app.post("/api/analysis/analyze", async (req, res) => {
     try {
       const analysisRequest = req.body as AnalysisRequest;
@@ -1600,9 +1884,13 @@ export async function registerRoutes(app: Application): Promise<Server> {
           const fs = await import('fs');
           const path = await import('path');
           
-          // Look for migration report files
+          // Look for migration report files and test coverage reports
           const files = await fs.promises.readdir(repoPath);
-          const migrationReports = files.filter(file => file.startsWith('migration-report-') && file.endsWith('.md'));
+          const migrationReports = files.filter(file => 
+            (file.startsWith('migration-report-') || file === 'migration-report.md') && file.endsWith('.md')
+          );
+          const quickMigrationReports = files.filter(file => file.startsWith('quick-migration-report-') && file.endsWith('.md'));
+          const testCoverageReports = files.filter(file => file.startsWith('test-coverage-report-') && file.endsWith('.json'));
           
           for (const reportFile of migrationReports) {
             const filePath = path.join(repoPath, reportFile);
@@ -1611,6 +1899,30 @@ export async function registerRoutes(app: Application): Promise<Server> {
               id: reportFile.replace('.md', ''),
               fileName: reportFile,
               type: 'migration-report',
+              createdAt: stats.birthtime,
+              size: stats.size
+            });
+          }
+          
+          for (const reportFile of quickMigrationReports) {
+            const filePath = path.join(repoPath, reportFile);
+            const stats = await fs.promises.stat(filePath);
+            generatedReports.push({
+              id: reportFile.replace('.md', ''),
+              fileName: reportFile,
+              type: 'quick-migration-report',
+              createdAt: stats.birthtime,
+              size: stats.size
+            });
+          }
+          
+          for (const reportFile of testCoverageReports) {
+            const filePath = path.join(repoPath, reportFile);
+            const stats = await fs.promises.stat(filePath);
+            generatedReports.push({
+              id: reportFile.replace('.json', ''),
+              fileName: reportFile,
+              type: 'test-coverage-report',
               createdAt: stats.birthtime,
               size: stats.size
             });
@@ -1654,10 +1966,10 @@ export async function registerRoutes(app: Application): Promise<Server> {
     try {
       const { repositoryId, fileName } = req.params;
       
-      // Validate filename - allow all markdown files for now to debug
+      // Validate filename - allow markdown and JSON files
       broadcastLog('DEBUG', `Attempting to download file: ${fileName}`);
-      if (!fileName.endsWith('.md')) {
-        return res.status(400).json({ error: "Only markdown files are allowed" });
+      if (!fileName.endsWith('.md') && !fileName.endsWith('.json')) {
+        return res.status(400).json({ error: "Only markdown and JSON files are allowed" });
       }
       
       const filePath = await resolveReportFilePath(repositoryId, fileName);
@@ -1671,16 +1983,19 @@ export async function registerRoutes(app: Application): Promise<Server> {
       const fileContent = await fs.promises.readFile(filePath, 'utf-8');
       const stats = await fs.promises.stat(filePath);
       
+      // Set appropriate content type
+      const contentType = fileName.endsWith('.json') ? 'application/json' : 'text/markdown';
+      
       // Set download headers
-      res.setHeader('Content-Type', 'text/markdown');
+      res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
       res.setHeader('Content-Length', Buffer.byteLength(fileContent, 'utf-8').toString());
       
-      broadcastLog('INFO', `Migration report download: ${fileName} (${stats.size} bytes)`);
+      broadcastLog('INFO', `Report download: ${fileName} (${stats.size} bytes)`);
       res.send(fileContent);
       
     } catch (error) {
-      broadcastLog('ERROR', `Migration report download error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      broadcastLog('ERROR', `Report download error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       res.status(500).json({ error: "Report download failed" });
     }
   });
@@ -1718,58 +2033,74 @@ export async function registerRoutes(app: Application): Promise<Server> {
   app.get('/api/reports/:repositoryId/structured', async (req, res) => {
     try {
       const { repositoryId } = req.params;
+      const { analysisType } = req.query;
       
-      // CRITICAL FIX: First check repository's lastReportId
-      const repository = await storage.getRepository(repositoryId);
+      // Get all reports for this repository
+      const allReports = await storage.getAnalysisReportsByRepository(repositoryId);
       
-      if (repository?.lastReportId) {
-        try {
-          const latestReport = await storage.getAnalysisReport(repository.lastReportId);
-          if (latestReport) {
-            broadcastLog('INFO', `Using repository's lastReportId: ${repository.lastReportId}`);
-            
-            // Check if it's a failed report
-            const pythonOutput = (latestReport.results as any)?.pythonScriptOutput;
-            if (pythonOutput?.error || pythonOutput?.exitCode !== 0 || !pythonOutput?.parsedMigrationData) {
-              const errorMessage = pythonOutput?.error || 'Analysis failed to generate migration data';
-              
-              res.json({ 
-                structuredData: null,
-                status: 'failed',
-                error: errorMessage,
-                reportId: latestReport.id,
-                createdAt: latestReport.createdAt
-              });
-              return;
-            }
-            
-            // It's a successful report with structured data
-            if (pythonOutput?.parsedMigrationData) {
-              res.json({
-                structuredData: pythonOutput.parsedMigrationData,
-                status: 'ready',
-                reportId: latestReport.id,
-                createdAt: latestReport.createdAt
-              });
-              return;
-            }
-          }
-        } catch (reportError) {
-          broadcastLog('WARN', `Could not fetch report ${repository.lastReportId}: ${reportError instanceof Error ? reportError.message : 'Unknown error'}`);
-        }
+      // Filter by analysis type if provided
+      let relevantReports = allReports;
+      if (analysisType && typeof analysisType === 'string') {
+        relevantReports = allReports.filter(report => report.analysisType === analysisType);
       }
       
-      // NO FALLBACK - If repository.lastReportId doesn't exist or couldn't be fetched,
-      // return no_analysis status to show error screen
-      res.json({ 
+      // Sort by creation date (most recent first) and get the latest
+      const latestReport = relevantReports.sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )[0];
+      
+      if (!latestReport) {
+        // No report found for this repository/type combination
+        return res.json({ 
+          structuredData: null, 
+          status: 'no_analysis',
+          error: analysisType 
+            ? `No ${analysisType} analysis report found for this repository`
+            : 'No analysis report found for this repository'
+        });
+      }
+      
+      broadcastLog('INFO', `Found report ${latestReport.id} for repository ${repositoryId}${analysisType ? ` with type ${analysisType}` : ''}`);
+      
+      // Check if it's a failed report
+      const pythonOutput = (latestReport.results as any)?.pythonScriptOutput;
+      if (pythonOutput?.error || pythonOutput?.exitCode !== 0 || !pythonOutput?.parsedMigrationData) {
+        const errorMessage = pythonOutput?.error || 'Analysis failed to generate migration data';
+        
+        return res.json({ 
+          structuredData: null,
+          status: 'failed',
+          error: errorMessage,
+          reportId: latestReport.id,
+          createdAt: latestReport.createdAt,
+          analysisType: latestReport.analysisType
+        });
+      }
+      
+      // It's a successful report with structured data
+      if (pythonOutput?.parsedMigrationData) {
+        return res.json({
+          structuredData: pythonOutput.parsedMigrationData,
+          status: 'ready',
+          reportId: latestReport.id,
+          createdAt: latestReport.createdAt,
+          analysisType: latestReport.analysisType
+        });
+      }
+      
+      // Fallback if no structured data
+      return res.json({ 
         structuredData: null, 
-        status: 'no_analysis',
-        error: 'No analysis report found for this repository'
+        status: 'no_data',
+        error: 'Report exists but contains no structured data'
       });
       
     } catch (error) {
       console.error('Error fetching structured migration data:', error);
-      res.status(500).json({ error: 'Failed to fetch structured migration data' });
+      res.status(500).json({ 
+        error: 'Failed to fetch structured migration data',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 

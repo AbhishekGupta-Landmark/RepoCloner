@@ -140,11 +140,11 @@ export default function RepositoryInput() {
 
   return (
     <div className="p-4 border-b border-border">
-      <h2 className="text-lg font-semibold mb-4">Clone Repository</h2>
+      <h2 className="text-lg font-semibold mb-4 text-foreground">Clone Repository</h2>
       
       {/* Provider Selection */}
       <div className="mb-4">
-        <Label className="block text-sm font-medium mb-2">Git Provider</Label>
+        <Label className="block text-sm font-medium mb-2 text-foreground">Git Provider</Label>
         <Select value={selectedProvider} onValueChange={handleProviderChange}>
           <SelectTrigger className="w-full" data-testid="select-provider">
             <SelectValue>

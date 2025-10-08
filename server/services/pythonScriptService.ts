@@ -111,59 +111,59 @@ export class PythonScriptService {
   /**
    * Execute migration analysis via API call instead of local Python script
    */
-  async executePostCloneScript(repositoryPath: string, repositoryUrl: string, repositoryId?: string, aiSettings?: any): Promise<PythonExecutionResult> {
-    broadcastLog('INFO', `🔄 Starting API call for migration analysis...`);
-    broadcastLog('INFO', `📍 Repository URL: ${repositoryUrl}`);
-    broadcastLog('INFO', `📍 Repository Path: ${repositoryPath}`);
-    broadcastLog('INFO', `📍 Repository ID: ${repositoryId}`);
-    broadcastLog('INFO', `📍 AI Settings present: ${!!aiSettings}`);
+  async executePostCloneScript(repositoryPath: string, repositoryUrl: string, repositoryId?: string, aiSettings?: any, analysisType: string = 'default'): Promise<PythonExecutionResult> {
+    broadcastLog('INFO', `🔄 Starting Python script execution for migration analysis...`);
+    broadcastLog('INFO', `Executing post-clone Python script for repository: ${repositoryUrl}`);
+    broadcastLog('INFO', `Selected analysis type: ${analysisType}`);
     
-    if (!aiSettings || !aiSettings.apiKey || !aiSettings.model) {
-      broadcastLog('ERROR', '❌ AI settings are required for migration analysis');
-      broadcastLog('ERROR', `❌ AI Settings: ${JSON.stringify(aiSettings)}`);
+    // Use analysisRegistry to get the correct script path
+    const { analysisRegistry } = await import('./analysisRegistry');
+    const analysisTypeInfo = await analysisRegistry.getTypeById(analysisType);
+    
+    if (!analysisTypeInfo) {
+      broadcastLog('ERROR', `Analysis type '${analysisType}' not found in registry`);
       return {
         success: false,
-        error: 'AI configuration is required to perform migration analysis. Please configure AI settings first.',
+        error: `Analysis type '${analysisType}' not found. Available types: default, quick-migration-1`,
         exitCode: -1
       };
     }
-
-    try {
-      const executionStartTime = Date.now();
-
-      // Prepare API request payload
-      const apiPayload = {
-        repositoryUrl,
-        repositoryPath,
-        repositoryId,
-        aiSettings: {
-          apiKey: aiSettings.apiKey,
-          model: aiSettings.model,
-          apiEndpointUrl: aiSettings.apiEndpointUrl,
-          apiVersion: aiSettings.apiVersion
+    
+    const scriptPath = analysisTypeInfo.scriptPath;
+    broadcastLog('INFO', `Using Python script: ${scriptPath} (${analysisTypeInfo.label})`);
+    
+    if (await this.fileExists(scriptPath)) {
+      broadcastLog('INFO', `✅ Script file exists: ${scriptPath}`);
+      
+      // Build command arguments including AI settings
+      let scriptArgs = [repositoryUrl, repositoryPath];
+      
+      // Add AI settings as command-line arguments if available
+      if (aiSettings && aiSettings.apiKey && aiSettings.model) {
+        broadcastLog('INFO', 'Passing AI settings to Python script');
+        scriptArgs.push(
+          '--api-key', aiSettings.apiKey,
+          '--model', aiSettings.model
+        );
+        
+        if (aiSettings.apiEndpointUrl) {
+          // Use the URL exactly as configured by the user - don't modify it!
+          // EPAM proxy and other services may require api-version in URL for routing/auth
+          scriptArgs.push('--base-url', aiSettings.apiEndpointUrl);
         }
-      };
-
-      // SECURITY: Log request without sensitive data
-      broadcastLog('INFO', `🐍 Making API call to ${this.apiBaseUrl}`);
-      broadcastLog('INFO', `🐍 Repository path: ${repositoryPath}`);
-      broadcastLog('INFO', `🐍 AI model: ${aiSettings.model}`);
-
-      // Make API call to Python service
-      const response = await fetch(this.apiBaseUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(apiPayload),
-        signal: AbortSignal.timeout(this.defaultTimeout)
-      });
-
-      const executionEndTime = Date.now();
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        broadcastLog('ERROR', `🐍 API call failed with status ${response.status}: ${errorText}`);
+        
+        if (aiSettings.apiVersion) {
+          // Only pass api-version as header if it's NOT already in the URL
+          if (!aiSettings.apiEndpointUrl?.includes('api-version=')) {
+            scriptArgs.push('--api-version', aiSettings.apiVersion);
+          }
+        }
+        
+        // SECURITY: Properly mask sensitive arguments
+        const maskedArgs = this.maskSensitiveArgs(scriptArgs);
+        broadcastLog('INFO', `Final script command: python ${scriptPath} ${maskedArgs.join(' ')}`);
+      } else {
+        broadcastLog('ERROR', 'AI settings are required for migration analysis');
         return {
           success: false,
           error: `Migration analysis API failed with status ${response.status}: ${errorText}`,
@@ -175,15 +175,15 @@ export class PythonScriptService {
 
       const result = await response.json();
       
-      broadcastLog('INFO', `🐍 API call completed successfully`);
-      broadcastLog('INFO', `🐍 Generated ${result.generatedFiles?.length || 0} files`);
+      broadcastLog('INFO', `🐍 About to execute Python script with ${scriptArgs.length} arguments`);
+      broadcastLog('INFO', `🐍 Script path: ${scriptPath}`);
       
-      if (result.generatedFiles && result.generatedFiles.length > 0) {
-        result.generatedFiles.forEach((file: any) => {
-          broadcastLog('INFO', `🐍 Generated file: ${file.relativePath || file.name} (${file.size} bytes)`);
-        });
-      }
-
+      const result = await this.executePythonScript({
+        scriptPath: scriptPath,
+        workingDirectory: repositoryPath,
+        args: scriptArgs
+      });
+      
       // Use robust README resolver for MD file generation - pass report directory to script
       broadcastLog('INFO', `🔍 Using README resolver to find correct README file path`);
       const readmePath = findReadmePath(repositoryPath);
@@ -199,38 +199,45 @@ export class PythonScriptService {
         broadcastLog('INFO', `📁 Using default report directory: ${reportDirectory}`);
       }
       
-      // DEBUGGING: Check if any migration report files were returned from API
-      const expectedMdPattern = `migration-report-*.md`;
-      broadcastLog('INFO', `🐍 Expected MD file pattern: ${expectedMdPattern}`);
+      // Check for generated migration report files (supports both timestamped and non-timestamped)
+      broadcastLog('INFO', `🐍 Checking for migration report files in: ${repositoryPath}`);
       
-      if (result.generatedFiles) {
-        const migrationReports = result.generatedFiles.filter((file: any) =>
-          file.name && file.name.startsWith('migration-report-') && file.name.endsWith('.md')
+      // Check if migration report file was created
+      try {
+        const fs = await import('fs');
+        const files = await fs.promises.readdir(repositoryPath);
+        const migrationReports = files.filter(file => 
+          (file.startsWith('migration-report') || file.startsWith('quick-migration-report')) && file.endsWith('.md')
         );
-        broadcastLog('INFO', `🐍 Found ${migrationReports.length} migration report files from API`);
         
         if (migrationReports.length > 0) {
-          migrationReports.forEach((file: any) => {
-            broadcastLog('INFO', `🐍 MD file from API: ${file.path || file.name}`);
-          });
+          for (const reportFile of migrationReports) {
+            const stats = await fs.promises.stat(path.join(repositoryPath, reportFile));
+            broadcastLog('INFO', `✅ Migration report found: ${reportFile} (${stats.size} bytes)`);
+          }
         } else {
-          broadcastLog('WARN', `🐍 No migration report MD files returned from API`);
+          broadcastLog('WARN', `⚠️  No migration report files found matching pattern: migration-report*.md`);
         }
+      } catch (error) {
+        broadcastLog('ERROR', `🐍 Error checking for migration report files: ${error}`);
       }
       
-      return {
-        success: result.success || true,
-        output: result.output,
-        error: result.error,
-        exitCode: result.exitCode || 0,
-        generatedFiles: result.generatedFiles || [],
-        executionStartTime,
-        executionEndTime
-      };
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      broadcastLog('ERROR', `🐍 API call error: ${errorMessage}`);
+      broadcastLog('INFO', `🐍 Python script execution completed - Success: ${result.success}`);
+      if (result.success) {
+        broadcastLog('INFO', `🐍 Generated ${result.generatedFiles?.length || 0} files`);
+        if (result.generatedFiles && result.generatedFiles.length > 0) {
+          result.generatedFiles.forEach(file => {
+            broadcastLog('INFO', `🐍 Generated file: ${file.relativePath} (${file.size} bytes)`);
+          });
+        }
+      } else {
+        broadcastLog('ERROR', `🐍 Script execution failed: ${result.error}`);
+      }
+      
+      return result;
+    } else {
+      // Return failure when default.py doesn't exist - no fallback script generation
+      broadcastLog('ERROR', 'default.py not found and no fallback script should be generated');
       return {
         success: false,
         error: `Migration analysis API error: ${errorMessage}`,
@@ -390,7 +397,85 @@ export class PythonScriptService {
       const titleMatch = reportContent.match(/^#\s+(.+)$/m);
       const title = titleMatch ? titleMatch[1] : 'Kafka to Azure Service Bus Migration Analysis';
 
-      // Extract Kafka inventory from markdown table
+      // CRITICAL: Try to extract JSON block first (for default2.py reports)
+      const jsonBlockMatch = reportContent.match(/```json\s*\n([\s\S]*?)\n```/);
+      
+      if (jsonBlockMatch) {
+        // Parse JSON structure from default2.py
+        try {
+          const jsonData = JSON.parse(jsonBlockMatch[1]);
+          broadcastLog('INFO', `📦 Found JSON block in report - parsing default2.py format`);
+          
+          // Map inventory array to kafka_inventory
+          const kafkaInventory = (jsonData.inventory || []).map((item: any) => ({
+            file: item.file,
+            apis_used: Array.isArray(item.kafka_apis) ? item.kafka_apis.join(', ') : item.kafka_apis,
+            summary: item.summary || ''
+          }));
+          
+          // Map diffs array to code_diffs
+          const codeDiffs = (jsonData.diffs || []).map((item: any) => ({
+            file: item.file,
+            diff_content: item.diff || '',
+            migrated_code: item.migrated_code || '',  // Include full migrated code
+            description: item.description || '',
+            key_changes: item.key_changes || [],
+            language: this.inferLanguageFromFile(item.file),
+            hunks: this.parseDiffHunks(item.diff || ''),
+            stats: this.calculateDiffStats(item.diff || '')
+          }));
+          
+          // Parse markdown sections for AI results and package changes
+          const sections: any = {};
+          
+          // Extract AI-Powered Analysis Results section
+          const aiSectionMatch = reportContent.match(/###\s*AI-Powered Analysis Results\s*\n([\s\S]*?)(?=###|##|```json|$)/i);
+          if (aiSectionMatch && aiSectionMatch[1].trim()) {
+            sections.ai_powered = {
+              title: 'AI-Powered Analysis Results',
+              content: aiSectionMatch[1].trim()
+            };
+          }
+          
+          // Extract NuGet Package Changes section
+          const packageSectionMatch = reportContent.match(/###\s*NuGet Package Changes\s*\n([\s\S]*?)(?=###|##|```json|$)/i);
+          if (packageSectionMatch && packageSectionMatch[1].trim()) {
+            sections.package_changes = {
+              title: 'NuGet Package Changes',
+              content: packageSectionMatch[1].trim()
+            };
+          }
+          
+          // Extract Manual Keyword Detection section
+          const manualSectionMatch = reportContent.match(/###\s*Manual Keyword Detection\s*\n([\s\S]*?)(?=###|##|```json|$)/i);
+          if (manualSectionMatch && manualSectionMatch[1].trim()) {
+            sections.manual_detection = {
+              title: 'Manual Keyword Detection',
+              content: manualSectionMatch[1].trim()
+            };
+          }
+          
+          const structuredData: MigrationReportData = {
+            title,
+            kafka_inventory: kafkaInventory,
+            code_diffs: codeDiffs,
+            sections,
+            stats: {
+              total_files_with_kafka: kafkaInventory.length,
+              total_files_with_diffs: codeDiffs.length,
+              sections_count: Object.keys(sections).length
+            }
+          };
+          
+          broadcastLog('INFO', `✅ Parsed JSON format: ${kafkaInventory.length} inventory items, ${codeDiffs.length} diffs, ${Object.keys(sections).length} sections`);
+          return structuredData;
+        } catch (jsonError) {
+          broadcastLog('WARN', `Failed to parse JSON block, falling back to markdown parsing: ${jsonError}`);
+          // Fall through to markdown parsing
+        }
+      }
+
+      // FALLBACK: Extract Kafka inventory from markdown table (for default.py reports)
       const kafkaInventory: any[] = [];
       
       // Find the Kafka Usage Inventory section
@@ -746,7 +831,9 @@ export class PythonScriptService {
     repositoryPath: string,
     pythonResult: PythonExecutionResult,
     scriptPath: string,
-    storage: any
+    storage: any,
+    analysisTypeLabel?: string,
+    analysisTypeId?: string
   ): Promise<string | undefined> {
     try {
       broadcastLog('INFO', `📊 Processing Python script results for structured report...`);
@@ -779,16 +866,27 @@ export class PythonScriptService {
         // Set the parsed data directly on the pythonResult object (this is where the API expects it)
         (pythonResult as any).parsedMigrationData = parsedMigrationData;
         
+        // Add analysis type label to parsed data for display
+        if (analysisTypeLabel) {
+          parsedMigrationData.analysisTypeLabel = analysisTypeLabel;
+        }
+        
         broadcastLog('INFO', `✅ Successfully parsed migration data: ${parsedMigrationData.code_diffs?.length || 0} diffs, ${parsedMigrationData.kafka_inventory?.length || 0} files with Kafka`);
+        
+        // CRITICAL FIX: Use the actual analysisTypeId from the dropdown selection
+        // instead of deriving from filename (which caused mismatch between frontend query and backend storage)
+        const reportAnalysisType = analysisTypeId || 'default';
+        broadcastLog('INFO', `📝 Storing report with analysisType: ${reportAnalysisType}`);
         
         // Create analysis report in database and return its ID
         const report = await storage.createAnalysisReport({
           repositoryId,
-          analysisType: 'migration' as any,
+          analysisType: reportAnalysisType as any,
           results: {
             pythonScriptOutput: {
               ...pythonResult,
-              parsedMigrationData
+              parsedMigrationData,
+              analysisTypeLabel: analysisTypeLabel || 'Migration Analysis' // Store label for retrieval
             }
           }
         });

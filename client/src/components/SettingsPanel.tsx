@@ -387,7 +387,7 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
                 className="space-y-4"
               >
                 <div className="space-y-2">
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <h3 className="text-lg font-semibold flex items-center gap-2 text-foreground">
                     <Bot className="w-5 h-5" />
                     AI Configuration
                     <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-md font-normal">Server Settings</span>
@@ -540,7 +540,7 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
                 className="space-y-4"
               >
             <div className="space-y-2">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
+              <h3 className="text-lg font-semibold flex items-center gap-2 text-foreground">
                 <GitBranch className="w-5 h-5" />
                 Git Authentication
                 <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-md font-normal">Server Settings</span>
@@ -753,7 +753,7 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
                 className="space-y-4"
               >
             <div className="space-y-2">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
+              <h3 className="text-lg font-semibold flex items-center gap-2 text-foreground">
                 <Zap className="w-5 h-5" />
                 Analysis Preferences
                 <span className="text-xs bg-muted px-2 py-1 rounded-md font-normal">Local Settings</span>

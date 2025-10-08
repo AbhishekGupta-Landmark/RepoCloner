@@ -100,6 +100,7 @@ export interface CodeDiff {
   file: string;
   diff_content: string;
   language: string;
+  key_changes?: string[];
 }
 
 export interface MigrationReportData {
@@ -107,11 +108,34 @@ export interface MigrationReportData {
   kafka_inventory: KafkaUsageItem[];
   code_diffs: CodeDiff[];
   sections: Record<string, any>;
+  key_changes?: string[];
+  analysisTypeLabel?: string; // Label of the analysis type used (e.g., "Quick Migration Analysis")
   stats: {
     total_files_with_kafka: number;
     total_files_with_diffs: number;
     sections_count: number;
   };
+}
+
+// Test Coverage report structured data types
+export interface TestCoverageFileReport {
+  file: string;
+  testFile: string;
+  testCasesFound: number;
+  newTestCasesAdded: number;
+  generatedTests: string;
+  summary?: string;
+}
+
+export interface TestCoverageReportData {
+  title: string;
+  repositoryUrl: string;
+  generatedAt: string;
+  totalFilesAnalyzed: number;
+  totalOriginalTestCases: number;
+  totalNewTestCasesAdded: number;
+  totalTestCasesAfterImprovements: number;
+  fileReports: TestCoverageFileReport[];
 }
 
 // Insert schemas
@@ -299,12 +323,23 @@ export interface PythonScriptResult {
   parsedMigrationData?: ParsedMigrationReport; // For migration analysis type
 }
 
-// Migration report parsing types
+// Migration report parsing types (for frontend consumption - uses snake_case to match backend/JSON)
 export interface ParsedMigrationReport {
   title: string;
-  kafkaInventory: KafkaUsageItem[];
-  codeDiffs: CodeDiff[];
+  kafkaInventory: {
+    file: string;
+    apisUsed: string;
+    summary: string;
+  }[];
+  codeDiffs: {
+    file: string;
+    diff_content: string;
+    diffContent: string;
+    language: string;
+    key_changes?: string[];
+  }[];
   sections: Record<string, any>;
+  key_changes?: string[];
   stats: {
     totalFilesWithKafka: number;
     totalFilesWithDiffs: number;
@@ -312,14 +347,11 @@ export interface ParsedMigrationReport {
   };
 }
 
-export interface KafkaUsageItem {
-  file: string;
-  apisUsed: string;
-  summary: string;
-}
+// Analysis Type Registry - for dynamic analysis types
+export const AnalysisTypeSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  scriptPath: z.string(),
+});
 
-export interface CodeDiff {
-  file: string;
-  diffContent: string;
-  language: string;
-}
+export type AnalysisType = z.infer<typeof AnalysisTypeSchema>;

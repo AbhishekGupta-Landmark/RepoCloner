@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileText, Code, BarChart3, Loader2, AlertTriangle, GitBranch, Code2, CheckCircle, ChevronDown, RotateCw } from 'lucide-react';
+import { FileText, Code, BarChart3, Loader2, AlertTriangle, GitBranch, Code2, CheckCircle, ChevronDown, RotateCw, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAnalysis } from '@/hooks/useAnalysis';
 import DiffViewer from '@/components/ui/DiffViewer';
@@ -19,6 +19,7 @@ interface KafkaUsageItem {
 interface CodeDiff {
   file: string;
   diff_content: string;
+  migrated_code?: string;
   language: string;
   hunks?: any[];
   stats?: any;
@@ -32,7 +33,9 @@ interface MigrationReportData {
   kafka_inventory: KafkaUsageItem[];
   code_diffs: CodeDiff[];
   sections: Record<string, any>;
+  key_changes?: string[];
   notes?: string[];
+  analysisTypeLabel?: string;
   stats: {
     total_files_with_kafka: number;
     total_files_with_diffs: number;
@@ -42,9 +45,12 @@ interface MigrationReportData {
 
 interface MigrationReportViewerProps {
   repositoryId: string;
+  analysisType?: string;
 }
 
-export function MigrationReportViewer({ repositoryId }: MigrationReportViewerProps) {
+export function MigrationReportViewer({ repositoryId, analysisType }: MigrationReportViewerProps) {
+  const [keyChangesOpen, setKeyChangesOpen] = useState(true);
+  
   // Get analysis functions and loading state
   const { analyzeCode, isLoading } = useAnalysis();
   
@@ -53,21 +59,36 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
   const isAnalyzing = isLoading || isMutating > 0;
   
   const { data, isLoading: isQueryLoading, error, refetch } = useQuery({
-    queryKey: ['structured-report', repositoryId],
+    queryKey: ['structured-report', repositoryId, analysisType || 'all'],
     queryFn: async () => {
-      const response = await fetch(`/api/reports/${repositoryId}/structured`);
+      const url = analysisType 
+        ? `/api/reports/${repositoryId}/structured?analysisType=${encodeURIComponent(analysisType)}`
+        : `/api/reports/${repositoryId}/structured`;
+      const response = await fetch(url);
+      
       if (!response.ok) {
         throw new Error('Failed to fetch structured migration data');
       }
+      
+      // Check content type to ensure we're getting JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Expected JSON but got:', contentType, text.substring(0, 200));
+        throw new Error(`Server returned ${contentType || 'non-JSON'} instead of JSON`);
+      }
+      
       return response.json();
     },
     enabled: !!repositoryId,
     // Only poll when analysis might be in progress, stop when completed
     refetchInterval: (query) => {
       const currentData = query.state.data as any;
-      return currentData?.status === 'ready' || currentData?.status === 'completed' ? false : 5000;
+      // Stop polling if we have a ready report or if there's no analysis yet
+      return currentData?.status === 'ready' || currentData?.status === 'completed' || currentData?.status === 'no_analysis' ? false : 5000;
     },
-    staleTime: 0 // Always consider data stale to ensure fresh fetches
+    staleTime: 0, // Always consider data stale to ensure fresh fetches
+    retry: false // Don't retry to avoid showing stale errors
   });
   
   // Show loading state when initially loading OR when analysis is running
@@ -82,12 +103,29 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
     );
   }
 
+  // Handle fetch errors - never show HTML parsing errors to user
   if (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // HTML parsing errors mean no report exists yet - show friendly prompt
+    if (errorMessage.includes('<!DOCTYPE') || errorMessage.includes('HTML') || errorMessage.includes('non-JSON')) {
+      return (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
+            <h3 className="text-lg font-medium mb-2">Ready to Analyze</h3>
+            <p className="text-sm text-muted-foreground">Click the "Analyze Code" button above to start the analysis</p>
+          </CardContent>
+        </Card>
+      );
+    }
+    
+    // Real error - show it
     return (
       <Card>
         <CardContent className="py-8">
           <p className="text-red-500 text-center">
-            Failed to load migration report: {error instanceof Error ? error.message : 'Unknown error'}
+            {errorMessage}
           </p>
         </CardContent>
       </Card>
@@ -95,7 +133,20 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
   }
 
   // Handle different analysis states
-  if (!data?.structuredData) {
+  if (!data || !data.structuredData) {
+    // No analysis run yet - show prompt
+    if (data?.status === 'no_analysis' || !data) {
+      return (
+        <Card>
+          <CardContent className="text-center py-12">
+            <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
+            <h3 className="text-lg font-medium mb-2">Ready to Analyze</h3>
+            <p className="text-sm text-muted-foreground">Click the "Analyze Code" button above to start the analysis</p>
+          </CardContent>
+        </Card>
+      );
+    }
+    
     // Analysis failed - show error message
     if (data?.status === 'failed') {
       return (
@@ -180,6 +231,24 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
 
   const reportData: MigrationReportData = data.structuredData;
 
+  // Extract all key changes from report level and code diffs
+  const allKeyChanges: string[] = [];
+  if (reportData.key_changes) {
+    allKeyChanges.push(...reportData.key_changes);
+  }
+  
+  // Also extract key_changes from individual code diffs
+  if (reportData.code_diffs && Array.isArray(reportData.code_diffs)) {
+    reportData.code_diffs.forEach(diff => {
+      if (diff.key_changes) {
+        allKeyChanges.push(...diff.key_changes);
+      }
+    });
+  }
+  
+  // Remove duplicates
+  const uniqueKeyChanges = Array.from(new Set(allKeyChanges));
+  
   // Extract all notes from code diffs and report level
   const allNotes: string[] = [];
   
@@ -197,6 +266,10 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
     });
   }
 
+  // Get report title - use descriptive migration-specific title
+  const reportTitle = "Kafka → Azure Service Bus Migration Report";
+  const reportSubtitle = `Generated on ${new Date(data.createdAt).toLocaleDateString()}`;
+
   return (
     <div className="space-y-6" data-testid="migration-report-viewer">
       {/* Header */}
@@ -205,10 +278,10 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
           <div>
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              {reportData.title || 'Migration Analysis Report'}
+              {reportTitle}
             </CardTitle>
             <CardDescription>
-              Generated on {new Date(data.createdAt).toLocaleDateString()}
+              {reportSubtitle}
             </CardDescription>
           </div>
         </CardHeader>
@@ -235,6 +308,45 @@ export function MigrationReportViewer({ repositoryId }: MigrationReportViewerPro
           </div>
         </CardContent>
       </Card>
+
+      {/* Key Changes Section */}
+      {uniqueKeyChanges.length > 0 && (
+        <Collapsible open={keyChangesOpen} onOpenChange={setKeyChangesOpen}>
+          <Card className="border-yellow-200 dark:border-yellow-800" data-testid="section-key-changes">
+            <CardHeader>
+              <CollapsibleTrigger asChild>
+                <div className="flex items-center justify-between cursor-pointer">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
+                      <CheckCircle className="h-5 w-5" />
+                      Key Changes
+                      <Badge variant="secondary" className="ml-2">{uniqueKeyChanges.length}</Badge>
+                    </CardTitle>
+                    <CardDescription>
+                      Critical modifications required for Kafka to Azure Service Bus migration
+                    </CardDescription>
+                  </div>
+                  <ChevronDown className={`h-5 w-5 text-yellow-600 dark:text-yellow-400 transition-transform duration-200 ${keyChangesOpen ? 'rotate-180' : ''}`} />
+                </div>
+              </CollapsibleTrigger>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent>
+                <div className="space-y-3">
+                  {uniqueKeyChanges.map((change, index) => (
+                    <div key={index} className="flex items-start gap-3 p-3 bg-yellow-50 dark:bg-yellow-950/30 rounded-lg border border-yellow-200 dark:border-yellow-800" data-testid={`text-key-change-${index}`}>
+                      <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2 flex-shrink-0"></div>
+                      <p className="text-sm text-yellow-800 dark:text-yellow-200 leading-relaxed">
+                        {change}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+      )}
 
       {/* Notes Section */}
       {allNotes.length > 0 && (

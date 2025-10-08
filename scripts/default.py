@@ -1,3 +1,5 @@
+# ANALYSIS_ID: default
+# ANALYSIS_LABEL: Migration Analysis
 import os
 import re
 import json
@@ -19,32 +21,12 @@ def parse_args():
     parser.add_argument('repo_url', help='Repository URL to analyze')
     parser.add_argument('repo_path', help='Local path to clone/analyze repository')
     
-    # AI API key with EPAM fallback
-    ai_api_key = os.environ.get("AI_API_KEY")
-    base_url = os.environ.get("AI_ENDPOINT_URL", "https://api.openai.com/v1/chat/completions")
-    model = os.environ.get("AI_MODEL", "gpt-4")
-    api_version = os.environ.get("AI_API_VERSION", "2024-02-15-preview")
-    
-    if not ai_api_key:
-        # Fallback to EPAM AI proxy if no app-configured AI key
-        ai_api_key = os.environ.get("EPAM_AI_API_KEY")
-        if ai_api_key:
-            print("🔧 Using EPAM AI proxy credentials from environment")
-            # Set EPAM-specific defaults
-            base_url = "https://ai-proxy.lab.epam.com/openai/deployments/claude-3-5-haiku@20241022/chat/completions"
-            model = "claude-3-5-haiku@20241022"
-            api_version = "3.5 Haiku"
-    
-    parser.add_argument('--model', default=model, help='AI model to use')
-    parser.add_argument('--api-version', default=api_version, help='API version')
-    parser.add_argument('--base-url', default=base_url, help='API endpoint URL')
-    parser.add_argument('--api-key', default=ai_api_key, help='AI API key (required)')
+    # AI configuration - NO fallbacks, must be provided explicitly
+    parser.add_argument('--model', required=True, help='AI model to use')
+    parser.add_argument('--api-version', help='API version (optional)')
+    parser.add_argument('--base-url', required=True, help='API endpoint URL')
+    parser.add_argument('--api-key', required=True, help='AI API key (required)')
     return parser.parse_args()
-
-# Safe defaults - no hardcoded credentials
-DEFAULT_MODEL = "gpt-4"
-DEFAULT_API_VERSION = "2024-02-15-preview"
-DEFAULT_BASE_URL = "https://api.openai.com/v1/chat/completions"
 
 class RepoAnalysisState(TypedDict):
     repo_url: str
@@ -168,6 +150,13 @@ def get_updated_state_with_code_chunks(state: RepoAnalysisState) -> RepoAnalysis
     repo_path = state["repo_path"]
     chunks = []
     EXCLUDED_EXTENSIONS = (".png", ".jpg", ".exe", ".dll", ".bin")
+    
+    # Exclude generated report files (don't send our own reports to AI)
+    EXCLUDED_REPORT_PATTERNS = (
+        "migration-report-", 
+        "quick-migration-report-", 
+        "test-coverage-report-"
+    )
 
     max_chunk_size = 4000
     for root, dirs, files in os.walk(repo_path):
@@ -177,6 +166,11 @@ def get_updated_state_with_code_chunks(state: RepoAnalysisState) -> RepoAnalysis
             path = os.path.join(root, f)
             if f.lower().endswith(EXCLUDED_EXTENSIONS):
                 continue
+            
+            # Skip generated report files (both .md and .json)
+            if any(f.startswith(pattern) for pattern in EXCLUDED_REPORT_PATTERNS):
+                if f.lower().endswith(('.md', '.json')):
+                    continue
             try:
                 with open(path, "rb") as test_fp:
                     start = test_fp.read(1024)
@@ -196,10 +190,10 @@ def get_updated_state_with_code_chunks(state: RepoAnalysisState) -> RepoAnalysis
 
 def analyze_code(state: RepoAnalysisState):
     llm = ApiKeyOnlyChatModel(
-        model_name=state.get('model', DEFAULT_MODEL), 
-        base_url=state.get('base_url', DEFAULT_BASE_URL), 
-        api_key=state.get('api_key'),
-        api_version=state.get('api_version')
+        model_name=state['model'], 
+        base_url=state['base_url'], 
+        api_key=state['api_key'],
+        api_version=state['api_version']
     )
     summaries = []
     for chunk in state["code_chunks"]:
@@ -212,10 +206,10 @@ def analyze_code(state: RepoAnalysisState):
 
 def scan_for_kafka_usage_ai(state: RepoAnalysisState) -> RepoAnalysisState:
     llm = ApiKeyOnlyChatModel(
-        model_name=state.get('model', DEFAULT_MODEL), 
-        base_url=state.get('base_url', DEFAULT_BASE_URL), 
-        api_key=state.get('api_key'),
-        api_version=state.get('api_version')
+        model_name=state['model'], 
+        base_url=state['base_url'], 
+        api_key=state['api_key'],
+        api_version=state['api_version']
     )
     inventory: List[Dict[str, Any]] = []
     code_chunks = state["code_chunks"]
@@ -297,10 +291,10 @@ def extract_description_and_diff(raw: str) -> tuple[str, str]:
 
 def generate_code_diffs(state: RepoAnalysisState) -> RepoAnalysisState:
     llm = ApiKeyOnlyChatModel(
-        model_name=state.get('model', DEFAULT_MODEL), 
-        base_url=state.get('base_url', DEFAULT_BASE_URL), 
-        api_key=state.get('api_key'),
-        api_version=state.get('api_version')
+        model_name=state['model'], 
+        base_url=state['base_url'], 
+        api_key=state['api_key'],
+        api_version=state['api_version']
     )
     inventory = state.get("kafka_inventory", [])
     repo_path = state["repo_path"]
@@ -359,12 +353,15 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
     """
 
     llm = ApiKeyOnlyChatModel(
-        model_name=state.get('model', DEFAULT_MODEL), 
-        base_url=state.get('base_url', DEFAULT_BASE_URL), 
-        api_key=state.get('api_key')
+        model_name=state['model'], 
+        base_url=state['base_url'], 
+        api_key=state['api_key']
     )
 
-    with open(report_path, "w", encoding="utf-8") as f:
+    # Use report_path from state if provided, otherwise use default parameter
+    actual_report_path = state.get('report_path', report_path)
+
+    with open(actual_report_path, "w", encoding="utf-8") as f:
         # Header
         f.write("# Kafka → Azure Service Bus Migration Report\n\n")
 
@@ -404,10 +401,10 @@ def generate_report_streaming(state: RepoAnalysisState, report_path="migration-r
                 f.write("*No diff content generated*\n\n")
 
 
-    print(f"✅ Streaming migration report written to {report_path}")
+    print(f"✅ Streaming migration report written to {actual_report_path}")
 
     # Update state with a final message
-    return {**state, "messages": state["messages"] + [AIMessage(content=f"Migration report generated at {report_path}.")]}
+    return {**state, "messages": state["messages"] + [AIMessage(content=f"Migration report generated at {actual_report_path}.")]}
 
 # Build workflow
 graph = StateGraph(RepoAnalysisState)
@@ -428,23 +425,7 @@ graph.add_edge("generate_report", END)
 
 app = graph.compile()
 
-# Run
-def run_analysis(question: str = "Provide a summary of the repository and its Kafka usage."):
-    initial_state: RepoAnalysisState = {
-        "repo_url": "https://github.com/srigumm/dotnetcore-kafka-integration",
-        "repo_path": "./cloned_repo",
-        "code_chunks": [],
-        "analysis": "",
-        "kafka_inventory": [],
-        "code_diffs": [],
-        "messages": [HumanMessage(content=question)],
-        "model": DEFAULT_MODEL,
-        "api_version": DEFAULT_API_VERSION,
-        "base_url": DEFAULT_BASE_URL,
-        "api_key": "",
-    }
-    result = app.invoke(initial_state)
-    print("\nAI Proxy Response:\n", result["messages"][-1].content)
+# Removed: run_analysis function (relied on fallback constants, no longer needed)
 
 # Main execution with proper argument parsing
 if __name__ == "__main__":
@@ -464,120 +445,34 @@ if __name__ == "__main__":
     print(f"🌐 Using Endpoint: {args.base_url}")
     print(f"📊 Phase 1: Repository validation and code loading...")
     
-    report_generated = False
-    analysis_type = "Static Analysis"
+    # AI analysis is required - no fallback
+    if not args.api_key or not args.base_url or args.api_key == "test" or args.base_url == "test":
+        print("❌ ERROR: AI configuration is required. No AI credentials provided.")
+        sys.exit(1)
     
-    # Try AI analysis if we have credentials
-    if args.api_key and args.base_url and args.api_key != "test" and args.base_url != "test":
-        try:
-            print("🤖 Attempting AI analysis...")
-            result = app.invoke({
-                "repo_url": args.repo_url,
-                "repo_path": args.repo_path,
-                "code_chunks": [],
-                "analysis": "",
-                "kafka_inventory": [],
-                "code_diffs": [],
-                "messages": [HumanMessage(content="Analyze this repository for Kafka usage and generate migration report.")],
-                # AI configuration from command-line arguments
-                "model": args.model,
-                "api_version": args.api_version,
-                "base_url": args.base_url,
-                "api_key": args.api_key
-            })
-            
-            print("\n✅ AI Migration analysis completed!")
-            print(f"📄 REPORT_GENERATED: {report_filename}")
-            analysis_type = "AI Analysis"
-            report_generated = True
+    try:
+        print("🤖 Starting AI analysis...")
+        result = app.invoke({
+            "repo_url": args.repo_url,
+            "repo_path": args.repo_path,
+            "report_path": report_path,
+            "code_chunks": [],
+            "analysis": "",
+            "kafka_inventory": [],
+            "code_diffs": [],
+            "messages": [HumanMessage(content="Analyze this repository for Kafka usage and generate migration report.")],
+            # AI configuration from command-line arguments
+            "model": args.model,
+            "api_version": args.api_version,
+            "base_url": args.base_url,
+            "api_key": args.api_key
+        })
         
-        except Exception as e:
-            print(f"\n❌ AI Analysis failed: {str(e)}")
-            print("🔄 Falling back to static analysis...")
-    else:
-        print("⚠️ No AI credentials provided, using static analysis")
-    
-    # Generate static fallback report if AI failed
-    if not report_generated:
-        print("🔄 Generating static analysis fallback report...")
-        try:
-            # Static analysis - scan for Kafka files without AI
-            kafka_files = []
-            code_diffs = []
-            
-            # Find files that likely contain Kafka usage
-            for root, dirs, files in os.walk(args.repo_path):
-                if ".git" in dirs:
-                    dirs.remove(".git")
-                for file in files:
-                    if file.endswith(('.cs', '.java', '.js', '.ts', '.py')):
-                        file_path = os.path.join(root, file)
-                        try:
-                            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                                content = f.read()
-                                if any(keyword.lower() in content.lower() for keyword in ['kafka', 'producer', 'consumer', 'confluent']):
-                                    relative_path = os.path.relpath(file_path, args.repo_path)
-                                    kafka_files.append({
-                                        'file': relative_path,
-                                        'kafka_apis': ['Kafka Producer', 'Kafka Consumer', 'Confluent.Kafka'],
-                                        'summary': 'Kafka usage detected in static analysis'
-                                    })
-                                    code_diffs.append({
-                                        'file': relative_path,
-                                        'diff_content': f'''- // Original Kafka implementation\n+ // Recommended Azure Service Bus migration:\n+ using Azure.Messaging.ServiceBus;\n+ // Replace Kafka producers with ServiceBusClient\n+ // Replace Kafka consumers with ServiceBusReceiver\n+ // Update configuration to use Service Bus connection strings''',
-                                        'description': 'Static analysis detected Kafka usage - recommended Azure Service Bus migration',
-                                        'language': 'diff'
-                                    })
-                        except Exception:
-                            continue
-            
-            # Generate static migration report
-            with open(report_path, "w", encoding="utf-8") as f:
-                f.write("# Kafka → Azure Service Bus Migration Report\n\n")
-                f.write("*Generated by static analysis*\n\n")
-                
-                # Kafka inventory section
-                f.write("## 1. Kafka Usage Inventory\n\n")
-                if kafka_files:
-                    f.write("Files in your repository that use Kafka APIs:\n\n")
-                    f.write("| File | APIs Used | Summary |\n")
-                    f.write("|------|-----------|---------|\n")
-                    for item in kafka_files:
-                        apis = ', '.join(item.get('kafka_apis', []))
-                        f.write(f"| {item['file']} | {apis} | {item['summary']} |\n")
-                else:
-                    f.write("No Kafka usage detected in static analysis.\n")
-                f.write("\n")
-                
-                # Code migrations section
-                f.write("## 2. Code Migration Diffs\n\n")
-                if code_diffs:
-                    for diff in code_diffs:
-                        f.write(f"### {diff['file']}\n")
-                        
-                        # Write description above the code block if it exists
-                        if diff.get('description'):
-                            f.write(f"{diff['description']}\n\n")
-                        
-                        f.write("```diff\n")
-                        f.write(diff.get('diff_content', diff.get('diff', '')))
-                        f.write("\n```\n\n")
-                else:
-                    f.write("No migration recommendations available from static analysis.\n")
-                    f.write("Enable AI analysis for detailed migration guidance.\n\n")
-            
-            print(f"✅ Static analysis report generated: {report_filename}")
-            analysis_type = "Static Analysis Fallback"
-            report_generated = True
-            
-        except Exception as e:
-            print(f"❌ Static analysis fallback failed: {str(e)}")
-    
-    # Final status
-    if report_generated:
-        print(f"✅ Analysis complete - Report available: {report_filename}")
-        print(f"📊 Analysis type: {analysis_type}")
+        print("\n✅ AI Migration analysis completed!")
+        print(f"📄 REPORT_GENERATED: {report_filename}")
         sys.exit(0)
-    else:
-        print("❌ Both AI and static analysis failed - no report generated")
+    
+    except Exception as e:
+        print(f"\n❌ AI Analysis failed: {str(e)}")
+        print("ERROR: Analysis failed. Please check your AI configuration and try again.")
         sys.exit(1)

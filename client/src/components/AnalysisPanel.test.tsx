@@ -64,7 +64,7 @@ describe('AnalysisPanel', () => {
   it('renders analysis panel', () => {
     renderWithProviders(<AnalysisPanel />)
     
-    expect(screen.getByText('OpenAI Code Analysis')).toBeInTheDocument()
+    expect(screen.getByText('AI Code Analysis')).toBeInTheDocument()
   })
 
   it('shows analyze code button', () => {

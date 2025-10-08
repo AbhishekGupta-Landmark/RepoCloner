@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, Clock, Loader2, Download } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FileText, Clock, Loader2, Download, Eye, Maximize2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAppContext } from "@/context/AppContext";
 import { AnalysisReport, AnalysisResult } from "@shared/schema";
@@ -17,9 +18,11 @@ export default function ReportsPanel() {
   const { currentRepository } = useAppContext();
   const { toast } = useToast();
   const [downloadingReports, setDownloadingReports] = useState<Set<string>>(new Set());
+  const [viewingReport, setViewingReport] = useState<{ id: string, fileName: string } | null>(null);
+  const [reportContent, setReportContent] = useState<string>('');
 
   // Fetch actual reports from the API
-  const { data: reports, isLoading } = useQuery<{ reports: AnalysisReport[] }>({
+  const { data: reports, isLoading } = useQuery<{ reports: AnalysisReport[], generatedReports?: Array<{id: string, fileName: string, type: string, createdAt: Date, size: number}> }>({
     queryKey: ['/api/analysis/reports', currentRepository?.id],
     enabled: !!currentRepository?.id // Only fetch when we have a repository
   });
@@ -27,6 +30,19 @@ export default function ReportsPanel() {
   // Helper function to get report title and description based on analysis type
   const getReportInfo = (analysisType: string, results?: any) => {
     switch (analysisType) {
+      case 'migration':
+        // Use analysisTypeLabel from results if available
+        const analysisLabel = results?.pythonScriptOutput?.analysisTypeLabel;
+        if (analysisLabel) {
+          return {
+            title: `${analysisLabel} Report`,
+            description: 'Kafka to Azure Service Bus migration analysis'
+          };
+        }
+        return {
+          title: 'Migration Analysis Report',
+          description: 'Kafka to Azure Service Bus migration analysis'
+        };
       case 'python-script':
         // Extract filename from generated files
         if (results?.pythonScriptOutput?.generatedFiles?.length > 0) {
@@ -66,11 +82,34 @@ export default function ReportsPanel() {
           title: 'Architecture Analysis Report',
           description: 'Software architecture patterns and design quality'
         };
-      default:
+      case 'test-coverage-report':
         return {
-          title: 'Analysis Report',
-          description: 'Code analysis results'
+          title: 'Test Coverage and Validation Report',
+          description: 'AI-powered test coverage analysis and recommendations'
         };
+      case 'migration-report':
+        return {
+          title: 'Migration Analysis Report',
+          description: 'Kafka to Azure Service Bus migration analysis'
+        };
+      case 'quick-migration-report':
+        return {
+          title: 'Quick Migration Analysis Report',
+          description: 'Kafka to Azure Service Bus migration analysis'
+        };
+      case 'default':
+        return {
+          title: 'Migration Analysis Report',
+          description: 'Kafka to Azure Service Bus migration analysis'
+        };
+      case 'quick-migration-1':
+        return {
+          title: 'Quick Migration Analysis Report',
+          description: 'Kafka to Azure Service Bus migration analysis'
+        };
+      default:
+        // Don't show unrecognized report types - they might be internal/duplicate entries
+        return null;
     }
   };
 
@@ -108,14 +147,103 @@ export default function ReportsPanel() {
     return `${Math.floor(diffInMinutes / 1440)} days ago`;
   };
 
+  const handleViewReport = async (reportId: string, fileName: string) => {
+    if (!currentRepository?.id) return;
+    
+    try {
+      const viewUrl = `/api/analysis/reports/${encodeURIComponent(currentRepository.id)}/download/${encodeURIComponent(fileName)}`;
+      const response = await fetch(viewUrl);
+      
+      if (!response.ok) {
+        toast({
+          title: "Failed to load report",
+          description: "Could not retrieve report content",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      const content = await response.text();
+      setReportContent(content);
+      setViewingReport({ id: reportId, fileName });
+    } catch (error) {
+      toast({
+        title: "Error loading report",
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: "destructive",
+      });
+    }
+  };
 
 
-  const displayReports = reports?.reports || [];
+
+  // Combine database reports and generated reports (from filesystem)
+  const dbReports = reports?.reports || [];
+  const generatedReportsFromFS = reports?.generatedReports || [];
+  
+  const genReports = generatedReportsFromFS.map(gr => ({
+    id: gr.id,
+    repositoryId: currentRepository?.id || '',
+    analysisType: gr.type,
+    results: { fileName: gr.fileName, fileSize: gr.size },
+    createdAt: gr.createdAt,
+    isGeneratedReport: true,
+    fileName: gr.fileName
+  }));
+  
+  // Filter out database reports that have matching generated report files to avoid duplicates
+  // Match based on timestamp proximity (within 5 seconds) to be more precise
+  const filteredDbReports = dbReports.filter(dbReport => {
+    if (dbReport.analysisType === 'migration' || dbReport.analysisType === 'python-script') {
+      const dbTime = dbReport.createdAt ? new Date(dbReport.createdAt).getTime() : 0;
+      
+      // Check if there's a generated file created around the same time
+      const hasMatchingGenFile = genReports.some(genReport => {
+        const genTime = genReport.createdAt ? new Date(genReport.createdAt).getTime() : 0;
+        const timeDiff = Math.abs(dbTime - genTime);
+        return timeDiff < 5000; // Within 5 seconds = same analysis
+      });
+      
+      if (hasMatchingGenFile) {
+        return false; // Filter out - this DB entry has a matching file
+      }
+    }
+    return true;
+  });
+  
+  // CRITICAL: Only show reports that have actual files (prevent empty entries)
+  const reportsWithFiles = [...genReports, ...filteredDbReports].filter(report => {
+    // Generated reports always have files (they come from filesystem)
+    if ('isGeneratedReport' in report && report.isGeneratedReport) {
+      return true;
+    }
+    
+    // For DB reports, check if file exists in generatedReports OR has downloadUrl
+    const results = report.results as any;
+    if (results?.fileName) {
+      const hasFile = generatedReportsFromFS.some(gr => gr.fileName === results.fileName);
+      if (hasFile) return true;
+    }
+    
+    // Check for downloadUrl or other file indicators
+    if (results?.downloadUrl || results?.reportPath) {
+      return true;
+    }
+    
+    // No file found - don't show this entry
+    return false;
+  });
+  
+  const displayReports = reportsWithFiles.sort((a, b) => {
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
 
   return (
     <div className="p-6 h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-semibold">Analysis Reports</h2>
+        <h2 className="text-lg font-semibold text-foreground">Analysis Reports</h2>
       </div>
       
       <Tabs defaultValue="reports" className="h-full flex flex-col">
@@ -224,6 +352,9 @@ export default function ReportsPanel() {
               const metrics = getMetrics(results as AnalysisResult);
               const createdAt = report.createdAt ? new Date(report.createdAt).toISOString() : new Date().toISOString();
               
+              // Skip reports with unrecognized types (reportInfo is null)
+              if (!reportInfo) return null;
+              
               return (
                 <Card key={report.id} data-testid={`report-${report.id}`}>
                   <CardHeader className="pb-3">
@@ -270,18 +401,39 @@ export default function ReportsPanel() {
                         )}
                       </div>
                       
-                      {/* Download button for python-script reports with generated files */}
-                      {(report.analysisType === 'python-script' || report.analysisType === 'migration') && 
-                       results?.pythonScriptOutput?.generatedFiles?.length > 0 && 
-                       currentRepository?.id && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={downloadingReports.has(report.id)}
-                          className="!text-white !border-white/30 hover:!bg-blue-600 hover:!border-blue-500 hover:!text-white bg-transparent"
-                          onClick={async () => {
-                            const generatedFile = results.pythonScriptOutput.generatedFiles[0];
-                            const fileName = generatedFile.name;
+                      {/* View and Download buttons for reports with generated files or generated reports */}
+                      {((((report.analysisType === 'python-script' || report.analysisType === 'migration') && 
+                       results?.pythonScriptOutput?.generatedFiles?.length > 0) ||
+                       ((report.analysisType === 'migration-report' || report.analysisType === 'test-coverage-report' || report.analysisType === 'quick-migration-report') && (report as any).fileName)) && 
+                       currentRepository?.id) && (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="!text-white !border-white/30 hover:!bg-blue-600 hover:!border-blue-500 hover:!text-white bg-transparent"
+                            onClick={() => {
+                              const fileName = (report as any).fileName || 
+                                             results.pythonScriptOutput?.generatedFiles?.[0]?.name;
+                              if (fileName) {
+                                handleViewReport(report.id, fileName);
+                              }
+                            }}
+                            data-testid={`view-report-${report.id}`}
+                          >
+                            <Eye className="h-3 w-3 mr-1" />
+                            View
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={downloadingReports.has(report.id)}
+                            className="!text-white !border-white/30 hover:!bg-blue-600 hover:!border-blue-500 hover:!text-white bg-transparent"
+                            onClick={async () => {
+                            // Determine filename based on report type
+                            const fileName = (report as any).fileName || 
+                                           results.pythonScriptOutput?.generatedFiles?.[0]?.name;
+                            
+                            if (!fileName) return;
                             
                             setDownloadingReports(prev => new Set(prev).add(report.id));
                             
@@ -350,6 +502,7 @@ export default function ReportsPanel() {
                           )}
                           {downloadingReports.has(report.id) ? 'Downloading...' : 'Download'}
                         </Button>
+                        </div>
                       )}
                     </div>
                   </CardContent>
@@ -362,6 +515,42 @@ export default function ReportsPanel() {
         </TabsContent>
 
       </Tabs>
+
+      {/* Report Viewer Dialog */}
+      <Dialog open={!!viewingReport} onOpenChange={(open) => !open && setViewingReport(null)}>
+        <DialogContent className="max-w-6xl h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-foreground">
+                {viewingReport?.fileName || 'Report'}
+              </DialogTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const elem = document.querySelector('[role="dialog"]') as HTMLElement;
+                  if (elem && document.fullscreenElement !== elem) {
+                    elem.requestFullscreen();
+                  } else if (document.fullscreenElement) {
+                    document.exitFullscreen();
+                  }
+                }}
+                className="!text-foreground !border-border hover:!bg-accent"
+                data-testid="maximize-dialog"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 mt-4 overflow-hidden">
+            <ScrollArea className="h-full">
+              <pre className="text-sm text-foreground font-mono whitespace-pre-wrap break-words p-4 bg-muted rounded-lg">
+                {reportContent}
+              </pre>
+            </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

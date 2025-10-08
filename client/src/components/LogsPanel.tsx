@@ -210,7 +210,7 @@ export default function LogsPanel() {
     <div className="p-6 h-full flex flex-col">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold">Activity Logs</h2>
+          <h2 className="text-lg font-semibold text-foreground">Activity Logs</h2>
           <div className="flex items-center gap-2">
             <Wifi className="h-4 w-4 text-green-500" data-testid="icon-connected" />
             <span className="text-xs text-green-600" data-testid="text-connection-status">

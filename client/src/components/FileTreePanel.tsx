@@ -82,7 +82,7 @@ function RepositoryDownloadButton({ repositoryId, repositoryName }: RepositoryDo
       disabled={isDownloading}
       title="Download Complete Repository as ZIP"
       data-testid="button-download-repository"
-      className="hover-lift transition-fast hover:bg-purple-500/10 hover:text-purple-500 disabled:opacity-50"
+      className="hover-lift transition-fast text-muted-foreground hover:bg-purple-500/10 hover:text-purple-500 disabled:opacity-50"
     >
       {isDownloading ? (
         <motion.div
@@ -523,7 +523,7 @@ export default function FileTreePanel() {
               onClick={expandAll}
               title="Expand All"
               data-testid="button-expand-all"
-              className="hover-lift transition-fast hover:bg-green-500/10 hover:text-green-500"
+              className="hover-lift transition-fast text-muted-foreground hover:bg-green-500/10 hover:text-green-500"
             >
               <Plus className="h-3 w-3" />
             </Button>
@@ -533,7 +533,7 @@ export default function FileTreePanel() {
               onClick={collapseAll}
               title="Collapse All"
               data-testid="button-collapse-all"
-              className="hover-lift transition-fast hover:bg-red-500/10 hover:text-red-500"
+              className="hover-lift transition-fast text-muted-foreground hover:bg-red-500/10 hover:text-red-500"
             >
               <Minus className="h-3 w-3" />
             </Button>
@@ -543,7 +543,7 @@ export default function FileTreePanel() {
               onClick={refreshTree}
               title="Refresh"
               data-testid="button-refresh-tree"
-              className="hover-lift transition-fast hover:bg-blue-500/10 hover:text-blue-500"
+              className="hover-lift transition-fast text-muted-foreground hover:bg-blue-500/10 hover:text-blue-500"
             >
               <motion.div
                 whileTap={{ rotate: 360 }}
