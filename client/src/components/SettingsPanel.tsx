@@ -858,14 +858,14 @@ export default function SettingsPanel({ onApplied, initialTab = "ai" }: Settings
                             variant="outline"
                             className={`justify-start gap-2 ${
                               selectedProvider === id 
-                                ? "border-primary bg-primary/10 text-primary" 
-                                : "hover:bg-muted"
+                                ? "border-primary bg-primary/10 text-primary dark:text-primary" 
+                                : "text-foreground dark:text-foreground hover:bg-muted hover:text-foreground dark:hover:text-foreground"
                             }`}
                             onClick={() => setSelectedProvider(id)}
                             data-testid={`button-provider-${id}`}
                           >
-                            <Icon className="h-4 w-4" />
-                            {provider.name}
+                            <Icon className="h-4 w-4 flex-shrink-0" />
+                            <span className="font-medium">{provider.name}</span>
                             {selectedProvider === id && (
                               <div className="ml-auto h-2 w-2 rounded-full bg-primary" />
                             )}
