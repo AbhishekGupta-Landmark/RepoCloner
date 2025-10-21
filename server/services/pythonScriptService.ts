@@ -659,28 +659,17 @@ export class PythonScriptService {
             summary: item.summary || ''
           }));
           
-          // Map code_diffs array - populate both old and new field names for backward compatibility
-          const codeDiffs = (jsonData.code_diffs || jsonData.diffs || []).map((item: any) => {
-            const diffContent = item.diff_content || item.diff || '';
-            const migratedCode = item.migrated_code || '';
-            
-            return {
-              file: item.file,
-              // New field names
-              diff_content: diffContent,
-              migrated_code: migratedCode,
-              // Legacy field names (for Code Analysis backward compatibility)
-              diff: diffContent,
-              code: migratedCode,
-              // Common fields
-              description: item.description || '',
-              key_changes: item.key_changes || [],
-              summary: item.description || '',
-              language: this.inferLanguageFromFile(item.file),
-              hunks: this.parseDiffHunks(diffContent),
-              stats: this.calculateDiffStats(diffContent)
-            };
-          });
+          // Map diffs array to code_diffs
+          const codeDiffs = (jsonData.diffs || []).map((item: any) => ({
+            file: item.file,
+            diff_content: item.diff || '',
+            migrated_code: item.migrated_code || '',  // Include full migrated code
+            description: item.description || '',
+            key_changes: item.key_changes || [],
+            language: this.inferLanguageFromFile(item.file),
+            hunks: this.parseDiffHunks(item.diff || ''),
+            stats: this.calculateDiffStats(item.diff || '')
+          }));
           
           // Parse markdown sections for AI results and package changes
           const sections: any = {};

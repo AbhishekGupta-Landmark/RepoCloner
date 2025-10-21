@@ -533,7 +533,7 @@ def main():
             "generatedAt": str(int(time.time() * 1000))
         },
         "inventory": [],
-        "code_diffs": [],  # Changed from "diffs" to match backend expectation
+        "diffs": [],
         "keyChanges": []
     }
     
@@ -566,18 +566,18 @@ def main():
                 # Generate proper unified diff with real code
                 diff_content = generate_unified_diff(file_content, migrated_code, file_path)
                 
-                transformed_report["code_diffs"].append({
+                transformed_report["diffs"].append({
                     "file": file_path,
-                    "diff_content": migrated_code,  # Backend expects diff_content or code field
+                    "diff": diff_content,
                     "description": description,
                     "key_changes": key_changes if key_changes else [f"Replace Kafka {role} with Azure Service Bus"],
-                    "migrated_code": migrated_code  # Full migrated code for reference
+                    "migrated_code": migrated_code  # Full migrated code
                 })
             else:
                 # Fallback if file can't be read
-                transformed_report["code_diffs"].append({
+                transformed_report["diffs"].append({
                     "file": file_path,
-                    "diff_content": f"// Could not read original file\n// Please migrate manually",
+                    "diff": f"--- a/{file_path}\n+++ b/{file_path}\n@@ File not readable @@",
                     "description": f"Could not read file for migration",
                     "key_changes": [f"Replace Kafka {role} with Azure Service Bus"]
                 })
@@ -606,36 +606,38 @@ def main():
                 # Generate proper unified diff with real code
                 diff_content = generate_unified_diff(file_content, migrated_code, file)
                 
-                transformed_report["code_diffs"].append({
+                transformed_report["diffs"].append({
                     "file": file,
-                    "diff_content": migrated_code,  # Backend expects diff_content or code field
+                    "diff": diff_content,
                     "description": description,
                     "key_changes": key_changes if key_changes else ["Replace Kafka with Azure Service Bus"],
                     "migrated_code": migrated_code
                 })
             else:
                 # Fallback
-                transformed_report["code_diffs"].append({
+                transformed_report["diffs"].append({
                     "file": file,
-                    "diff_content": f"// Could not read original file\n// Please migrate manually",
+                    "diff": f"--- a/{file}\n+++ b/{file}\n@@ File not readable @@",
                     "description": "Could not read file for migration",
                     "key_changes": ["Replace Kafka with Azure Service Bus"]
                 })
     
-    # Add NuGet package changes as code_diffs
+    # Add NuGet package changes as diffs
     for change in report.get("csproj_changes", []):
         csproj_file = change.get("file", "")
         remove_pkg = change.get("remove", "")
         add_pkg = change.get("add", "")
         
-        # Generate updated csproj content
-        migrated_content = f"""<!-- NuGet Package Migration -->
-<PackageReference Include="{add_pkg}" />
-<!-- Removed: {remove_pkg} -->"""
+        diff_content = f"""--- a/{csproj_file}
++++ b/{csproj_file}
+@@ NuGet Package Update @@
+-    <PackageReference Include="{remove_pkg}" />
++    <PackageReference Include="{add_pkg}" />
+"""
         
-        transformed_report["code_diffs"].append({
+        transformed_report["diffs"].append({
             "file": csproj_file,
-            "diff_content": migrated_content,
+            "diff": diff_content,
             "description": f"Update NuGet package: Remove {remove_pkg}, Add {add_pkg}",
             "key_changes": [f"Remove {remove_pkg}", f"Add {add_pkg}"]
         })
