@@ -2454,8 +2454,8 @@ export async function registerRoutes(app: Application): Promise<Server> {
         return {
           filePath: diff.file,
           oldCode,
-          newCode: diff.diff_content || diff.code || "// AI-generated migration code",
-          description: diff.key_changes?.join(", ") || diff.summary || "Code migration changes"
+          newCode: diff.migrated_code || "// AI-generated migration code not available",
+          description: diff.key_changes?.join(", ") || diff.description || "Code migration changes"
         };
       }));
       
