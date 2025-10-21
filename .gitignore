@@ -16,3 +16,4 @@ __pycache__/
 .coverage
 .env.local
 .env.*.local
+replit.md
