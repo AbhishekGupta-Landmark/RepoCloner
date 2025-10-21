@@ -659,16 +659,16 @@ export class PythonScriptService {
             summary: item.summary || ''
           }));
           
-          // Map diffs array to code_diffs
-          const codeDiffs = (jsonData.diffs || []).map((item: any) => ({
+          // Map code_diffs array to code_diffs (updated to match new script output)
+          const codeDiffs = (jsonData.code_diffs || jsonData.diffs || []).map((item: any) => ({
             file: item.file,
-            diff_content: item.diff || '',
+            diff_content: item.diff_content || item.diff || '',
             migrated_code: item.migrated_code || '',  // Include full migrated code
             description: item.description || '',
             key_changes: item.key_changes || [],
             language: this.inferLanguageFromFile(item.file),
-            hunks: this.parseDiffHunks(item.diff || ''),
-            stats: this.calculateDiffStats(item.diff || '')
+            hunks: this.parseDiffHunks(item.diff_content || item.diff || ''),
+            stats: this.calculateDiffStats(item.diff_content || item.diff || '')
           }));
           
           // Parse markdown sections for AI results and package changes
