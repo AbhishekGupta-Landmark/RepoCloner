@@ -202,7 +202,11 @@ export interface AuthCredentials {
 export interface AuthResult {
   success: boolean;
   token?: string;
+  userId?: string;
   username?: string;
+  displayName?: string;
+  email?: string;
+  avatarUrl?: string;
   error?: string;
 }
 

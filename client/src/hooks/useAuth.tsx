@@ -78,8 +78,9 @@ export function useAuth() {
         title: "Authentication Successful",
         description: `Signed in as ${decodeURIComponent(username)} via ${provider}`
       });
-      // Invalidate auth status to refresh user data
+      // Invalidate both auth status and accounts to refresh user data and account list
       queryClient.invalidateQueries({ queryKey: ['/api/auth/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/accounts'] });
       // Clean up URL
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (authResult === 'error' && errorMessage) {
@@ -126,14 +127,14 @@ export function useAuth() {
       });
       return await response.json();
     },
-    onSuccess: (data) => {
-      setUser({
-        username: data.username,
-        provider: data.provider
-      });
-      // Refresh both auth status and accounts data
-      queryClient.invalidateQueries({ queryKey: ['/api/auth/status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/auth/accounts'] });
+    onSuccess: async (data) => {
+      // Don't manually set user state - let the queries handle it
+      // This ensures the active account from the backend is reflected correctly
+      
+      // Invalidate and wait for queries to refetch
+      await queryClient.invalidateQueries({ queryKey: ['/api/auth/status'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/auth/accounts'] });
+      
       toast({
         title: "Authentication Successful",
         description: `Signed in as ${data.username} via ${data.provider}`

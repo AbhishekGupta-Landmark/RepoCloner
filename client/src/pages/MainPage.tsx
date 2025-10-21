@@ -4,7 +4,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { motion, AnimatePresence } from "framer-motion";
-import AuthModal from "@/components/AuthModal";
 import FileTreePanel from "@/components/FileTreePanel";
 import AnalysisPanel from "@/components/AnalysisPanel";
 import ReportsPanel from "@/components/ReportsPanel";
@@ -42,8 +41,8 @@ const getProviderIcon = (provider: string) => {
 };
 
 export default function MainPage() {
-  const [authModalOpen, setAuthModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [initialSettingsTab, setInitialSettingsTab] = useState("ai");
   const [activeTab, setActiveTab] = useState("technology");
   const settingsAppliedRef = useRef(false);
   const { 
@@ -191,7 +190,7 @@ export default function MainPage() {
             <Code className="text-2xl text-primary drop-shadow-sm" />
           </motion.div>
           <h1 className="text-xl font-semibold bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">
-            Git Repository Cloner & Analyzer
+            AI Migration Tool
           </h1>
           <motion.div
             animate={{ rotate: [0, 10, -10, 0] }}
@@ -208,26 +207,7 @@ export default function MainPage() {
           transition={{ duration: 0.4, delay: 0.3 }}
         >
           <AnimatePresence mode="wait">
-            {!isAuthenticated ? (
-              <motion.div 
-                key="unauthenticated"
-                className="flex items-center gap-3"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ duration: 0.2 }}
-              >
-                <span className="text-muted-foreground text-sm">Not authenticated</span>
-                <Button 
-                  onClick={() => setAuthModalOpen(true)}
-                  data-testid="button-sign-in"
-                  className="bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 shadow-md hover:shadow-lg transition-all duration-200 font-medium border border-blue-500/20 focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 focus:ring-offset-background"
-                >
-                  <Zap className="mr-2 h-4 w-4" />
-                  Git Connection Preferences
-                </Button>
-              </motion.div>
-            ) : (
+            {isAuthenticated && (
               <motion.div 
                 key="authenticated"
                 className="flex items-center gap-3"
@@ -338,7 +318,10 @@ export default function MainPage() {
 
                     {/* Add Another Account Section - Always available for PAT authentication */}
                     <DropdownMenuItem 
-                      onClick={() => setAuthModalOpen(true)}
+                      onClick={() => {
+                        setInitialSettingsTab("connection");
+                        setSettingsModalOpen(true);
+                      }}
                       className="flex items-center gap-3 p-3 cursor-pointer hover:bg-muted/50" 
                       data-testid="dropdown-item-add-account"
                     >
@@ -675,15 +658,10 @@ export default function MainPage() {
       </div>
 
       {/* Modals with Enhanced Animations */}
-      <AuthModal 
-        open={authModalOpen} 
-        onOpenChange={setAuthModalOpen} 
-      />
-      
       <AnimatePresence>
         {settingsModalOpen && (
           <Dialog open={settingsModalOpen} onOpenChange={handleSettingsModalClose}>
-            <DialogContent className="max-w-7xl h-[95vh] flex flex-col shadow-strong border-border/50 p-0">
+            <DialogContent className="max-w-5xl h-[80vh] flex flex-col shadow-strong border-border/50 p-0">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -703,7 +681,7 @@ export default function MainPage() {
                   </DialogTitle>
                 </DialogHeader>
                 <div className="flex-1 overflow-hidden min-h-0">
-                  <SettingsPanel onApplied={onSettingsApplied} />
+                  <SettingsPanel onApplied={onSettingsApplied} initialTab={initialSettingsTab} />
                 </div>
               </motion.div>
             </DialogContent>
