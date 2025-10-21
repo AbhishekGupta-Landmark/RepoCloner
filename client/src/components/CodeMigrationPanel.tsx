@@ -52,7 +52,7 @@ export default function CodeMigrationPanel() {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
   // Fetch migration changes
-  const { data: migrationData, isLoading: isLoadingChanges } = useQuery<{
+  const { data: migrationData, isLoading: isLoadingChanges, error: queryError } = useQuery<{
     changes: MigrationChange[];
     migrationType: string;
     oldCoverage: CoverageData;
@@ -62,6 +62,13 @@ export default function CodeMigrationPanel() {
     queryKey: ['/api/migration/changes', currentRepository?.id],
     enabled: !!currentRepository?.id,
   });
+
+  // Debug logging
+  console.log('[CodeMigrationPanel] currentRepository:', currentRepository?.id);
+  console.log('[CodeMigrationPanel] Query enabled:', !!currentRepository?.id);
+  console.log('[CodeMigrationPanel] isLoading:', isLoadingChanges);
+  console.log('[CodeMigrationPanel] data:', migrationData);
+  console.log('[CodeMigrationPanel] error:', queryError);
 
   // Approve and push mutation
   const approveMutation = useMutation({
