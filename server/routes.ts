@@ -2423,12 +2423,17 @@ export async function registerRoutes(app: Application): Promise<Server> {
       const { repositoryId } = req.params;
       console.log(`🔍 [Migration Changes] Request for repository: ${repositoryId}`);
       
-      // Get the latest migration report
+      // Get the latest migration report (sort by createdAt DESC to get newest first)
       const reports = await storage.getAnalysisReportsByRepository(repositoryId);
       console.log(`📊 [Migration Changes] Found ${reports.length} reports`);
       console.log(`📊 [Migration Changes] Report types:`, reports.map(r => r.analysisType));
       
-      const migrationReport = reports.find(r => 
+      // Sort by createdAt descending to get the most recent first
+      const sortedReports = reports.sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      
+      const migrationReport = sortedReports.find(r => 
         r.analysisType === 'quick-migration-1' || 
         r.analysisType === 'comprehensive-migration' ||
         r.analysisType === 'migration'
