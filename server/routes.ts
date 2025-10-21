@@ -2421,9 +2421,12 @@ export async function registerRoutes(app: Application): Promise<Server> {
   app.get("/api/migration/changes/:repositoryId", async (req, res) => {
     try {
       const { repositoryId } = req.params;
+      console.log(`🔍 [Migration Changes] Request for repository: ${repositoryId}`);
       
       // Get the latest migration report
       const reports = await storage.getAnalysisReportsByRepository(repositoryId);
+      console.log(`📊 [Migration Changes] Found ${reports.length} reports`);
+      
       const migrationReport = reports.find(r => 
         r.analysisType === 'quick-migration-1' || 
         r.analysisType === 'comprehensive-migration' ||
@@ -2431,12 +2434,14 @@ export async function registerRoutes(app: Application): Promise<Server> {
       );
       
       if (!migrationReport || !migrationReport.structuredData) {
+        console.log(`❌ [Migration Changes] No migration report found`);
         return res.status(404).json({ 
           error: "No migration report found. Please run a migration analysis first." 
         });
       }
       
       const structuredData = migrationReport.structuredData;
+      console.log(`✅ [Migration Changes] Found migration report, diffs:`, structuredData.diffs?.length || 0);
       
       // Extract changes from diffs array
       const changes = await Promise.all((structuredData.diffs || []).map(async (diff: any) => {
@@ -2486,6 +2491,8 @@ export async function registerRoutes(app: Application): Promise<Server> {
           }))
         };
       }
+      
+      console.log(`📤 [Migration Changes] Returning ${changes.length} changes`);
       
       res.json({
         changes,
