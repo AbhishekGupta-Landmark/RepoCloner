@@ -4,7 +4,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { motion, AnimatePresence } from "framer-motion";
-import AuthModal from "@/components/AuthModal";
 import FileTreePanel from "@/components/FileTreePanel";
 import AnalysisPanel from "@/components/AnalysisPanel";
 import ReportsPanel from "@/components/ReportsPanel";
@@ -42,7 +41,6 @@ const getProviderIcon = (provider: string) => {
 };
 
 export default function MainPage() {
-  const [authModalOpen, setAuthModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [initialSettingsTab, setInitialSettingsTab] = useState("ai");
   const [activeTab, setActiveTab] = useState("technology");
@@ -342,7 +340,10 @@ export default function MainPage() {
 
                     {/* Add Another Account Section - Always available for PAT authentication */}
                     <DropdownMenuItem 
-                      onClick={() => setAuthModalOpen(true)}
+                      onClick={() => {
+                        setInitialSettingsTab("connection");
+                        setSettingsModalOpen(true);
+                      }}
                       className="flex items-center gap-3 p-3 cursor-pointer hover:bg-muted/50" 
                       data-testid="dropdown-item-add-account"
                     >
@@ -679,11 +680,6 @@ export default function MainPage() {
       </div>
 
       {/* Modals with Enhanced Animations */}
-      <AuthModal 
-        open={authModalOpen} 
-        onOpenChange={setAuthModalOpen} 
-      />
-      
       <AnimatePresence>
         {settingsModalOpen && (
           <Dialog open={settingsModalOpen} onOpenChange={handleSettingsModalClose}>
