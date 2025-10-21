@@ -97,10 +97,8 @@ function addAccount(req: Express['request'], account: OAuthAccount): void {
     // Add new account
     req.session.accounts[account.id] = account;
     
-    // Set as active if it's the first account
-    if (!req.session.activeAccountId) {
-      req.session.activeAccountId = account.id;
-    }
+    // Always set newly added account as active (user just signed in with it)
+    req.session.activeAccountId = account.id;
   }
 }
 

@@ -207,29 +207,7 @@ export default function MainPage() {
           transition={{ duration: 0.4, delay: 0.3 }}
         >
           <AnimatePresence mode="wait">
-            {!isAuthenticated ? (
-              <motion.div 
-                key="unauthenticated"
-                className="flex items-center gap-3"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ duration: 0.2 }}
-              >
-                <span className="text-muted-foreground text-sm">Not authenticated</span>
-                <Button 
-                  onClick={() => {
-                    setInitialSettingsTab("connection");
-                    setSettingsModalOpen(true);
-                  }}
-                  data-testid="button-sign-in"
-                  className="bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 shadow-md hover:shadow-lg transition-all duration-200 font-medium border border-blue-500/20 focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 focus:ring-offset-background"
-                >
-                  <Zap className="mr-2 h-4 w-4" />
-                  Sign In
-                </Button>
-              </motion.div>
-            ) : (
+            {isAuthenticated && (
               <motion.div 
                 key="authenticated"
                 className="flex items-center gap-3"
