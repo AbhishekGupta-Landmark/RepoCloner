@@ -2426,6 +2426,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
       // Get the latest migration report
       const reports = await storage.getAnalysisReportsByRepository(repositoryId);
       console.log(`📊 [Migration Changes] Found ${reports.length} reports`);
+      console.log(`📊 [Migration Changes] Report types:`, reports.map(r => r.analysisType));
       
       const migrationReport = reports.find(r => 
         r.analysisType === 'quick-migration-1' || 
@@ -2433,10 +2434,18 @@ export async function registerRoutes(app: Application): Promise<Server> {
         r.analysisType === 'migration'
       );
       
-      if (!migrationReport || !migrationReport.structuredData) {
+      if (!migrationReport) {
         console.log(`❌ [Migration Changes] No migration report found`);
         return res.status(404).json({ 
           error: "No migration report found. Please run a migration analysis first." 
+        });
+      }
+      
+      if (!migrationReport.structuredData) {
+        console.log(`❌ [Migration Changes] Migration report has no structuredData`);
+        console.log(`📊 [Migration Changes] Report:`, JSON.stringify(migrationReport, null, 2));
+        return res.status(404).json({ 
+          error: "Migration report has no structured data. Please re-run the analysis." 
         });
       }
       
