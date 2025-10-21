@@ -78,8 +78,9 @@ export function useAuth() {
         title: "Authentication Successful",
         description: `Signed in as ${decodeURIComponent(username)} via ${provider}`
       });
-      // Invalidate auth status to refresh user data
+      // Invalidate both auth status and accounts to refresh user data and account list
       queryClient.invalidateQueries({ queryKey: ['/api/auth/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/accounts'] });
       // Clean up URL
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (authResult === 'error' && errorMessage) {
