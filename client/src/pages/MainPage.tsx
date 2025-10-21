@@ -191,7 +191,7 @@ export default function MainPage() {
             <Code className="text-2xl text-primary drop-shadow-sm" />
           </motion.div>
           <h1 className="text-xl font-semibold bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">
-            Git Repository Cloner & Analyzer
+            AI Migration Tool
           </h1>
           <motion.div
             animate={{ rotate: [0, 10, -10, 0] }}
@@ -224,7 +224,7 @@ export default function MainPage() {
                   className="bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 shadow-md hover:shadow-lg transition-all duration-200 font-medium border border-blue-500/20 focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 focus:ring-offset-background"
                 >
                   <Zap className="mr-2 h-4 w-4" />
-                  Git Connection Preferences
+                  Sign In
                 </Button>
               </motion.div>
             ) : (

@@ -363,7 +363,7 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
 
           {/* Tabbed Interface */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="ai" className="flex items-center gap-2" data-testid="tab-ai-configuration">
                 <Bot className="w-4 h-4" />
                 AI Configuration
@@ -372,8 +372,12 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
                 <GitBranch className="w-4 h-4" />
                 Git Authentication
               </TabsTrigger>
-              <TabsTrigger value="analysis" className="flex items-center gap-2" data-testid="tab-analysis-settings">
+              <TabsTrigger value="connection" className="flex items-center gap-2" data-testid="tab-git-connection">
                 <Zap className="w-4 h-4" />
+                Git Connection
+              </TabsTrigger>
+              <TabsTrigger value="analysis" className="flex items-center gap-2" data-testid="tab-analysis-settings">
+                <Settings className="w-4 h-4" />
                 Analysis Settings
               </TabsTrigger>
             </TabsList>
@@ -542,11 +546,11 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
             <div className="space-y-2">
               <h3 className="text-lg font-semibold flex items-center gap-2 text-foreground">
                 <GitBranch className="w-5 h-5" />
-                Git Authentication
+                Git Authentication (Clone FROM Repositories)
                 <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-md font-normal">Server Settings</span>
               </h3>
               <p className="text-sm text-muted-foreground">
-                Configure OAuth applications for secure repository access and user sign-in. Changes are saved to the server.
+                Configure OAuth applications for <strong>reading and cloning FROM repositories</strong>. This enables user authentication and access to private repositories for analysis. Changes are saved to the server.
               </p>
             </div>
 
@@ -741,6 +745,144 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
                 </div>
               </div>
             </div>
+              </motion.div>
+            </TabsContent>
+
+            {/* Git Connection Tab - For Push/Write Operations */}
+            <TabsContent value="connection" className="space-y-4">
+              <motion.div
+                initial={{ opacity: 1, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="space-y-4"
+              >
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold flex items-center gap-2 text-foreground">
+                    <Zap className="w-5 h-5" />
+                    Git Connection (Push TO Repositories)
+                    <span className="text-xs bg-green-500/10 text-green-500 px-2 py-1 rounded-md font-normal">Push Credentials</span>
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Configure Personal Access Tokens (PAT) for <strong>pushing and writing TO repositories</strong>. This enables automated report commits and code modifications. Required for cloning analysis results back to GitHub.
+                  </p>
+                </div>
+
+                <div className="space-y-4 border border-border rounded-lg p-4 bg-card">
+                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 space-y-2">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-blue-500">Different from OAuth Authentication</p>
+                        <p className="text-xs text-muted-foreground">
+                          • <strong>Git Authentication (OAuth)</strong> - Used for <strong>reading FROM</strong> repositories (analysis, cloning)<br/>
+                          • <strong>Git Connection (PAT)</strong> - Used for <strong>writing TO</strong> repositories (pushing reports, commits)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="github-pat" className="text-sm font-medium flex items-center gap-2">
+                        <Github className="w-4 h-4" />
+                        GitHub Personal Access Token
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="github-pat"
+                          type={showSecrets.githubPat ? "text" : "password"}
+                          placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                          data-testid="input-github-pat"
+                          className="pr-10"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3"
+                          onClick={() => toggleSecretVisibility('githubPat')}
+                        >
+                          {showSecrets.githubPat ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Create a PAT at{" "}
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="p-0 h-auto text-xs text-primary"
+                          onClick={() => window.open('https://github.com/settings/tokens/new', '_blank')}
+                        >
+                          GitHub Settings →
+                        </Button>
+                        {" "}with <code className="bg-muted px-1 py-0.5 rounded text-xs">repo</code> scope for full repository access
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="git-username" className="text-sm font-medium">
+                        Git Username
+                      </Label>
+                      <Input
+                        id="git-username"
+                        placeholder="your-github-username"
+                        data-testid="input-git-username"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Used for commit author information when pushing reports
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="git-email" className="text-sm font-medium">
+                        Git Email
+                      </Label>
+                      <Input
+                        id="git-email"
+                        type="email"
+                        placeholder="your-email@example.com"
+                        data-testid="input-git-email"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Email address for commit author information
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="default-branch" className="text-sm font-medium">
+                        Default Branch for Reports
+                      </Label>
+                      <Input
+                        id="default-branch"
+                        placeholder="ai-migration-reports"
+                        data-testid="input-default-branch"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Branch name where analysis reports will be committed
+                      </p>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="auto-push"
+                        data-testid="checkbox-auto-push"
+                      />
+                      <Label htmlFor="auto-push" className="text-sm cursor-pointer">
+                        Automatically push reports to repository after analysis
+                      </Label>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-4 border-t border-border">
+                    <Button 
+                      className="min-w-[150px]"
+                      data-testid="button-save-git-connection"
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      Save Connection Settings
+                    </Button>
+                  </div>
+                </div>
               </motion.div>
             </TabsContent>
 
