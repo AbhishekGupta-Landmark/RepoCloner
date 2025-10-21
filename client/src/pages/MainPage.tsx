@@ -44,6 +44,7 @@ const getProviderIcon = (provider: string) => {
 export default function MainPage() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [initialSettingsTab, setInitialSettingsTab] = useState("ai");
   const [activeTab, setActiveTab] = useState("technology");
   const settingsAppliedRef = useRef(false);
   const { 
@@ -219,7 +220,10 @@ export default function MainPage() {
               >
                 <span className="text-muted-foreground text-sm">Not authenticated</span>
                 <Button 
-                  onClick={() => setAuthModalOpen(true)}
+                  onClick={() => {
+                    setInitialSettingsTab("connection");
+                    setSettingsModalOpen(true);
+                  }}
                   data-testid="button-sign-in"
                   className="bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 shadow-md hover:shadow-lg transition-all duration-200 font-medium border border-blue-500/20 focus:ring-2 focus:ring-blue-500/50 focus:ring-offset-2 focus:ring-offset-background"
                 >
@@ -703,7 +707,7 @@ export default function MainPage() {
                   </DialogTitle>
                 </DialogHeader>
                 <div className="flex-1 overflow-hidden min-h-0">
-                  <SettingsPanel onApplied={onSettingsApplied} />
+                  <SettingsPanel onApplied={onSettingsApplied} initialTab={initialSettingsTab} />
                 </div>
               </motion.div>
             </DialogContent>

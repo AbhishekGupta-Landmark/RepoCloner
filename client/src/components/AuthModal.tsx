@@ -258,7 +258,7 @@ export default function AuthModal({ open, onOpenChange }: AuthModalProps) {
                     OAuth Configuration Required
                   </div>
                   <p className="text-sm text-orange-600 dark:text-orange-400">
-                    Please configure OAuth Credentials in the Environment Variables for {selectedProvider} to enable sign in
+                    Please configure OAuth Credentials in Settings → Git Authentication tab for {selectedProvider} to enable sign in
                   </p>
                 </div>
               ) : (

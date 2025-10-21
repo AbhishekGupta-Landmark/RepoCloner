@@ -21,11 +21,15 @@ import {
   Server,
   Globe,
   GitlabIcon as Gitlab,
-  Users
+  Users,
+  Lock,
+  Key
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/useAuth";
+import { AuthCredentials } from "@shared/schema";
 
 // Model to API Version mapping
 const MODEL_API_MAPPING = {
@@ -113,10 +117,11 @@ const GIT_PROVIDERS = {
 
 interface SettingsPanelProps {
   onApplied?: () => void;
+  initialTab?: string;
 }
 
-export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
-  const [activeTab, setActiveTab] = useState("ai");
+export default function SettingsPanel({ onApplied, initialTab = "ai" }: SettingsPanelProps) {
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [settings, setSettings] = useState({
     openai: {
       apiKey: "",
@@ -163,7 +168,16 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
   const [aiHasKey, setAiHasKey] = useState(false);
   const [newApiKey, setNewApiKey] = useState("");
 
+  // Sign-in state (for Git Connection tab)
+  const [selectedProvider, setSelectedProvider] = useState("github");
+  const [authMethod, setAuthMethod] = useState<'oauth' | 'pat'>('oauth');
+  const [credentials, setCredentials] = useState({ token: "" });
+  const [oauthConfigStatus, setOauthConfigStatus] = useState<Record<string, boolean>>({});
+  const [configCheckLoading, setConfigCheckLoading] = useState(false);
+  const [configError, setConfigError] = useState<string | null>(null);
+
   const { toast } = useToast();
+  const { authenticate, isLoading: authIsLoading } = useAuth();
 
   // Load configuration on mount
   useEffect(() => {
@@ -312,6 +326,71 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
     }));
     setHasUnsavedOauthChanges(true);
   };
+
+  // Check OAuth configuration for sign-in (Git Connection tab)
+  const checkOauthConfig = async () => {
+    if (authMethod !== "oauth") return;
+    
+    setConfigCheckLoading(true);
+    setConfigError(null);
+    
+    try {
+      const configResponse = await fetch('/api/admin/oauth-config', {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      
+      if (!configResponse.ok) {
+        throw new Error(`Config request failed: ${configResponse.status}`);
+      }
+      
+      const configData = await configResponse.json();
+      
+      if (configData.config) {
+        const status: Record<string, boolean> = {};
+        Object.keys(configData.config).forEach(provider => {
+          const providerConfig = configData.config[provider];
+          status[provider] = !!(providerConfig?.clientId && providerConfig?.clientSecret);
+        });
+        setOauthConfigStatus(status);
+      } else {
+        setConfigError("Failed to load OAuth configuration");
+      }
+    } catch (error) {
+      setConfigError("Failed to verify OAuth configuration");
+    } finally {
+      setConfigCheckLoading(false);
+    }
+  };
+
+  // Handle sign-in authentication (OAuth or PAT)
+  const handleAuthenticate = async () => {
+    if (authMethod === "oauth") {
+      window.location.href = `/api/auth/oauth/${selectedProvider}`;
+      return;
+    }
+
+    const authCredentials: AuthCredentials = {
+      type: authMethod,
+      token: credentials.token || undefined
+    };
+
+    const success = await authenticate(selectedProvider, authCredentials);
+    if (success) {
+      setCredentials({ token: "" });
+      toast({
+        title: "Authentication Successful",
+        description: `Connected to ${selectedProvider} successfully.`
+      });
+    }
+  };
+
+  // Check configuration when auth method or provider changes
+  useEffect(() => {
+    if (authMethod === "oauth" && activeTab === "connection") {
+      checkOauthConfig();
+    }
+  }, [selectedProvider, authMethod, activeTab]);
 
   const toggleSecretVisibility = (field: string) => {
     setShowSecrets(prev => ({
@@ -546,11 +625,11 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
             <div className="space-y-2">
               <h3 className="text-lg font-semibold flex items-center gap-2 text-foreground">
                 <GitBranch className="w-5 h-5" />
-                Git Authentication (Clone FROM Repositories)
+                Git Authentication (Clone FROM Git Providers)
                 <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-md font-normal">Server Settings</span>
               </h3>
               <p className="text-sm text-muted-foreground">
-                Configure OAuth applications for <strong>reading and cloning FROM repositories</strong>. This enables user authentication and access to private repositories for analysis. Changes are saved to the server.
+                Configure OAuth applications for <strong>reading and cloning FROM Git Providers</strong>. This enables user authentication and access to private repositories for analysis. Changes are saved to the server.
               </p>
             </div>
 
@@ -758,130 +837,186 @@ export default function SettingsPanel({ onApplied }: SettingsPanelProps) {
               >
                 <div className="space-y-2">
                   <h3 className="text-lg font-semibold flex items-center gap-2 text-foreground">
-                    <Zap className="w-5 h-5" />
-                    Git Connection (Push TO Repositories)
-                    <span className="text-xs bg-green-500/10 text-green-500 px-2 py-1 rounded-md font-normal">Push Credentials</span>
+                    <Lock className="w-5 h-5" />
+                    Git Connection - Sign In to Git Provider
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    Configure Personal Access Tokens (PAT) for <strong>pushing and writing TO repositories</strong>. This enables automated report commits and code modifications. Required for cloning analysis results back to GitHub.
+                    Authenticate with your Git provider using OAuth or Personal Access Token (PAT). This enables access to repositories for analysis and report generation.
                   </p>
                 </div>
 
                 <div className="space-y-4 border border-border rounded-lg p-4 bg-card">
-                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 space-y-2">
-                    <div className="flex items-start gap-2">
-                      <AlertCircle className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-blue-500">Different from OAuth Authentication</p>
-                        <p className="text-xs text-muted-foreground">
-                          • <strong>Git Authentication (OAuth)</strong> - Used for <strong>reading FROM</strong> repositories (analysis, cloning)<br/>
-                          • <strong>Git Connection (PAT)</strong> - Used for <strong>writing TO</strong> repositories (pushing reports, commits)
-                        </p>
-                      </div>
+                  {/* Provider Selection */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Select Git Provider</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {Object.entries(GIT_PROVIDERS).map(([id, provider]) => {
+                        const Icon = provider.icon;
+                        return (
+                          <Button
+                            key={id}
+                            variant="outline"
+                            className={`justify-start gap-2 ${
+                              selectedProvider === id 
+                                ? "border-primary bg-primary/10 text-primary" 
+                                : "hover:bg-muted"
+                            }`}
+                            onClick={() => setSelectedProvider(id)}
+                            data-testid={`button-provider-${id}`}
+                          >
+                            <Icon className="h-4 w-4" />
+                            {provider.name}
+                            {selectedProvider === id && (
+                              <div className="ml-auto h-2 w-2 rounded-full bg-primary" />
+                            )}
+                          </Button>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="github-pat" className="text-sm font-medium flex items-center gap-2">
-                        <Github className="w-4 h-4" />
-                        GitHub Personal Access Token
-                      </Label>
-                      <div className="relative">
-                        <Input
-                          id="github-pat"
-                          type={showSecrets.githubPat ? "text" : "password"}
-                          placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                          data-testid="input-github-pat"
-                          className="pr-10"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="absolute right-0 top-0 h-full px-3"
-                          onClick={() => toggleSecretVisibility('githubPat')}
-                        >
-                          {showSecrets.githubPat ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Create a PAT at{" "}
-                        <Button
-                          variant="link"
-                          size="sm"
-                          className="p-0 h-auto text-xs text-primary"
-                          onClick={() => window.open('https://github.com/settings/tokens/new', '_blank')}
-                        >
-                          GitHub Settings →
-                        </Button>
-                        {" "}with <code className="bg-muted px-1 py-0.5 rounded text-xs">repo</code> scope for full repository access
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="git-username" className="text-sm font-medium">
-                        Git Username
-                      </Label>
-                      <Input
-                        id="git-username"
-                        placeholder="your-github-username"
-                        data-testid="input-git-username"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Used for commit author information when pushing reports
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="git-email" className="text-sm font-medium">
-                        Git Email
-                      </Label>
-                      <Input
-                        id="git-email"
-                        type="email"
-                        placeholder="your-email@example.com"
-                        data-testid="input-git-email"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Email address for commit author information
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="default-branch" className="text-sm font-medium">
-                        Default Branch for Reports
-                      </Label>
-                      <Input
-                        id="default-branch"
-                        placeholder="ai-migration-reports"
-                        data-testid="input-default-branch"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Branch name where analysis reports will be committed
-                      </p>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="auto-push"
-                        data-testid="checkbox-auto-push"
-                      />
-                      <Label htmlFor="auto-push" className="text-sm cursor-pointer">
-                        Automatically push reports to repository after analysis
-                      </Label>
-                    </div>
+                  {/* Authentication Method */}
+                  <div className="space-y-2">
+                    <Label htmlFor="auth-method" className="text-sm font-medium">
+                      Authentication Method
+                    </Label>
+                    <Select value={authMethod} onValueChange={(value) => setAuthMethod(value as 'oauth' | 'pat')}>
+                      <SelectTrigger data-testid="select-auth-method">
+                        <div className="flex items-center gap-2">
+                          {authMethod === "oauth" && <Zap className="h-4 w-4 text-primary" />}
+                          {authMethod === "pat" && <Key className="h-4 w-4 text-primary" />}
+                          <SelectValue placeholder="Select method" />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="oauth">
+                          <div className="flex items-center gap-2">
+                            <Zap className="h-4 w-4 text-green-500" />
+                            <div>
+                              <div className="font-medium">OAuth (Recommended)</div>
+                              <div className="text-xs text-muted-foreground">Secure browser authentication</div>
+                            </div>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="pat">
+                          <div className="flex items-center gap-2">
+                            <Key className="h-4 w-4 text-blue-500" />
+                            <div>
+                              <div className="font-medium">Personal Access Token</div>
+                              <div className="text-xs text-muted-foreground">Use your personal token</div>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
-                  <div className="flex justify-end pt-4 border-t border-border">
-                    <Button 
-                      className="min-w-[150px]"
-                      data-testid="button-save-git-connection"
-                    >
-                      <Save className="w-4 h-4 mr-2" />
-                      Save Connection Settings
-                    </Button>
-                  </div>
+                  {/* OAuth Method */}
+                  {authMethod === "oauth" && (
+                    <div className="space-y-3">
+                      {configCheckLoading ? (
+                        <div className="p-3 border rounded-md bg-muted/50">
+                          <div className="flex items-center gap-2 text-sm">
+                            <motion.div
+                              animate={{ rotate: 360 }}
+                              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                            >
+                              <Zap className="h-4 w-4" />
+                            </motion.div>
+                            Checking OAuth configuration...
+                          </div>
+                        </div>
+                      ) : configError ? (
+                        <div className="p-3 border rounded-md bg-destructive/10 border-destructive/20">
+                          <div className="flex items-center gap-2 text-sm text-destructive mb-2">
+                            <AlertCircle className="h-4 w-4" />
+                            Configuration Check Failed
+                          </div>
+                          <p className="text-sm text-muted-foreground">{configError}</p>
+                        </div>
+                      ) : !oauthConfigStatus[selectedProvider] ? (
+                        <div className="p-3 border rounded-md bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800">
+                          <div className="flex items-center gap-2 text-sm text-orange-700 dark:text-orange-300 mb-2">
+                            <AlertCircle className="h-4 w-4" />
+                            OAuth Configuration Required
+                          </div>
+                          <p className="text-sm text-orange-600 dark:text-orange-400">
+                            Please configure OAuth Credentials in Settings → Git Authentication tab for {selectedProvider} to enable sign in
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="p-3 border rounded-md bg-card">
+                          <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
+                            <Zap className="h-4 w-4 text-green-500" />
+                            OAuth Ready
+                          </h4>
+                          <p className="text-sm text-muted-foreground">
+                            Click below to sign in with {selectedProvider}. You'll be redirected to {selectedProvider}'s official login page.
+                          </p>
+                        </div>
+                      )}
+                      <Button 
+                        className="w-full" 
+                        onClick={handleAuthenticate}
+                        disabled={authIsLoading || configCheckLoading || !!configError || !oauthConfigStatus[selectedProvider]}
+                        data-testid="button-oauth-authenticate"
+                      >
+                        {authIsLoading ? "Redirecting..." : 
+                         configCheckLoading ? "Checking configuration..." :
+                         !oauthConfigStatus[selectedProvider] ? "Configuration Required" :
+                         `Sign in with ${selectedProvider}`}
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* PAT Method */}
+                  {authMethod === "pat" && (
+                    <div className="space-y-3">
+                      {selectedProvider === "bitbucket" ? (
+                        <div className="p-3 border rounded-md bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800">
+                          <div className="flex items-center gap-2 text-sm text-orange-700 dark:text-orange-300 mb-2">
+                            <AlertCircle className="h-4 w-4" />
+                            PAT Not Available for Bitbucket
+                          </div>
+                          <p className="text-sm text-orange-600 dark:text-orange-400 mb-2">
+                            Bitbucket App Passwords require username + password (Basic auth), but username/password authentication has been removed for security.
+                          </p>
+                          <p className="text-sm text-orange-600 dark:text-orange-400">
+                            Please use OAuth authentication instead by selecting "OAuth (Recommended)" above.
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            <Label htmlFor="pat-token" className="text-sm font-medium mb-2 block">
+                              Personal Access Token
+                            </Label>
+                            <Input
+                              id="pat-token"
+                              type="password"
+                              placeholder="Enter your personal access token"
+                              value={credentials.token}
+                              onChange={(e) => setCredentials(prev => ({ ...prev, token: e.target.value }))}
+                              data-testid="input-pat-token"
+                            />
+                            {selectedProvider === "gitea" && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Works with self-hosted Gitea instances
+                              </p>
+                            )}
+                          </div>
+                          <Button 
+                            className="w-full" 
+                            onClick={handleAuthenticate}
+                            disabled={authIsLoading || !credentials.token}
+                            data-testid="button-pat-authenticate"
+                          >
+                            {authIsLoading ? "Authenticating..." : "Authenticate with Token"}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </motion.div>
             </TabsContent>
