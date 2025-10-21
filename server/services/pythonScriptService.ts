@@ -1134,7 +1134,8 @@ export class PythonScriptService {
               parsedMigrationData,
               analysisTypeLabel: analysisTypeLabel || 'Migration Analysis' // Store label for retrieval
             }
-          }
+          },
+          structuredData: parsedMigrationData // CRITICAL: Pass structuredData for Code Migration panel
         });
         
         broadcastLog('INFO', `🎉 Migration analysis report created with ID: ${report.id}`);
