@@ -2438,8 +2438,9 @@ export async function registerRoutes(app: Application): Promise<Server> {
       
       const structuredData = migrationReport.structuredData;
       
-      // Extract changes from code_diffs with real file contents
-      const changes = await Promise.all((structuredData.code_diffs || []).map(async (diff: any) => {
+      // Extract changes from code_diffs or diffs (main branch uses "diffs", newer code uses "code_diffs")
+      const diffsArray = structuredData.code_diffs || structuredData.diffs || [];
+      const changes = await Promise.all(diffsArray.map(async (diff: any) => {
         // Fetch real file contents
         let oldCode = "// Original file not found in repository";
         try {
