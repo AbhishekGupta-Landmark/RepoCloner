@@ -1130,25 +1130,25 @@ export async function registerRoutes(app: Application): Promise<Server> {
       }
 
       // Handle personal account creation for GitHub
-      if (options?.personalAccount && req.session?.auth?.provider === 'github') {
-        broadcastLog('INFO', '🚀 Personal account repository creation requested');
+      if (options?.personalAccount) {
+        const activeAccount = getActiveAccount(req);
         
-        // Check authentication
-        const auth = req.session?.auth;
-        if (!auth || auth.provider !== 'github' || !auth.token) {
+        if (!activeAccount || activeAccount.provider !== 'github') {
           broadcastLog('ERROR', 'Personal account creation requires GitHub authentication');
           return res.status(401).json({ 
             error: "Personal account creation requires GitHub authentication. Please sign in with GitHub." 
           });
         }
+        
+        broadcastLog('INFO', '🚀 Personal account repository creation requested');
 
         // Import GitHub service
         const { githubService } = await import('./services/githubService');
         
         // Create repository in user's personal account
-        broadcastLog('INFO', `Creating repository in ${auth.username}'s GitHub account`);
+        broadcastLog('INFO', `Creating repository in ${activeAccount.username}'s GitHub account`);
         const createResult = await githubService.createRepositoryInPersonalAccount(
-          auth.token,
+          activeAccount.accessToken,
           url
         );
         
@@ -1185,8 +1185,8 @@ export async function registerRoutes(app: Application): Promise<Server> {
         broadcastLog('INFO', 'Pushing mirror clone to personal repository...');
         const pushResult = await githubService.pushToPersonalRepository(
           mirrorCloneResult.localPath!,
-          auth.token,
-          auth.username,
+          activeAccount.accessToken,
+          activeAccount.username,
           createResult.repoName!
         );
 
@@ -1220,25 +1220,17 @@ export async function registerRoutes(app: Application): Promise<Server> {
       }
 
       // Handle personal account creation for GitLab
-      if (options?.personalAccount && req.session?.auth?.provider === 'gitlab') {
+      const activeAccountGitLab = getActiveAccount(req);
+      if (options?.personalAccount && activeAccountGitLab && activeAccountGitLab.provider === 'gitlab') {
         broadcastLog('INFO', '🚀 GitLab personal account repository creation requested');
-        
-        // Check authentication
-        const auth = req.session?.auth;
-        if (!auth || auth.provider !== 'gitlab' || !auth.token) {
-          broadcastLog('ERROR', 'Personal account creation requires GitLab authentication');
-          return res.status(401).json({ 
-            error: "Personal account creation requires GitLab authentication. Please sign in with GitLab." 
-          });
-        }
 
         // Import GitLab service
         const { gitlabService } = await import('./services/gitlabService');
         
         // Create repository in user's personal account
-        broadcastLog('INFO', `Creating repository in ${auth.username}'s GitLab account`);
+        broadcastLog('INFO', `Creating repository in ${activeAccountGitLab.username}'s GitLab account`);
         const createResult = await gitlabService.createRepositoryInPersonalAccount(
-          auth.token,
+          activeAccountGitLab.accessToken,
           url
         );
         
@@ -1275,8 +1267,8 @@ export async function registerRoutes(app: Application): Promise<Server> {
         broadcastLog('INFO', 'Pushing mirror clone to GitLab personal repository...');
         const pushResult = await gitlabService.pushToPersonalRepository(
           mirrorCloneResult.localPath!,
-          auth.token,
-          auth.username,
+          activeAccountGitLab.accessToken,
+          activeAccountGitLab.username,
           createResult.repoName!
         );
 
@@ -2415,6 +2407,193 @@ export async function registerRoutes(app: Application): Promise<Server> {
       if (!res.headersSent) {
         res.status(500).json({ error: "Repository download failed" });
       }
+    }
+  });
+
+  // Helper function to sanitize migration type for branch names
+  function sanitizeMigrationType(migrationType: string): string {
+    return migrationType
+      .replace(/[^a-zA-Z0-9]+/g, '')  // Remove non-alphanumeric characters
+      .replace(/^[0-9]+/, '');         // Remove leading numbers
+  }
+
+  // Migration approval endpoints
+  app.get("/api/migration/changes/:repositoryId", async (req, res) => {
+    try {
+      const { repositoryId } = req.params;
+      
+      // Get the latest migration report
+      const reports = await storage.getAnalysisReportsByRepository(repositoryId);
+      const migrationReport = reports.find(r => 
+        r.analysisType === 'quick-migration-1' || 
+        r.analysisType === 'comprehensive-migration' ||
+        r.analysisType === 'migration'
+      );
+      
+      if (!migrationReport || !migrationReport.structuredData) {
+        return res.status(404).json({ 
+          error: "No migration report found. Please run a migration analysis first." 
+        });
+      }
+      
+      const structuredData = migrationReport.structuredData;
+      
+      // Extract changes from code_diffs with real file contents
+      const changes = await Promise.all((structuredData.code_diffs || []).map(async (diff: any) => {
+        // Fetch real file contents
+        let oldCode = "// Original file not found in repository";
+        try {
+          const fileBuffer = await storage.getFileContent(repositoryId, diff.file);
+          if (fileBuffer) {
+            oldCode = fileBuffer.toString('utf-8');
+          }
+        } catch (error) {
+          console.warn(`Could not fetch original file: ${diff.file}`);
+        }
+        
+        return {
+          filePath: diff.file,
+          oldCode,
+          newCode: diff.diff_content || diff.code || "// AI-generated migration code",
+          description: diff.key_changes?.join(", ") || diff.summary || "Code migration changes"
+        };
+      }));
+      
+      // Get latest iteration number for this migration type
+      const rawMigrationType = migrationReport.structuredData?.analysisTypeLabel || "KafkaToAzureServiceBusMigration";
+      const migrationType = sanitizeMigrationType(rawMigrationType);
+      const latestIteration = await storage.getLatestIterationNumber(repositoryId, migrationType);
+      
+      // Get real coverage data from test coverage reports
+      const testCoverageReport = reports.find(r => r.analysisType === 'test-coverage');
+      let oldCoverage = { overall: 0, files: [] as any[] };
+      let newCoverage = { overall: 0, files: [] as any[] };
+      
+      if (testCoverageReport?.structuredData) {
+        const coverageData = testCoverageReport.structuredData;
+        oldCoverage = {
+          overall: coverageData.totalOriginalTestCases || 0,
+          files: (coverageData.fileReports || []).map((fr: any) => ({
+            path: fr.file,
+            coverage: fr.testCasesFound || 0
+          }))
+        };
+        newCoverage = {
+          overall: coverageData.totalTestCasesAfterImprovements || coverageData.totalOriginalTestCases || 0,
+          files: (coverageData.fileReports || []).map((fr: any) => ({
+            path: fr.file,
+            coverage: (fr.testCasesFound || 0) + (fr.newTestCasesAdded || 0)
+          }))
+        };
+      }
+      
+      res.json({
+        changes,
+        migrationType,
+        oldCoverage,
+        newCoverage,
+        iterationNumber: latestIteration + 1
+      });
+    } catch (error) {
+      console.error("Failed to get migration changes:", error);
+      res.status(500).json({ error: "Failed to fetch migration changes" });
+    }
+  });
+  
+  app.post("/api/migration/approve", async (req, res) => {
+    try {
+      const { repositoryId, changes, migrationType, iterationNumber } = req.body;
+      
+      if (!repositoryId || !changes || !migrationType || !iterationNumber) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      
+      const repository = await storage.getRepository(repositoryId);
+      if (!repository) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+      
+      // Sanitize migration type and generate branch name
+      const sanitizedMigrationType = sanitizeMigrationType(migrationType);
+      const now = new Date();
+      const dateTime = now.toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const branchName = `${sanitizedMigrationType}${dateTime}Iteration${iterationNumber}`;
+      
+      // Get real coverage data from test coverage reports
+      const reports = await storage.getAnalysisReportsByRepository(repositoryId);
+      const testCoverageReport = reports.find(r => r.analysisType === 'test-coverage');
+      let oldCoverage = { overall: 0, files: [] as any[] };
+      let newCoverage = { overall: 0, files: [] as any[] };
+      
+      if (testCoverageReport?.structuredData) {
+        const coverageData = testCoverageReport.structuredData;
+        oldCoverage = {
+          overall: coverageData.totalOriginalTestCases || 0,
+          files: []
+        };
+        newCoverage = {
+          overall: coverageData.totalTestCasesAfterImprovements || coverageData.totalOriginalTestCases || 0,
+          files: []
+        };
+      }
+      
+      // Create migration iteration record with sanitized migration type
+      const iteration = await storage.createMigrationIteration({
+        repositoryId,
+        migrationType: sanitizedMigrationType,
+        iterationNumber: iterationNumber.toString(),
+        branchName,
+        changes,
+        oldCoverage,
+        newCoverage,
+        status: 'pending'
+      });
+      
+      // Get active account for Git operations
+      const activeAccount = getActiveAccount(req);
+      if (!activeAccount) {
+        return res.status(401).json({ error: "No authenticated account found" });
+      }
+      
+      // Push to Git (simplified version - actual implementation would use pushSpecificFiles.ts)
+      try {
+        broadcastLog('INFO', `Starting migration push to branch: ${branchName}`);
+        
+        // Import the push service
+        const { pushMigrationChanges } = await import('./services/migrationPushService.js');
+        
+        // Push the changes (includes migrated code + generated test files)
+        await pushMigrationChanges({
+          repository,
+          branchName,
+          changes,
+          oldCoverage,
+          newCoverage,
+          storage,
+          accessToken: activeAccount.accessToken,
+          commitMessage: `Migration iteration ${iterationNumber}: ${migrationType}\n\nAI-generated migration changes with test files.\nIncludes migrated code and generated tests from Test Coverage analysis.`
+        });
+        
+        // Update iteration status
+        await storage.updateMigrationIterationStatus(iteration.id, 'pushed', new Date());
+        
+        broadcastLog('INFO', `Migration successfully pushed to branch: ${branchName}`);
+        
+        res.json({
+          success: true,
+          branchName,
+          message: "Changes approved and pushed successfully"
+        });
+      } catch (pushError: any) {
+        await storage.updateMigrationIterationStatus(iteration.id, 'failed');
+        broadcastLog('ERROR', `Migration push failed: ${pushError.message}`);
+        throw pushError;
+      }
+    } catch (error: any) {
+      console.error("Failed to approve migration:", error);
+      res.status(500).json({ 
+        error: error.message || "Failed to approve and push changes" 
+      });
     }
   });
 

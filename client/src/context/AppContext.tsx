@@ -32,6 +32,7 @@ interface AppContextType {
   repositoryStatus: RepositoryStatus | null;
   refreshRepositoryStatus: (repositoryId: string) => Promise<void>;
   isCodeAnalysisEnabled: boolean;
+  isTestCoverageComplete: boolean;
   logService: LogService;
   showRepoPanel: boolean;
   toggleRepoPanel: () => void;
@@ -201,10 +202,24 @@ export function AppProvider({ children }: AppProviderProps) {
     logService.addLog('INFO', 'Activity logging system initialized', 'AppContext');
   }, []);
 
-  // Compute if Code Analysis is enabled based on repository clone status
+  // Fetch test coverage reports to check if test coverage is complete
+  const { data: reportsData } = useQuery<{ reports: any[] }>({
+    queryKey: ['/api/analysis/reports', currentRepository?.id],
+    enabled: !!currentRepository?.id,
+    staleTime: 5000,
+  });
+
+  // Check if test coverage analysis is complete
+  // Test coverage reports have structuredData (parsed JSON) instead of generatedFiles
+  const isTestCoverageComplete = !!reportsData?.reports?.some(
+    (r: any) => r.analysisType === 'test-coverage' && r.structuredData
+  );
+
+  // Compute if Code Analysis is enabled based on repository clone status AND test coverage completion
   const isCodeAnalysisEnabled = currentRepository !== null && 
     repositoryStatus !== null && 
-    repositoryStatus.cloneStatus === 'cloned';
+    repositoryStatus.cloneStatus === 'cloned' &&
+    isTestCoverageComplete;
 
   const value = {
     currentRepository,
@@ -213,6 +228,7 @@ export function AppProvider({ children }: AppProviderProps) {
     repositoryStatus,
     refreshRepositoryStatus,
     isCodeAnalysisEnabled,
+    isTestCoverageComplete,
     logService,
     showRepoPanel,
     toggleRepoPanel,
@@ -241,6 +257,7 @@ export const useAppContext = () => {
       repositoryStatus: null,
       refreshRepositoryStatus: async () => {},
       isCodeAnalysisEnabled: false,
+      isTestCoverageComplete: false,
       logService: {
         logs: [],
         addLog: () => {},
