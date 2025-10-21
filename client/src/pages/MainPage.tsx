@@ -687,7 +687,7 @@ export default function MainPage() {
       <AnimatePresence>
         {settingsModalOpen && (
           <Dialog open={settingsModalOpen} onOpenChange={handleSettingsModalClose}>
-            <DialogContent className="max-w-7xl h-[95vh] flex flex-col shadow-strong border-border/50 p-0">
+            <DialogContent className="max-w-5xl h-[80vh] flex flex-col shadow-strong border-border/50 p-0">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}

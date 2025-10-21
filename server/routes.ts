@@ -967,11 +967,11 @@ export async function registerRoutes(app: Application): Promise<Server> {
         const newAccount: OAuthAccount = {
           id: accountId,
           provider: provider as Provider,
-          providerUserId: result.username || 'unknown',
+          providerUserId: result.userId || result.username || 'unknown',
           username: result.username || 'unknown',
-          displayName: result.username || 'unknown',
-          email: undefined,
-          avatarUrl: undefined,
+          displayName: result.displayName || result.username || 'unknown',
+          email: result.email,
+          avatarUrl: result.avatarUrl,
           accessToken: result.token || '',
           refreshToken: undefined,
           scopes: ['basic'],
@@ -1877,13 +1877,24 @@ export async function registerRoutes(app: Application): Promise<Server> {
           const fs = await import('fs');
           const path = await import('path');
           
-          // Look for migration report files and test coverage reports
-          const files = await fs.promises.readdir(repoPath);
+          // Look for migration report files and test coverage reports in root and .reports subdirectory
+          const rootFiles = await fs.promises.readdir(repoPath);
+          const reportsDir = path.join(repoPath, '.reports');
+          let reportsDirFiles: string[] = [];
+          
+          try {
+            reportsDirFiles = (await fs.promises.readdir(reportsDir)).map(f => `.reports/${f}`);
+          } catch (error) {
+            // .reports directory doesn't exist, that's okay
+          }
+          
+          const files = [...rootFiles, ...reportsDirFiles];
           const migrationReports = files.filter(file => 
-            (file.startsWith('migration-report-') || file === 'migration-report.md') && file.endsWith('.md')
+            (file.startsWith('migration-report-') || file === 'migration-report.md' || file.includes('migration-report.md')) && file.endsWith('.md')
           );
-          const quickMigrationReports = files.filter(file => file.startsWith('quick-migration-report-') && file.endsWith('.md'));
-          const testCoverageReports = files.filter(file => file.startsWith('test-coverage-report-') && file.endsWith('.json'));
+          const quickMigrationReports = files.filter(file => (file.startsWith('quick-migration-report-') || file.includes('quick-migration-report')) && file.endsWith('.md'));
+          const comprehensiveMigrationReports = files.filter(file => file.includes('comprehensive-migration-report') && file.endsWith('.md'));
+          const testCoverageReports = files.filter(file => (file.startsWith('test-coverage-report-') || file.includes('test-coverage-report')) && file.endsWith('.json'));
           
           for (const reportFile of migrationReports) {
             const filePath = path.join(repoPath, reportFile);
@@ -1904,6 +1915,18 @@ export async function registerRoutes(app: Application): Promise<Server> {
               id: reportFile.replace('.md', ''),
               fileName: reportFile,
               type: 'quick-migration-report',
+              createdAt: stats.birthtime,
+              size: stats.size
+            });
+          }
+          
+          for (const reportFile of comprehensiveMigrationReports) {
+            const filePath = path.join(repoPath, reportFile);
+            const stats = await fs.promises.stat(filePath);
+            generatedReports.push({
+              id: reportFile.replace('.md', ''),
+              fileName: reportFile,
+              type: 'comprehensive-migration-report',
               createdAt: stats.birthtime,
               size: stats.size
             });
@@ -2038,9 +2061,11 @@ export async function registerRoutes(app: Application): Promise<Server> {
       }
       
       // Sort by creation date (most recent first) and get the latest
-      const latestReport = relevantReports.sort((a, b) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      )[0];
+      const latestReport = relevantReports.sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
+      })[0];
       
       if (!latestReport) {
         // No report found for this repository/type combination

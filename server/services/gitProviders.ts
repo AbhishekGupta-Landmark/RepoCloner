@@ -264,7 +264,11 @@ export class GitHubProvider implements GitProvider {
             broadcastLog('INFO', `GitHub authentication successful for user: ${userData.login}`);
             return {
               success: true,
+              userId: userData.id?.toString(),
               username: userData.login,
+              displayName: userData.name || userData.login,
+              email: userData.email,
+              avatarUrl: userData.avatar_url,
               token: credentials.token
             };
           } else {
