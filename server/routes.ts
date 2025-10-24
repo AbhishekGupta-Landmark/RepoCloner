@@ -2426,9 +2426,19 @@ export async function registerRoutes(app: Application): Promise<Server> {
         cleanedUrl = cleanedUrl.replace(/api-version=3\.5\b/, 'api-version=2024-02-15-preview');
       }
       
-      // Initialize OpenAI client with configured settings
+      // Check if this is an Azure endpoint (has /deployments/ in path)
+      const isAzureEndpoint = cleanedUrl?.includes('/deployments/');
+      
+      // For Azure endpoints, the model is in the URL path, so we use a placeholder
+      // For standard OpenAI endpoints, we use the actual model name
+      const modelToUse = isAzureEndpoint ? 'gpt-3.5-turbo' : aiSettings.model;
+      
       console.log(`🔧 [AI Migration] Original baseURL: ${aiSettings.apiEndpointUrl}`);
       console.log(`🔧 [AI Migration] Cleaned baseURL: ${cleanedUrl}`);
+      console.log(`🔧 [AI Migration] Is Azure endpoint: ${isAzureEndpoint}`);
+      console.log(`🔧 [AI Migration] Model to use in API call: ${modelToUse}`);
+      
+      // Initialize OpenAI client with configured settings
       const client = new OpenAI({
         apiKey: aiSettings.apiKey,
         baseURL: cleanedUrl
@@ -2452,9 +2462,9 @@ Return ONLY valid JSON with this exact structure:
 
 IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should contain actual working C# code.`;
 
-      console.log(`🔧 [AI Migration] Calling AI API with model: ${aiSettings.model}`);
+      console.log(`🔧 [AI Migration] Calling AI API...`);
       const response = await client.chat.completions.create({
-        model: aiSettings.model,
+        model: modelToUse,
         messages: [
           { role: "user", content: prompt }
         ],
