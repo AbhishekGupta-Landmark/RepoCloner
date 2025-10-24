@@ -33,8 +33,8 @@ interface AppContextType {
   refreshRepositoryStatus: (repositoryId: string) => Promise<void>;
   isCodeAnalysisEnabled: boolean;
   isTestCoverageComplete: boolean;
-  canAccessMigration: boolean;
-  enableMigrationAccess: () => void;
+  canAccessMigration: (reportId: string) => boolean;
+  enableMigrationAccess: (reportId: string) => void;
   switchToTab: (tab: string) => void;
   logService: LogService;
   showRepoPanel: boolean;
@@ -58,7 +58,7 @@ export function AppProvider({ children }: AppProviderProps) {
   const [currentRepository, setCurrentRepository] = useState<Repository | null>(null);
   const [repositoryStatus, setRepositoryStatus] = useState<RepositoryStatus | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [canAccessMigration, setCanAccessMigration] = useState<boolean>(false);
+  const [accessedReports, setAccessedReports] = useState<Set<string>>(new Set());
   
   // Sidebar visibility state with localStorage persistence
   const [showRepoPanel, setShowRepoPanel] = useState<boolean>(() => {
@@ -170,14 +170,19 @@ export function AppProvider({ children }: AppProviderProps) {
     } else {
       setRepositoryStatus(null);
     }
-    // Reset migration access when repository changes
-    setCanAccessMigration(false);
+    // Reset migration access when repository changes (clear all accessed reports)
+    setAccessedReports(new Set());
   }, [currentRepository]);
 
-  // Enable migration access (called from Code Analysis proceed button)
-  const enableMigrationAccess = () => {
-    setCanAccessMigration(true);
-    logService.addLog('INFO', 'Code Migration access enabled', 'AppContext');
+  // Check if a specific report has migration access enabled
+  const canAccessMigration = (reportId: string): boolean => {
+    return accessedReports.has(reportId);
+  };
+
+  // Enable migration access for a specific report (called from Code Analysis proceed button)
+  const enableMigrationAccess = (reportId: string) => {
+    setAccessedReports(prev => new Set(prev).add(reportId));
+    logService.addLog('INFO', `Code Migration access enabled for report: ${reportId}`, 'AppContext');
   };
 
   // Switch to a specific tab (called from Proceed button)
@@ -283,7 +288,7 @@ export const useAppContext = () => {
       refreshRepositoryStatus: async () => {},
       isCodeAnalysisEnabled: false,
       isTestCoverageComplete: false,
-      canAccessMigration: false,
+      canAccessMigration: () => false,
       enableMigrationAccess: () => {},
       switchToTab: () => {},
       logService: {
