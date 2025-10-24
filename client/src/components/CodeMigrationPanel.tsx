@@ -186,7 +186,7 @@ export default function CodeMigrationPanel() {
     if (!migrationData) return "";
     const now = new Date();
     const dateTime = now.toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    return `${migrationData.migrationType}${dateTime}Iteration${migrationData.iterationNumber}`;
+    return `${migrationData.migrationType}_${dateTime}_Iteration${migrationData.iterationNumber}`;
   };
 
   if (!currentRepository) {

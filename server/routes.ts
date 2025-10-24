@@ -250,6 +250,7 @@ import { insertRepositorySchema, insertAnalysisReportSchema, insertAISettingsSch
 import { z } from "zod";
 import { randomUUID } from "crypto";
 import { url } from "inspector";
+import OpenAI from "openai";
 
 // In-memory OAuth credential storage
 const oauthCredentials = new Map<string, { clientId: string; clientSecret: string; scope?: string; enabled?: boolean }>();
@@ -2410,6 +2411,68 @@ export async function registerRoutes(app: Application): Promise<Server> {
     }
   });
 
+  // Helper function to generate migrated code using AI
+  async function generateMigratedCode(originalCode: string, filePath: string, aiSettings: any): Promise<string> {
+    try {
+      // Initialize OpenAI client with configured settings
+      const client = new OpenAI({
+        apiKey: aiSettings.apiKey,
+        baseURL: aiSettings.apiEndpointUrl
+      });
+
+      const prompt = `You are an expert in migrating Confluent Kafka code to Azure Service Bus. 
+Given the following C# file that uses Confluent Kafka, migrate it to use Azure Service Bus:
+
+File: ${filePath}
+
+Original Kafka code:
+\`\`\`csharp
+${originalCode}
+\`\`\`
+
+Return ONLY valid JSON with this exact structure:
+{
+  "migrated_code": "the actual migrated C# code here",
+  "description": "brief description of what was migrated"
+}
+
+IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should contain actual working C# code.`;
+
+      const response = await client.chat.completions.create({
+        model: aiSettings.model,
+        messages: [
+          { role: "user", content: prompt }
+        ],
+        temperature: 0
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error("AI returned no response");
+      }
+
+      // Parse JSON response
+      let result: any;
+      try {
+        // Try to extract JSON from markdown code blocks if present
+        const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        const jsonString = jsonMatch ? jsonMatch[1] : content;
+        result = JSON.parse(jsonString.trim());
+      } catch (parseError) {
+        throw new Error(`Failed to parse AI response as JSON: ${parseError}`);
+      }
+
+      if (result && result.migrated_code) {
+        return result.migrated_code;
+      } else {
+        throw new Error("AI response missing migrated_code field");
+      }
+    } catch (error) {
+      console.error(`❌ [AI Migration] Error generating code for ${filePath}:`, error);
+      throw error;
+    }
+  }
+
   // Helper function to sanitize migration type for branch names
   function sanitizeMigrationType(migrationType: string): string {
     return migrationType
@@ -2458,6 +2521,9 @@ export async function registerRoutes(app: Application): Promise<Server> {
       const structuredData = migrationReport.structuredData;
       console.log(`✅ [Migration Changes] Found migration report with structuredData`);
       
+      // Get AI settings for on-demand code generation
+      const aiSettings = await storage.getAISettingsForScript();
+      
       // CRITICAL FIX: The field is called code_diffs, not diffs!
       const diffsArray = structuredData.code_diffs || [];
       console.log(`📋 [Migration Changes] Found ${diffsArray.length} code diffs`);
@@ -2499,10 +2565,24 @@ export async function registerRoutes(app: Application): Promise<Server> {
           }
         }
         
+        // Generate migrated code on-demand if missing (for default.py which doesn't generate it)
+        let newCode = diff.migrated_code;
+        if (!newCode && aiSettings?.apiKey && oldCode !== "// Original file not found in repository") {
+          console.log(`🤖 [Migration Changes] Generating migrated code on-demand for: ${diff.file}`);
+          try {
+            newCode = await generateMigratedCode(oldCode, diff.file, aiSettings);
+          } catch (error) {
+            console.warn(`⚠️ [Migration Changes] Failed to generate code for ${diff.file}:`, error);
+            newCode = "// AI-generated migration code not available";
+          }
+        } else if (!newCode) {
+          newCode = "// AI-generated migration code not available";
+        }
+        
         return {
           filePath: diff.file,
           oldCode,
-          newCode: diff.migrated_code || "// AI-generated migration code not available",
+          newCode,
           description: diff.key_changes?.join(", ") || diff.description || "Code migration changes"
         };
       }));
