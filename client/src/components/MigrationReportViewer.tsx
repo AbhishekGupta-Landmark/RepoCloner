@@ -242,9 +242,10 @@ export function MigrationReportViewer({ repositoryId, analysisType, iterationNum
     });
   }
 
-  // Get report title with iteration suffix only (no date/time in header)
+  // Get report title and suffix with iteration number only (no date/time in header)
   // Format: Title Iteration[N]
-  const reportTitle = `Kafka → Azure Service Bus Migration Report Iteration${iterationNumber}`;
+  const suffix = ` Iteration${iterationNumber}`;
+  const reportTitle = `Kafka → Azure Service Bus Migration Report${suffix}`;
   const reportSubtitle = `Generated on ${new Date(data.createdAt).toLocaleDateString()}`;
 
   // Check if this specific report has been accessed for migration
