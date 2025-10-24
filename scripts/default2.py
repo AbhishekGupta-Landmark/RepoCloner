@@ -171,9 +171,9 @@ def generate_unified_diff(original_content: str, migrated_content, file_path: st
     original_normalized = original_content.replace('\r\n', '\n').replace('\r', '\n')
     migrated_normalized = migrated_content.replace('\r\n', '\n').replace('\r', '\n')
     
-    # Split content into lines
-    original_lines = original_normalized.splitlines(keepends=True)
-    migrated_lines = migrated_normalized.splitlines(keepends=True)
+    # Split content into lines WITHOUT keeping line endings to ensure clean comparison
+    original_lines = [line + '\n' for line in original_normalized.splitlines()]
+    migrated_lines = [line + '\n' for line in migrated_normalized.splitlines()]
     
     # Generate unified diff
     diff = difflib.unified_diff(
@@ -693,11 +693,11 @@ def main():
         })
     
     # Generate markdown report file with embedded JSON
-    # Filename format: Quick_Migration_Analysis_Report_DateTime_Iteration1
+    # Filename format: Quick_Migration_Analysis_Report_DateTime (no iteration in filename - that's UI-only)
     from datetime import datetime
     now = datetime.now()
     datetime_str = now.strftime("%Y-%m-%dT%H-%M-%S")
-    report_filename = f"Quick_Migration_Analysis_Report_{datetime_str}_Iteration1.md"
+    report_filename = f"Quick_Migration_Analysis_Report_{datetime_str}.md"
     report_path = os.path.join(root_dir, report_filename)
     
     with open(report_path, "w", encoding="utf-8") as f:
