@@ -296,6 +296,21 @@ def parse_json_response(content: str) -> Dict:
     
     return {}
 
+def detect_line_ending(text: str) -> str:
+    """Detect the line ending style used in text: CRLF or LF"""
+    if '\r\n' in text:
+        return '\r\n'
+    return '\n'
+
+def normalize_to_line_ending(text: str, target_ending: str) -> str:
+    """Normalize text to use the target line ending style"""
+    # First normalize everything to LF
+    normalized = text.replace('\r\n', '\n').replace('\r', '\n')
+    # Then convert to target ending if it's CRLF
+    if target_ending == '\r\n':
+        return normalized.replace('\n', '\r\n')
+    return normalized
+
 def ask_gpt4_for_migration_code(file_path: str, code_content: str, client: AzureOpenAI, model: str) -> Dict[str, Union[str, List[str]]]:
     """Ask GPT-4 to generate actual migration code for Kafka to Azure Service Bus.
     Returns a dict with:
@@ -305,6 +320,9 @@ def ask_gpt4_for_migration_code(file_path: str, code_content: str, client: Azure
       "key_changes": [...]
     }
     """
+    
+    # Detect original line ending style
+    original_line_ending = detect_line_ending(code_content)
     
     prompt = f"""You are an expert C# developer specializing in Kafka to Azure Service Bus migrations.
 
@@ -348,8 +366,12 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
         # Try parsing JSON with our robust parser
         result = parse_json_response(content)
         if result and "migrated_code" in result:
+            migrated_code = result.get("migrated_code", "")
+            # CRITICAL FIX: Preserve original file's line ending style
+            migrated_code = normalize_to_line_ending(migrated_code, original_line_ending)
+            
             return {
-                "migrated_code": result.get("migrated_code", ""),
+                "migrated_code": migrated_code,
                 "description": result.get("description", "Migration generated"),
                 "key_changes": result.get("key_changes", [])
             }
@@ -648,6 +670,9 @@ def main():
             with open(csproj_path, "r", encoding="utf-8") as f:
                 original_content = f.read()
             
+            # Detect original line ending style
+            original_line_ending = detect_line_ending(original_content)
+            
             # Generate migrated content by replacing the Kafka package reference
             # Extract package name and version from "PackageName (version)" format
             pkg_name_only = remove_pkg.split(" (")[0] if " (" in remove_pkg else remove_pkg
@@ -675,6 +700,9 @@ def main():
                 replacement_multiline = f'<PackageReference Include="{add_pkg_name_only}" Version="{add_pkg_version}" />'
                 migrated_content = re.sub(pattern_multiline, replacement_multiline, original_content, flags=re.IGNORECASE | re.DOTALL)
             
+            # CRITICAL FIX: Ensure migrated content preserves original line endings
+            migrated_content = normalize_to_line_ending(migrated_content, original_line_ending)
+            
         except Exception as e:
             print(f"Warning: Could not read .csproj file {csproj_file}: {e}", file=sys.stderr)
             original_content = f"// Could not read {csproj_file}"
@@ -693,11 +721,19 @@ def main():
         })
     
     # Generate markdown report file with embedded JSON
-    # Filename format: Quick_Migration_Analysis_Report_DateTime (no iteration in filename - that's UI-only)
+    # Filename format: Quick_Migration_Analysis_Report_DateTime_IterationN
+    # Find existing reports to determine iteration number
     from datetime import datetime
+    import glob
+    
     now = datetime.now()
     datetime_str = now.strftime("%Y-%m-%dT%H-%M-%S")
-    report_filename = f"Quick_Migration_Analysis_Report_{datetime_str}.md"
+    
+    # Count existing Quick Migration reports to determine iteration number
+    existing_reports = glob.glob(os.path.join(root_dir, "Quick_Migration_Analysis_Report_*.md"))
+    iteration_number = len(existing_reports) + 1
+    
+    report_filename = f"Quick_Migration_Analysis_Report_{datetime_str}_Iteration{iteration_number}.md"
     report_path = os.path.join(root_dir, report_filename)
     
     with open(report_path, "w", encoding="utf-8") as f:
