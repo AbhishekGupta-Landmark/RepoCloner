@@ -2417,11 +2417,21 @@ export async function registerRoutes(app: Application): Promise<Server> {
     console.log(`🔧 [AI Migration] Original code length: ${originalCode.length} characters`);
     
     try {
+      // Clean the baseURL - remove invalid query parameters
+      let cleanedUrl = aiSettings.apiEndpointUrl;
+      if (cleanedUrl) {
+        // Remove anything after "Haiku" in the URL (malformed query params)
+        cleanedUrl = cleanedUrl.replace(/\s+Haiku.*$/, '');
+        // Clean up the api-version parameter if it has invalid value
+        cleanedUrl = cleanedUrl.replace(/api-version=3\.5\b/, 'api-version=2024-02-15-preview');
+      }
+      
       // Initialize OpenAI client with configured settings
-      console.log(`🔧 [AI Migration] Initializing OpenAI client with baseURL: ${aiSettings.apiEndpointUrl}`);
+      console.log(`🔧 [AI Migration] Original baseURL: ${aiSettings.apiEndpointUrl}`);
+      console.log(`🔧 [AI Migration] Cleaned baseURL: ${cleanedUrl}`);
       const client = new OpenAI({
         apiKey: aiSettings.apiKey,
-        baseURL: aiSettings.apiEndpointUrl
+        baseURL: cleanedUrl
       });
 
       const prompt = `You are an expert in migrating Confluent Kafka code to Azure Service Bus. 

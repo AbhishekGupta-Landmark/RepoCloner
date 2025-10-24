@@ -78,6 +78,21 @@ export default function MainPage() {
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   
+  // Fetch all reports to get the latest migration report ID for checking access
+  const { data: allReportsData } = useQuery<{ reports: Array<{ id: string; analysisType: string; createdAt: string }> }>({
+    queryKey: ['/api/analysis/reports', currentRepository?.id],
+    enabled: !!currentRepository?.id,
+    staleTime: 0,
+  });
+  
+  // Find the latest migration report
+  const latestMigrationReport = allReportsData?.reports
+    ?.filter(r => r.analysisType === 'default' || r.analysisType === 'migration' || r.analysisType === 'quick-migration-1' || r.analysisType === 'comprehensive-migration')
+    ?.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  
+  // Check if migration access is enabled for the latest migration report
+  const hasMigrationAccess = latestMigrationReport ? canAccessMigration(latestMigrationReport.id) : false;
+  
   // Ref for accessing the ResizablePanel API
   const repoPanelRef = useRef<any>(null);
   
@@ -582,9 +597,9 @@ export default function MainPage() {
                         </TabsTrigger>
                         <TabsTrigger 
                           value="migration" 
-                          disabled={!isCodeAnalysisEnabled || !canAccessMigration}
+                          disabled={!isCodeAnalysisEnabled || !hasMigrationAccess}
                           className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden ${
-                            !isCodeAnalysisEnabled || !canAccessMigration
+                            !isCodeAnalysisEnabled || !hasMigrationAccess
                               ? 'opacity-50 cursor-not-allowed' 
                               : 'hover:bg-amber-500/10 hover:text-amber-500'
                           }`}
