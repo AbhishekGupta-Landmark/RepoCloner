@@ -430,11 +430,14 @@ app = graph.compile()
 # Main execution with proper argument parsing
 if __name__ == "__main__":
     import time
+    from datetime import datetime
     args = parse_args()
     
-    # Generate unique report filename
-    analysis_id = str(int(time.time() * 1000))
-    report_filename = f"migration-report-{analysis_id}.md"
+    # Generate unique report filename with format: Migration_Analysis_Report_DateTime_Iteration1
+    # DateTime format: YYYY-MM-DDTHH-MM-SS
+    now = datetime.now()
+    datetime_str = now.strftime("%Y-%m-%dT%H-%M-%S")
+    report_filename = f"Migration_Analysis_Report_{datetime_str}_Iteration1.md"
     report_path = os.path.join(args.repo_path, report_filename)
     
     print(f"🚀 Starting migration analysis...")

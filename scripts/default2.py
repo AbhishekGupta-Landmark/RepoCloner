@@ -684,9 +684,11 @@ def main():
         })
     
     # Generate markdown report file with embedded JSON
-    import time
-    analysis_id = str(int(time.time() * 1000))
-    report_filename = f"quick-migration-report-{analysis_id}.md"
+    # Filename format: Quick_Migration_Analysis_Report_DateTime_Iteration1
+    from datetime import datetime
+    now = datetime.now()
+    datetime_str = now.strftime("%Y-%m-%dT%H-%M-%S")
+    report_filename = f"Quick_Migration_Analysis_Report_{datetime_str}_Iteration1.md"
     report_path = os.path.join(root_dir, report_filename)
     
     with open(report_path, "w", encoding="utf-8") as f:

@@ -30,9 +30,8 @@ export default function ReportsPanel() {
   // Helper function to get report title and description based on analysis type
   // Now includes timestamp and iteration number: Title_YYYY-MM-DDTHH-MM-SS_Iteration[N]
   const getReportInfo = (analysisType: string, createdAt: string, iterationNumber: number, results?: any) => {
-    // Format timestamp: YYYY-MM-DD THH-MM-SS (colons replaced with hyphens for filename compatibility, space before T)
-    const timestamp = new Date(createdAt).toISOString().replace(/:/g, '-').split('.')[0].replace('T', ' T');
-    const suffix = ` ${timestamp} Iteration${iterationNumber}`;
+    // Format: Title Iteration[N] (no date/time in display)
+    const suffix = ` Iteration${iterationNumber}`;
     
     switch (analysisType) {
       case 'migration':
