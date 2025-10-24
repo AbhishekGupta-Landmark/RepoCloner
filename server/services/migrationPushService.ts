@@ -39,7 +39,12 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
     for (const [filePath, content] of Object.entries(changes)) {
       const fullPath = path.join(repository.localPath, filePath);
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
-      await fs.writeFile(fullPath, content, 'utf-8');
+      
+      // CRITICAL FIX: Write file in binary mode to preserve exact line endings
+      // The content already has the correct line endings from the Python script
+      // Using 'utf-8' encoding would normalize line endings on Linux to LF
+      await fs.writeFile(fullPath, Buffer.from(content, 'utf-8'));
+      
       filesList.push(filePath);
       console.log(`✅ Updated file: ${filePath}`);
     }
@@ -83,7 +88,9 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
           // Write the generated test file
           const fullTestPath = path.join(repository.localPath, testFilePath);
           await fs.mkdir(path.dirname(fullTestPath), { recursive: true });
-          await fs.writeFile(fullTestPath, fileReport.generatedTests, 'utf-8');
+          
+          // CRITICAL FIX: Write in binary mode to preserve line endings from generated tests
+          await fs.writeFile(fullTestPath, Buffer.from(fileReport.generatedTests, 'utf-8'));
           
           // CRITICAL: Normalize path to forward slashes for Git compatibility
           const normalizedPath = testFilePath.replace(/\\/g, '/');
