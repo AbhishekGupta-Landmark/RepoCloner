@@ -241,8 +241,16 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
     });
   }
 
-  // Get report title - use descriptive migration-specific title
-  const reportTitle = "Kafka → Azure Service Bus Migration Report";
+  // Get report title with timestamp and iteration suffix
+  // Format: Title_YYYY-MM-DDTHH-MM-SS_Iteration[N]
+  const timestamp = new Date(data.createdAt).toISOString().replace(/:/g, '-').split('.')[0];
+  
+  // Calculate iteration number: we need to fetch all reports and count same-type reports before this one
+  // For now, use a placeholder - this should be passed from parent or calculated from context
+  const iterationNumber = 1; // TODO: Calculate from all reports of same type
+  
+  const suffix = `_${timestamp}_Iteration${iterationNumber}`;
+  const reportTitle = `Kafka → Azure Service Bus Migration Report${suffix}`;
   const reportSubtitle = `Generated on ${new Date(data.createdAt).toLocaleDateString()}`;
 
   // Check if this specific report has been accessed for migration
@@ -363,7 +371,7 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
                   <div>
                     <CardTitle className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
                       <CheckCircle className="h-5 w-5" />
-                      Key Changes
+                      Key Changes{suffix}
                       <Badge variant="secondary" className="ml-2">{uniqueKeyChanges.length}</Badge>
                     </CardTitle>
                     <CardDescription>
@@ -424,18 +432,18 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="inventory" className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
-            Kafka Inventory
+            Kafka Inventory{suffix}
           </TabsTrigger>
           <TabsTrigger value="diffs" className="flex items-center gap-2">
             <Code className="h-4 w-4" />
-            Code Migrations
+            Code Migrations{suffix}
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="inventory" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Kafka Usage Analysis</CardTitle>
+              <CardTitle>Kafka Usage Analysis{suffix}</CardTitle>
               <CardDescription>
                 Files in your repository that use Kafka APIs
               </CardDescription>

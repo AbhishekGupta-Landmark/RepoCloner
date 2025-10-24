@@ -28,19 +28,24 @@ export default function ReportsPanel() {
   });
 
   // Helper function to get report title and description based on analysis type
-  const getReportInfo = (analysisType: string, results?: any) => {
+  // Now includes timestamp and iteration number: Title_YYYY-MM-DDTHH-MM-SS_Iteration[N]
+  const getReportInfo = (analysisType: string, createdAt: string, iterationNumber: number, results?: any) => {
+    // Format timestamp: YYYY-MM-DDTHH-MM-SS (colons replaced with hyphens for filename compatibility)
+    const timestamp = new Date(createdAt).toISOString().replace(/:/g, '-').split('.')[0];
+    const suffix = `_${timestamp}_Iteration${iterationNumber}`;
+    
     switch (analysisType) {
       case 'migration':
         // Use analysisTypeLabel from results if available
         const analysisLabel = results?.pythonScriptOutput?.analysisTypeLabel;
         if (analysisLabel) {
           return {
-            title: `${analysisLabel} Report`,
+            title: `${analysisLabel} Report${suffix}`,
             description: 'Kafka to Azure Service Bus migration analysis'
           };
         }
         return {
-          title: 'Migration Analysis Report',
+          title: `Migration Analysis Report${suffix}`,
           description: 'Kafka to Azure Service Bus migration analysis'
         };
       case 'python-script':
@@ -49,63 +54,73 @@ export default function ReportsPanel() {
           const filename = results.pythonScriptOutput.generatedFiles[0].name;
           const reportName = filename.replace(/\.(md|pdf|xlsx|docx)$/, '').replace(/-\d+$/, '');
           return {
-            title: reportName.split('-').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
+            title: reportName.split('-').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') + suffix,
             description: `Generated ${filename.split('.').pop()?.toUpperCase()} file`
           };
         }
         return {
-          title: 'Generated Report',
+          title: `Generated Report${suffix}`,
           description: 'Python script generated analysis'
         };
       case 'security':
         return {
-          title: 'Security Analysis Report',
+          title: `Security Analysis Report${suffix}`,
           description: 'Comprehensive security vulnerability assessment'
         };
       case 'quality':
         return {
-          title: 'Code Quality Report', 
+          title: `Code Quality Report${suffix}`, 
           description: 'Detailed analysis of code maintainability and best practices'
         };
       case 'performance':
         return {
-          title: 'Performance Analysis Report',
+          title: `Performance Analysis Report${suffix}`,
           description: 'Performance bottlenecks and optimization recommendations'
         };
       case 'documentation':
         return {
-          title: 'Documentation Report',
+          title: `Documentation Report${suffix}`,
           description: 'Code documentation coverage and quality assessment'
         };
       case 'architecture':
         return {
-          title: 'Architecture Analysis Report',
+          title: `Architecture Analysis Report${suffix}`,
           description: 'Software architecture patterns and design quality'
         };
       case 'test-coverage-report':
         return {
-          title: 'Test Coverage and Validation Report',
+          title: `Test Coverage and Validation Report${suffix}`,
           description: 'AI-powered test coverage analysis and recommendations'
         };
       case 'migration-report':
         return {
-          title: 'Migration Analysis Report',
+          title: `Migration Analysis Report${suffix}`,
           description: 'Kafka to Azure Service Bus migration analysis'
         };
       case 'quick-migration-report':
         return {
-          title: 'Quick Migration Analysis Report',
+          title: `Quick Migration Analysis Report${suffix}`,
           description: 'Kafka to Azure Service Bus migration analysis'
         };
       case 'default':
         return {
-          title: 'Migration Analysis Report',
+          title: `Migration Analysis Report${suffix}`,
           description: 'Kafka to Azure Service Bus migration analysis'
         };
       case 'quick-migration-1':
         return {
-          title: 'Quick Migration Analysis Report',
+          title: `Quick Migration Analysis Report${suffix}`,
           description: 'Kafka to Azure Service Bus migration analysis'
+        };
+      case 'comprehensive-migration':
+        return {
+          title: `Comprehensive Migration Analysis Report${suffix}`,
+          description: 'Complete Kafka to Azure Service Bus migration strategy and roadmap'
+        };
+      case 'comprehensive-migration-report':
+        return {
+          title: `Comprehensive Migration Analysis Report${suffix}`,
+          description: 'Complete Kafka to Azure Service Bus migration strategy and roadmap'
         };
       default:
         // Don't show unrecognized report types - they might be internal/duplicate entries
@@ -211,7 +226,7 @@ export default function ReportsPanel() {
     return true;
   });
   
-  // CRITICAL: Only show reports that have actual files (prevent empty entries)
+  // CRITICAL: Show reports with files OR failed reports (so users can see analysis history)
   const reportsWithFiles = [...genReports, ...filteredDbReports].filter(report => {
     // Generated reports always have files (they come from filesystem)
     if ('isGeneratedReport' in report && report.isGeneratedReport) {
@@ -230,7 +245,12 @@ export default function ReportsPanel() {
       return true;
     }
     
-    // No file found - don't show this entry
+    // IMPORTANT: Also show failed reports (they won't have files but users need to see them)
+    if (results?.pythonScriptOutput?.error || (results?.pythonScriptOutput?.exitCode !== undefined && results?.pythonScriptOutput?.exitCode !== 0)) {
+      return true;
+    }
+    
+    // No file found and not a failed report - don't show this entry
     return false;
   });
   
@@ -346,20 +366,41 @@ export default function ReportsPanel() {
           </motion.div>
         ) : (
           <div className="space-y-4">
-            {displayReports.map((report) => {
+            {displayReports.map((report, index) => {
               const results = report.results as any;
-              const reportInfo = getReportInfo(report.analysisType, results);
-              const metrics = getMetrics(results as AnalysisResult);
               const createdAt = report.createdAt ? new Date(report.createdAt).toISOString() : new Date().toISOString();
+              
+              // Calculate iteration number: count reports of same type created before this one + 1
+              const iterationNumber = displayReports
+                .filter(r => r.analysisType === report.analysisType)
+                .filter(r => {
+                  const rCreatedAt = r.createdAt ? new Date(r.createdAt).getTime() : 0;
+                  const reportCreatedAt = report.createdAt ? new Date(report.createdAt).getTime() : 0;
+                  return rCreatedAt <= reportCreatedAt;
+                })
+                .length;
+              
+              const reportInfo = getReportInfo(report.analysisType, createdAt, iterationNumber, results);
+              const metrics = getMetrics(results as AnalysisResult);
+              
+              // Check if this is a failed report
+              const isFailed = results?.pythonScriptOutput?.error || (results?.pythonScriptOutput?.exitCode !== undefined && results?.pythonScriptOutput?.exitCode !== 0);
               
               // Skip reports with unrecognized types (reportInfo is null)
               if (!reportInfo) return null;
               
               return (
-                <Card key={report.id} data-testid={`report-${report.id}`}>
+                <Card key={report.id} data-testid={`report-${report.id}`} className={isFailed ? "border-red-500/50" : ""}>
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-base">{reportInfo.title}</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-base">{reportInfo.title}</CardTitle>
+                        {isFailed && (
+                          <Badge variant="destructive" className="bg-red-500/20 text-red-400 border-red-500/30">
+                            Failed
+                          </Badge>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Clock className="h-3 w-3" />
                         <span data-testid={`report-time-${report.id}`}>
@@ -370,7 +411,7 @@ export default function ReportsPanel() {
                   </CardHeader>
                   <CardContent className="pt-0">
                     <p className="text-sm text-muted-foreground mb-3">
-                      {reportInfo.description}
+                      {isFailed ? `Analysis failed: ${results?.pythonScriptOutput?.error || 'Unknown error'}` : reportInfo.description}
                     </p>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4 text-xs">
@@ -401,10 +442,10 @@ export default function ReportsPanel() {
                         )}
                       </div>
                       
-                      {/* View and Download buttons for reports with generated files or generated reports */}
-                      {((((report.analysisType === 'python-script' || report.analysisType === 'migration') && 
+                      {/* View and Download buttons for reports with generated files or generated reports (but NOT failed reports) */}
+                      {!isFailed && ((((report.analysisType === 'python-script' || report.analysisType === 'migration' || report.analysisType === 'quick-migration-1' || report.analysisType === 'comprehensive-migration') && 
                        results?.pythonScriptOutput?.generatedFiles?.length > 0) ||
-                       ((report.analysisType === 'migration-report' || report.analysisType === 'test-coverage-report' || report.analysisType === 'quick-migration-report') && (report as any).fileName)) && 
+                       ((report.analysisType === 'migration-report' || report.analysisType === 'test-coverage-report' || report.analysisType === 'quick-migration-report' || report.analysisType === 'comprehensive-migration-report') && (report as any).fileName)) && 
                        currentRepository?.id) && (
                         <div className="flex items-center gap-2">
                           <Button
