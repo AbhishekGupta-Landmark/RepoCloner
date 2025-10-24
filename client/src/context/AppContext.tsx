@@ -35,6 +35,7 @@ interface AppContextType {
   isTestCoverageComplete: boolean;
   canAccessMigration: boolean;
   enableMigrationAccess: () => void;
+  switchToTab: (tab: string) => void;
   logService: LogService;
   showRepoPanel: boolean;
   toggleRepoPanel: () => void;
@@ -51,9 +52,10 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 interface AppProviderProps {
   children: ReactNode;
+  setActiveTab?: (tab: string) => void;
 }
 
-export function AppProvider({ children }: AppProviderProps) {
+export function AppProvider({ children, setActiveTab }: AppProviderProps) {
   const [currentRepository, setCurrentRepository] = useState<Repository | null>(null);
   const [repositoryStatus, setRepositoryStatus] = useState<RepositoryStatus | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -179,6 +181,14 @@ export function AppProvider({ children }: AppProviderProps) {
     logService.addLog('INFO', 'Code Migration access enabled', 'AppContext');
   };
 
+  // Switch to a specific tab (called from Proceed button)
+  const switchToTab = (tab: string) => {
+    if (setActiveTab) {
+      setActiveTab(tab);
+      logService.addLog('INFO', `Switched to ${tab} tab`, 'AppContext');
+    }
+  };
+
   // LogService implementation
   const logService: LogService = {
     logs,
@@ -242,6 +252,7 @@ export function AppProvider({ children }: AppProviderProps) {
     isTestCoverageComplete,
     canAccessMigration,
     enableMigrationAccess,
+    switchToTab,
     logService,
     showRepoPanel,
     toggleRepoPanel,
@@ -273,6 +284,7 @@ export const useAppContext = () => {
       isTestCoverageComplete: false,
       canAccessMigration: false,
       enableMigrationAccess: () => {},
+      switchToTab: () => {},
       logService: {
         logs: [],
         addLog: () => {},

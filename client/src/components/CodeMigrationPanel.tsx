@@ -44,36 +44,15 @@ interface CoverageData {
 }
 
 // Helper function to construct GitHub branch URL
+// IMPORTANT: This uses the hardcoded repository where code is pushed (AbhishekGupta-Landmark/RepoCloner)
+// NOT the cloned repository URL
 const constructGitHubBranchUrl = (repositoryUrl: string, branchName: string): string | null => {
   try {
-    // Handle both HTTPS and SSH formats
-    let owner = '';
-    let repo = '';
+    // Hardcoded target repository where all code changes are pushed
+    const targetOwner = 'AbhishekGupta-Landmark';
+    const targetRepo = 'RepoCloner';
     
-    if (repositoryUrl.startsWith('https://github.com/')) {
-      // HTTPS: https://github.com/owner/repo.git or https://github.com/owner/repo
-      // Extract path after github.com/ and remove optional .git suffix
-      const path = repositoryUrl.replace('https://github.com/', '').replace(/\.git$/, '');
-      const parts = path.split('/');
-      if (parts.length >= 2) {
-        owner = parts[0];
-        repo = parts[1];
-      }
-    } else if (repositoryUrl.startsWith('git@github.com:')) {
-      // SSH: git@github.com:owner/repo.git or git@github.com:owner/repo
-      // Extract path after git@github.com: and remove optional .git suffix
-      const path = repositoryUrl.replace('git@github.com:', '').replace(/\.git$/, '');
-      const parts = path.split('/');
-      if (parts.length >= 2) {
-        owner = parts[0];
-        repo = parts[1];
-      }
-    }
-    
-    if (owner && repo) {
-      return `https://github.com/${owner}/${repo}/tree/${branchName}`;
-    }
-    return null;
+    return `https://github.com/${targetOwner}/${targetRepo}/tree/${branchName}`;
   } catch (error) {
     console.error('Error parsing GitHub URL:', error);
     return null;
