@@ -487,7 +487,7 @@ export default function CodeMigrationPanel() {
                     <Button
                       variant="outline"
                       onClick={handleModifyAndApprove}
-                      className="gap-2"
+                      className="gap-2 text-primary hover:bg-primary/10 border-primary/30 hover:border-primary"
                       data-testid="button-modify"
                     >
                       <Edit3 className="h-4 w-4" />
