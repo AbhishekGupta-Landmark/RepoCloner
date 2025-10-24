@@ -154,17 +154,26 @@ def manual_detect_kafka(content: str) -> bool:
             return True
     return False
 
-def generate_unified_diff(original_content: str, migrated_content: str, file_path: str) -> str:
+def generate_unified_diff(original_content: str, migrated_content, file_path: str) -> str:
     """
     Generate proper unified diff format from original and migrated code.
     Returns unified diff string showing line-by-line changes.
+    Normalizes line endings to prevent identical code from appearing as deletions+additions.
     """
+    # Handle list input (join into string)
+    if isinstance(migrated_content, list):
+        migrated_content = '\n'.join(migrated_content)
+    
     if not original_content or not migrated_content:
         return f"--- a/{file_path}\n+++ b/{file_path}\n@@ No content available for diff @@"
     
+    # Normalize line endings: convert CRLF to LF to prevent false differences
+    original_normalized = original_content.replace('\r\n', '\n').replace('\r', '\n')
+    migrated_normalized = migrated_content.replace('\r\n', '\n').replace('\r', '\n')
+    
     # Split content into lines
-    original_lines = original_content.splitlines(keepends=True)
-    migrated_lines = migrated_content.splitlines(keepends=True)
+    original_lines = original_normalized.splitlines(keepends=True)
+    migrated_lines = migrated_normalized.splitlines(keepends=True)
     
     # Generate unified diff
     diff = difflib.unified_diff(
