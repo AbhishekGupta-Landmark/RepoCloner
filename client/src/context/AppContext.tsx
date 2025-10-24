@@ -181,7 +181,11 @@ export function AppProvider({ children }: AppProviderProps) {
 
   // Enable migration access for a specific report (called from Code Analysis proceed button)
   const enableMigrationAccess = (reportId: string) => {
-    setAccessedReports(prev => new Set(prev).add(reportId));
+    setAccessedReports(prev => {
+      const next = new Set(prev);
+      next.add(reportId);
+      return next;
+    });
     logService.addLog('INFO', `Code Migration access enabled for report: ${reportId}`, 'AppContext');
   };
 
