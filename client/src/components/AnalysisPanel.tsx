@@ -28,6 +28,24 @@ const MIGRATION_TYPES = [
     label: 'Kafka to Azure Service Bus',
     description: 'Migrate Kafka producers and consumers to Azure Service Bus',
     isImplemented: true
+  },
+  {
+    id: 'kafka-to-event-hub',
+    label: 'Kafka to Azure Event Hub',
+    description: 'Migrate Kafka producers and consumers to Azure Event Hub',
+    isImplemented: false
+  },
+  {
+    id: 'mq-to-service-bus',
+    label: 'MQ to Azure Service Bus',
+    description: 'Migrate IBM MQ or other message queues to Azure Service Bus',
+    isImplemented: false
+  },
+  {
+    id: 'rabbitmq-to-service-bus',
+    label: 'RabbitMQ to Azure Service Bus',
+    description: 'Migrate RabbitMQ queues and exchanges to Azure Service Bus',
+    isImplemented: false
   }
 ];
 
