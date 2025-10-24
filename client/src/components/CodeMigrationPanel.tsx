@@ -118,10 +118,8 @@ export default function CodeMigrationPanel() {
       return response.json();
     },
     onSuccess: (data) => {
-      // Construct GitHub branch URL
-      const branchUrl = currentRepository?.url 
-        ? constructGitHubBranchUrl(currentRepository.url, data.branchName)
-        : null;
+      // Use the branch URL from backend response (already points to correct repo - fork or original)
+      const branchUrl = data.branchUrl || null;
       
       // Store approval success state with branch info
       setApprovalSuccess({
