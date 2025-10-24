@@ -122,7 +122,7 @@ export default function AnalysisPanel() {
               !isCodeAnalysisEnabled || 
               !selectedAnalysisTypeId ||
               // Disable if migration analysis is selected but no migration types are chosen
-              ((selectedAnalysisTypeId === 'migration' || selectedAnalysisTypeId === 'quick-migration-1') && selectedMigrationTypes.length === 0)
+              ((selectedAnalysisTypeId === 'default' || selectedAnalysisTypeId === 'quick-migration-1') && selectedMigrationTypes.length === 0)
             }
             data-testid="button-analyze-code"
             variant="default"
@@ -203,7 +203,7 @@ export default function AnalysisPanel() {
         </div>
 
         {/* Migration Type Checkboxes - Show when migration analysis is selected */}
-        {selectedAnalysisTypeId && (selectedAnalysisTypeId === 'migration' || selectedAnalysisTypeId === 'quick-migration-1') && (
+        {selectedAnalysisTypeId && (selectedAnalysisTypeId === 'default' || selectedAnalysisTypeId === 'quick-migration-1') && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
