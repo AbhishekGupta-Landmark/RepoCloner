@@ -52,10 +52,9 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 interface AppProviderProps {
   children: ReactNode;
-  setActiveTab?: (tab: string) => void;
 }
 
-export function AppProvider({ children, setActiveTab }: AppProviderProps) {
+export function AppProvider({ children }: AppProviderProps) {
   const [currentRepository, setCurrentRepository] = useState<Repository | null>(null);
   const [repositoryStatus, setRepositoryStatus] = useState<RepositoryStatus | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -183,6 +182,8 @@ export function AppProvider({ children, setActiveTab }: AppProviderProps) {
 
   // Switch to a specific tab (called from Proceed button)
   const switchToTab = (tab: string) => {
+    // Access setActiveTab from window (set by MainPage)
+    const setActiveTab = (window as any).__setActiveTab;
     if (setActiveTab) {
       setActiveTab(tab);
       logService.addLog('INFO', `Switched to ${tab} tab`, 'AppContext');

@@ -46,6 +46,14 @@ export default function MainPage() {
   const [initialSettingsTab, setInitialSettingsTab] = useState("ai");
   const [activeTab, setActiveTab] = useState("technology");
   const settingsAppliedRef = useRef(false);
+  
+  // Make setActiveTab available globally through window for context to access
+  useEffect(() => {
+    (window as any).__setActiveTab = setActiveTab;
+    return () => {
+      delete (window as any).__setActiveTab;
+    };
+  }, []);
   const { 
     user, 
     isAuthenticated, 
