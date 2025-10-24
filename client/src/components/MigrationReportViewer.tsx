@@ -243,9 +243,9 @@ export function MigrationReportViewer({ repositoryId, analysisType, iterationNum
   }
 
   // Get report title with timestamp and iteration suffix
-  // Format: Title_YYYY-MM-DDTHH-MM-SS_Iteration[N]
-  const timestamp = new Date(data.createdAt).toISOString().replace(/:/g, '-').split('.')[0];
-  const suffix = `_${timestamp}_Iteration${iterationNumber}`;
+  // Format: Title YYYY-MM-DD THH-MM-SS Iteration[N]
+  const timestamp = new Date(data.createdAt).toISOString().replace(/:/g, '-').split('.')[0].replace('T', ' T');
+  const suffix = ` ${timestamp} Iteration${iterationNumber}`;
   const reportTitle = `Kafka → Azure Service Bus Migration Report${suffix}`;
   const reportSubtitle = `Generated on ${new Date(data.createdAt).toLocaleDateString()}`;
 
