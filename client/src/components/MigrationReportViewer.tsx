@@ -256,8 +256,8 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
         >
           <Card className="border-2 border-primary/50 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5">
             <CardContent className="py-4">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   <motion.div
                     animate={{ 
                       scale: [1, 1.1, 1],
@@ -267,10 +267,11 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
                       repeat: Infinity,
                       ease: "easeInOut"
                     }}
+                    className="flex-shrink-0"
                   >
                     <Sparkles className="h-8 w-8 text-primary" />
                   </motion.div>
-                  <div className="text-left">
+                  <div className="text-left min-w-0">
                     <h3 className="text-base font-semibold">Analysis Complete!</h3>
                     <p className="text-sm text-muted-foreground">
                       Review the insights below, then proceed to Code Migration tab.
@@ -282,7 +283,7 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
                     enableMigrationAccess();
                     switchToTab('migration');
                   }}
-                  className="group relative overflow-hidden bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-white font-medium"
+                  className="group relative overflow-hidden bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-white font-medium flex-shrink-0 w-full sm:w-auto"
                   data-testid="button-proceed-to-migration"
                 >
                   <motion.div
