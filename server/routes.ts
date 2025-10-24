@@ -2434,8 +2434,9 @@ export async function registerRoutes(app: Application): Promise<Server> {
       );
       
       const migrationReport = sortedReports.find(r => 
-        r.analysisType === 'default' ||           // Regular Migration Analysis
-        r.analysisType === 'quick-migration-1' || // Quick Migration Analysis
+        r.analysisType === 'default' ||            // Regular Migration Analysis (new)
+        r.analysisType === 'migration' ||          // Regular Migration Analysis (legacy - stored as 'migration')
+        r.analysisType === 'quick-migration-1' ||  // Quick Migration Analysis
         r.analysisType === 'comprehensive-migration' // Comprehensive Migration Analysis
       );
       
