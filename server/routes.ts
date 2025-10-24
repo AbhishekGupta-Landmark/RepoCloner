@@ -2434,9 +2434,9 @@ export async function registerRoutes(app: Application): Promise<Server> {
       );
       
       const migrationReport = sortedReports.find(r => 
-        r.analysisType === 'quick-migration-1' || 
-        r.analysisType === 'comprehensive-migration' ||
-        r.analysisType === 'migration'
+        r.analysisType === 'default' ||           // Regular Migration Analysis
+        r.analysisType === 'quick-migration-1' || // Quick Migration Analysis
+        r.analysisType === 'comprehensive-migration' // Comprehensive Migration Analysis
       );
       
       if (!migrationReport) {
@@ -2566,7 +2566,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
       const sanitizedMigrationType = sanitizeMigrationType(migrationType);
       const now = new Date();
       const dateTime = now.toISOString().replace(/[:.]/g, '-').slice(0, -5);
-      const branchName = `${sanitizedMigrationType}${dateTime}Iteration${iterationNumber}`;
+      const branchName = `${sanitizedMigrationType}_${dateTime}_Iteration${iterationNumber}`;
       
       // Get real coverage data from test coverage reports
       const reports = await storage.getAnalysisReportsByRepository(repositoryId);
