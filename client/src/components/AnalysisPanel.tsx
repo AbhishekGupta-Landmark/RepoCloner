@@ -7,10 +7,11 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAnalysis } from "@/hooks/useAnalysis";
 import { useAppContext } from "../context/AppContext";
-import { Brain, CheckCircle, Shield, Wrench, AlertTriangle, Lightbulb, FileText, Code, ArrowRight, GitCompare, Sparkles } from "lucide-react";
+import { Brain, CheckCircle, Shield, Wrench, AlertTriangle, Lightbulb, FileText, Code, ArrowRight, GitCompare, Sparkles, ChevronDown } from "lucide-react";
 import { MigrationReportViewer } from "./MigrationReportViewer";
 import { useIsMutating, useQuery } from "@tanstack/react-query";
 
@@ -51,6 +52,7 @@ const MIGRATION_TYPES = [
 export default function AnalysisPanel() {
   const [selectedAnalysisTypeId, setSelectedAnalysisTypeId] = useState<string>("");
   const [selectedMigrationTypes, setSelectedMigrationTypes] = useState<string[]>(['kafka-to-service-bus']);
+  const [migrationTypesOpen, setMigrationTypesOpen] = useState(true);
   const { currentRepository, isCodeAnalysisEnabled } = useAppContext();
   
   // Load analysis types from API
@@ -211,63 +213,72 @@ export default function AnalysisPanel() {
             transition={{ duration: 0.3 }}
             className="mt-4"
           >
-            <Card className="border-2 border-primary/20">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                  <CardTitle className="text-base">Select Migration Type(s)</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {MIGRATION_TYPES.map((type) => (
-                    <div 
-                      key={type.id}
-                      className={`flex items-start space-x-3 p-3 rounded-lg border-2 transition-all ${
-                        selectedMigrationTypes.includes(type.id)
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-primary/30 hover:bg-muted/50'
-                      } ${!type.isImplemented ? 'opacity-60' : ''}`}
-                    >
-                      <Checkbox
-                        id={type.id}
-                        checked={selectedMigrationTypes.includes(type.id)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setSelectedMigrationTypes([...selectedMigrationTypes, type.id]);
-                          } else {
-                            setSelectedMigrationTypes(selectedMigrationTypes.filter(id => id !== type.id));
-                          }
-                        }}
-                        disabled={!type.isImplemented}
-                        data-testid={`checkbox-migration-${type.id}`}
-                        className="mt-0.5"
-                      />
-                      <div className="flex-1">
-                        <Label 
-                          htmlFor={type.id} 
-                          className={`font-medium text-sm cursor-pointer ${!type.isImplemented ? 'cursor-not-allowed' : ''}`}
-                        >
-                          {type.label}
-                          {!type.isImplemented && (
-                            <Badge variant="secondary" className="ml-2 text-xs">Coming Soon</Badge>
-                          )}
-                        </Label>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {type.description}
-                        </p>
+            <Collapsible open={migrationTypesOpen} onOpenChange={setMigrationTypesOpen}>
+              <Card className="border-2 border-primary/20">
+                <CardHeader className="pb-3">
+                  <CollapsibleTrigger asChild>
+                    <div className="flex items-center justify-between cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 text-primary" />
+                        <CardTitle className="text-base">Select Migration Type(s)</CardTitle>
                       </div>
+                      <ChevronDown className={`h-5 w-5 text-primary transition-transform duration-200 ${migrationTypesOpen ? 'rotate-180' : ''}`} />
                     </div>
-                  ))}
-                </div>
-                {selectedMigrationTypes.length === 0 && (
-                  <p className="text-sm text-amber-600 dark:text-amber-400 mt-3 flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4" />
-                    Please select at least one migration type to proceed
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+                  </CollapsibleTrigger>
+                </CardHeader>
+                <CollapsibleContent>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {MIGRATION_TYPES.map((type) => (
+                        <div 
+                          key={type.id}
+                          className={`flex items-start space-x-3 p-3 rounded-lg border-2 transition-all ${
+                            selectedMigrationTypes.includes(type.id)
+                              ? 'border-primary bg-primary/5'
+                              : 'border-border hover:border-primary/30 hover:bg-muted/50'
+                          } ${!type.isImplemented ? 'opacity-60' : ''}`}
+                        >
+                          <Checkbox
+                            id={type.id}
+                            checked={selectedMigrationTypes.includes(type.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedMigrationTypes([...selectedMigrationTypes, type.id]);
+                              } else {
+                                setSelectedMigrationTypes(selectedMigrationTypes.filter(id => id !== type.id));
+                              }
+                            }}
+                            disabled={!type.isImplemented}
+                            data-testid={`checkbox-migration-${type.id}`}
+                            className="mt-0.5"
+                          />
+                          <div className="flex-1">
+                            <Label 
+                              htmlFor={type.id} 
+                              className={`font-medium text-sm cursor-pointer ${!type.isImplemented ? 'cursor-not-allowed' : ''}`}
+                            >
+                              {type.label}
+                              {!type.isImplemented && (
+                                <Badge variant="secondary" className="ml-2 text-xs">Coming Soon</Badge>
+                              )}
+                            </Label>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {type.description}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {selectedMigrationTypes.length === 0 && (
+                      <p className="text-sm text-amber-600 dark:text-amber-400 mt-3 flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4" />
+                        Please select at least one migration type to proceed
+                      </p>
+                    )}
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
           </motion.div>
         )}
       </div>

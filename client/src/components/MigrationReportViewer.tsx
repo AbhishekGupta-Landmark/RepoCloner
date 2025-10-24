@@ -247,6 +247,70 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
 
   return (
     <div className="space-y-6" data-testid="migration-report-viewer">
+      {/* Proceed to Code Migration Button - Only shown if not already accessed */}
+      {!canAccessMigration && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+        >
+          <Card className="border-2 border-primary/50 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <motion.div
+                    animate={{ 
+                      scale: [1, 1.1, 1],
+                    }}
+                    transition={{ 
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: "easeInOut"
+                    }}
+                  >
+                    <Sparkles className="h-8 w-8 text-primary" />
+                  </motion.div>
+                  <div className="text-left">
+                    <h3 className="text-base font-semibold">Analysis Complete!</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Review the insights below, then proceed to Code Migration tab.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  onClick={() => {
+                    enableMigrationAccess();
+                  }}
+                  className="group relative overflow-hidden bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-white font-medium"
+                  data-testid="button-proceed-to-migration"
+                >
+                  <motion.div
+                    className="flex items-center gap-2"
+                    whileHover={{ scale: 1.05 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                  >
+                    <span>Proceed to Code Migration</span>
+                    <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                  </motion.div>
+                  
+                  {/* Animated background shimmer */}
+                  <motion.div
+                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                    initial={{ x: '-100%' }}
+                    animate={{ x: '200%' }}
+                    transition={{ 
+                      duration: 3,
+                      repeat: Infinity,
+                      ease: "linear"
+                    }}
+                  />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
       {/* Header */}
       <Card>
         <CardHeader>
@@ -283,72 +347,6 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
           </div>
         </CardContent>
       </Card>
-
-      {/* Proceed to Code Migration Button - Only shown if not already accessed */}
-      {!canAccessMigration && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-        >
-          <Card className="border-2 border-primary/50 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5">
-            <CardContent className="pt-6">
-              <div className="flex flex-col items-center text-center gap-4">
-                <motion.div
-                  animate={{ 
-                    scale: [1, 1.1, 1],
-                  }}
-                  transition={{ 
-                    duration: 2,
-                    repeat: Infinity,
-                    ease: "easeInOut"
-                  }}
-                >
-                  <Sparkles className="h-12 w-12 text-primary" />
-                </motion.div>
-                <div>
-                  <h3 className="text-xl font-semibold mb-2">Analysis Complete!</h3>
-                  <p className="text-muted-foreground max-w-2xl">
-                    Your migration analysis is ready. Review the insights above, and when you're satisfied, 
-                    proceed to the Code Migration tab where you can review AI-generated changes, 
-                    modify them if needed, and push approved updates to your Git repository.
-                  </p>
-                </div>
-                <Button
-                  onClick={() => {
-                    enableMigrationAccess();
-                    // Optionally scroll to top or show a toast
-                  }}
-                  size="lg"
-                  className="group relative overflow-hidden bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-white font-semibold px-8 py-6 text-base"
-                  data-testid="button-proceed-to-migration"
-                >
-                  <motion.div
-                    className="flex items-center gap-2"
-                    whileHover={{ scale: 1.05 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                  >
-                    <span>Proceed to Code Migration</span>
-                    <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                  </motion.div>
-                  
-                  {/* Animated background shimmer */}
-                  <motion.div
-                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
-                    initial={{ x: '-100%' }}
-                    animate={{ x: '200%' }}
-                    transition={{ 
-                      duration: 3,
-                      repeat: Infinity,
-                      ease: "linear"
-                    }}
-                  />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
 
       {/* Key Changes Section */}
       {uniqueKeyChanges.length > 0 && (
