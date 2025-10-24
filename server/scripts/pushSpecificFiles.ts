@@ -256,12 +256,14 @@ class GitHubPusher {
     return result.data.createCommitOnBranch.commit.oid;
   }
 
-  async pushSpecificFiles(branchName: string, commitMessage: string, filePaths: string[]): Promise<void> {
+  async pushSpecificFiles(branchName: string, commitMessage: string, filePaths: string[], baseDir?: string): Promise<void> {
     try {
       console.log('🚀 Starting GitHub push process...');
       console.log(`📁 Pushing ${filePaths.length} specific files:`, filePaths);
       
-      const workspaceDir = '/home/runner/workspace';
+      // Use provided baseDir or fall back to Replit workspace
+      const workspaceDir = baseDir || '/home/runner/workspace';
+      console.log(`📂 Base directory: ${workspaceDir}`);
       
       // Prepare file changes with base64 encoding
       const fileChanges: FileChange[] = [];
@@ -284,8 +286,8 @@ class GitHubPusher {
       }
 
       if (fileChanges.length === 0) {
-        console.log('⚠️  No files to push');
-        return;
+        console.error('❌ No files could be read from the repository');
+        throw new Error(`Failed to read any of the ${filePaths.length} files from ${workspaceDir}`);
       }
 
       console.log(`✅ Prepared ${fileChanges.length} files for push`);

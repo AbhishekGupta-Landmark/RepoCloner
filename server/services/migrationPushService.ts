@@ -77,7 +77,7 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
     
     // Use GitHubPusher to push the specific files
     const pusher = new GitHubPusher(accessToken, owner, repoName);
-    await pusher.pushSpecificFiles(branchName, commitMessage, filesList);
+    await pusher.pushSpecificFiles(branchName, commitMessage, filesList, repository.localPath);
     
     console.log(`🎉 Successfully pushed ${filesList.length} files to branch: ${branchName}`);
   } catch (error) {
