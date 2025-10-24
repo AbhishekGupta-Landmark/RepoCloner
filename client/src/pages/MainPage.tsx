@@ -78,13 +78,19 @@ export default function MainPage() {
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   
-  // Get cached reports data instead of making a new query
-  const cachedReportsData = queryClient.getQueryData<{ reports: Array<{ id: string; analysisType: string; createdAt: string }> }>(['/api/analysis/reports', currentRepository?.id]);
-  
-  // Find the latest migration report from cached data
-  const latestMigrationReport = cachedReportsData?.reports
-    ?.filter(r => r.analysisType === 'default' || r.analysisType === 'migration' || r.analysisType === 'quick-migration-1' || r.analysisType === 'comprehensive-migration')
-    ?.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  // Subscribe to reports query and derive latest migration report (this reuses existing query, doesn't create new one)
+  const { data: latestMigrationReport } = useQuery({
+    queryKey: ['/api/analysis/reports', currentRepository?.id],
+    enabled: !!currentRepository?.id,
+    staleTime: 5000, // Match AppContext staleTime to reuse existing query
+    select: (data: { reports: Array<{ id: string; analysisType: string; createdAt: string }> }) => {
+      // Create a copy before sorting to avoid mutating shared cache
+      const migrationReports = [...(data?.reports || [])]
+        .filter(r => r.analysisType === 'default' || r.analysisType === 'migration' || r.analysisType === 'quick-migration-1' || r.analysisType === 'comprehensive-migration')
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return migrationReports[0] || null;
+    }
+  });
   
   // Check if migration access is enabled for the latest migration report
   const hasMigrationAccess = latestMigrationReport ? canAccessMigration(latestMigrationReport.id) : false;
