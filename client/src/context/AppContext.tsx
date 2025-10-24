@@ -253,11 +253,11 @@ export function AppProvider({ children }: AppProviderProps) {
     repositoryStatus.cloneStatus === 'cloned' &&
     isTestCoverageComplete;
 
-  // Compute if any migration report has been granted access (for Code Migration tab)
-  const latestMigrationReport = reportsData?.reports
-    ?.filter(r => r.analysisType?.includes('migration') || r.analysisType === 'default')
-    ?.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-  const hasMigrationAccess = latestMigrationReport ? canAccessMigration(latestMigrationReport.id) : false;
+  // Compute if any migration report exists (for Code Migration tab)
+  // The tab should be enabled if there's ANY migration report, regardless of "Proceed to Migration" button
+  const hasMigrationAccess = !!(reportsData?.reports?.some(r => 
+    r.analysisType?.includes('migration') || r.analysisType === 'default'
+  ));
 
   const value = {
     currentRepository,
