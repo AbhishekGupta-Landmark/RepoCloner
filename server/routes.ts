@@ -1717,13 +1717,30 @@ export async function registerRoutes(app: Application): Promise<Server> {
           });
         }
         
-        const reportFile = testCoverageReports[testCoverageReports.length - 1]; // Get the latest
-        const reportPath = path.join(repository.localPath, reportFile);
+        const originalReportFile = testCoverageReports[testCoverageReports.length - 1]; // Get the latest
+        const originalReportPath = path.join(repository.localPath, originalReportFile);
         
-        broadcastLog('INFO', `Test coverage report generated: ${reportFile}`);
+        // Get iteration number for test coverage
+        const latestIteration = await storage.getLatestIterationNumber(repository.id, 'TestCoverage');
+        const iterationNumber = latestIteration + 1;
+        
+        // Format datetime as YYYY-MM-DDTHH-MM-SS
+        const now = new Date();
+        const formattedDateTime = now.toISOString()
+          .replace(/\.\d{3}Z$/, '')  // Remove milliseconds and Z
+          .replace(/:/g, '-');        // Replace colons with dashes
+        
+        // Create new filename: Report_Name_DateTime_IterationNumber.FileType
+        const newReportFile = `Test_Coverage_Report_${formattedDateTime}_Iteration${iterationNumber}.json`;
+        const newReportPath = path.join(repository.localPath, newReportFile);
+        
+        // Rename the file
+        await fs.promises.rename(originalReportPath, newReportPath);
+        
+        broadcastLog('INFO', `Test coverage report renamed: ${originalReportFile} → ${newReportFile}`);
         
         // Store test coverage report in database - now reading JSON directly
-        const reportContent = await fs.promises.readFile(reportPath, 'utf-8');
+        const reportContent = await fs.promises.readFile(newReportPath, 'utf-8');
         const parsedData = JSON.parse(reportContent);
         
         const report = await storage.createAnalysisReport({
@@ -1734,7 +1751,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
               exitCode: 0,
               stdout,
               stderr,
-              reportFile,
+              reportFile: newReportFile,
               parsedData
             }
           },
@@ -1746,7 +1763,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
         res.json({
           success: true,
           reportId: report.id,
-          reportFile,
+          reportFile: newReportFile,
           data: parsedData
         });
         
@@ -2602,27 +2619,17 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
           }
         }
         
-        // Generate migrated code on-demand if missing (for default.py which doesn't generate it)
+        // Use migrated_code if available from Python script, otherwise apply diff to show changes
         let newCode = diff.migrated_code;
-        if (!newCode && aiSettings?.apiKey && oldCode !== "// Original file not found in repository") {
-          console.log(`🤖 [Migration Changes] Generating migrated code on-demand for: ${diff.file}`);
-          console.log(`🤖 [Migration Changes] AI Settings:`, {
-            hasApiKey: !!aiSettings.apiKey,
-            model: aiSettings.model,
-            baseUrl: aiSettings.apiEndpointUrl
-          });
-          try {
-            newCode = await generateMigratedCode(oldCode, diff.file, aiSettings);
-            console.log(`✅ [Migration Changes] Successfully generated code for: ${diff.file} (${newCode.length} characters)`);
-          } catch (error: any) {
-            console.error(`❌ [Migration Changes] Failed to generate code for ${diff.file}:`);
-            console.error(`❌ [Migration Changes] Error type: ${error.constructor?.name}`);
-            console.error(`❌ [Migration Changes] Error message: ${error.message}`);
-            console.error(`❌ [Migration Changes] Full error:`, error);
-            newCode = "// AI-generated migration code not available";
-          }
+        
+        // If no migrated_code but we have a diff, apply it to the old code
+        if (!newCode && diff.diff_content) {
+          // For now, just use the diff content as-is
+          // The frontend will parse and display it in a side-by-side view
+          newCode = diff.diff_content;
+          console.log(`📝 [Migration Changes] Using diff content for: ${diff.file}`);
         } else if (!newCode) {
-          newCode = "// AI-generated migration code not available";
+          newCode = "// Migration code not available - diff content missing";
         }
         
         return {
