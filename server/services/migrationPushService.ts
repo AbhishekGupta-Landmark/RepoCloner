@@ -21,9 +21,15 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
   const { GitHubPusher } = await import('../scripts/pushSpecificFiles.js');
   
   // Extract owner and repo name from repository URL
-  const urlMatch = repository.url.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+  // Use clonedUrl if available (for forked repos), otherwise use url
+  const targetUrl = (repository.clonedUrl && repository.clonedUrl.trim() !== '') 
+    ? repository.clonedUrl 
+    : repository.url;
+  console.log(`🎯 Pushing to: ${targetUrl}${repository.clonedUrl ? ' (personal fork)' : ' (original repo)'}`);
+  
+  const urlMatch = targetUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
   if (!urlMatch) {
-    throw new Error(`Invalid GitHub repository URL: ${repository.url}`);
+    throw new Error(`Invalid GitHub repository URL: ${targetUrl}`);
   }
   const [, owner, repoName] = urlMatch;
   

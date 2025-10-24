@@ -274,7 +274,7 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
                   <div className="text-left min-w-0">
                     <h3 className="text-base font-semibold">Analysis Complete!</h3>
                     <p className="text-sm text-muted-foreground">
-                      Review the insights below, then proceed to Code Migration tab.
+                      Your migration analysis is ready. Review the insights above, and when you're satisfied, proceed to the Code Migration tab where you can review AI-generated changes, modify them if needed, and push approved updates to your Git repository.
                     </p>
                   </div>
                 </div>
