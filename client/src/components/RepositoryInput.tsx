@@ -228,13 +228,12 @@ export default function RepositoryInput() {
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="personal"
-                      checked={cloneOptions.personalAccount && isAuthenticated}
+                      checked={isAuthenticated ? true : false}
                       onCheckedChange={(checked) => {
-                        if (isAuthenticated) {
-                          setCloneOptions(prev => ({ ...prev, personalAccount: !!checked }))
-                        }
+                        // When authenticated, always keep it checked (disabled)
+                        // When not authenticated, do nothing
                       }}
-                      disabled={!isAuthenticated}
+                      disabled={true}
                       data-testid="checkbox-personal-account"
                     />
                     <Label htmlFor="personal" className={`text-sm flex items-center gap-2 ${!isAuthenticated ? 'text-muted-foreground' : ''}`}>
@@ -245,8 +244,8 @@ export default function RepositoryInput() {
                 </TooltipTrigger>
                 <TooltipContent>
                   {isAuthenticated 
-                    ? `Create repository in ${user?.username}'s ${user?.provider} account`
-                    : "Sign in first to create repository in your personal account"
+                    ? `Always enabled when authenticated. Creates a fork in ${user?.username}'s ${user?.provider} account so you can push migration changes.`
+                    : "Sign in with GitHub to enable. Required for pushing migration changes to repositories."
                   }
                 </TooltipContent>
               </Tooltip>
