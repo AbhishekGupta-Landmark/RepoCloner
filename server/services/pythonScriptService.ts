@@ -257,9 +257,13 @@ export class PythonScriptService {
       try {
         const fs = await import('fs');
         const files = await fs.promises.readdir(repositoryPath);
-        const migrationReports = files.filter(file => 
-          (file.startsWith('migration-report') || file.startsWith('quick-migration-report')) && file.endsWith('.md')
-        );
+        const migrationReports = files.filter(file => {
+          const lowerFile = file.toLowerCase();
+          return (
+            (lowerFile.includes('migration') && lowerFile.includes('report') && lowerFile.endsWith('.md')) ||
+            (lowerFile.includes('migration') && lowerFile.includes('analysis') && lowerFile.endsWith('.md'))
+          );
+        });
         
         if (migrationReports.length > 0) {
           for (const reportFile of migrationReports) {
@@ -267,7 +271,7 @@ export class PythonScriptService {
             broadcastLog('INFO', `✅ Migration report found: ${reportFile} (${stats.size} bytes)`);
           }
         } else {
-          broadcastLog('WARN', `⚠️  No migration report files found matching pattern: migration-report*.md`);
+          broadcastLog('WARN', `⚠️  No migration report files found matching pattern: *migration*report*.md or *migration*analysis*.md`);
         }
       } catch (error) {
         broadcastLog('ERROR', `🐍 Error checking for migration report files: ${error}`);
@@ -1089,9 +1093,9 @@ export class PythonScriptService {
         return undefined;
       }
 
-      // Find and process the migration report markdown file
+      // Find and process the migration report markdown file (case-insensitive)
       const migrationReportFile = pythonResult.generatedFiles.find(file => 
-        file.name.endsWith('.md') && file.name.includes('migration')
+        file.name.toLowerCase().endsWith('.md') && file.name.toLowerCase().includes('migration')
       );
 
       if (!migrationReportFile) {
