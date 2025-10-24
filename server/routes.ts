@@ -1707,7 +1707,10 @@ export async function registerRoutes(app: Application): Promise<Server> {
         // Find generated test coverage report (JSON format)
         const fs = await import('fs');
         const files = await fs.promises.readdir(repository.localPath);
-        const testCoverageReports = files.filter(file => file.startsWith('test-coverage-report-') && file.endsWith('.json'));
+        const testCoverageReports = files.filter(file => 
+          (file.startsWith('test-coverage-report-') || file.startsWith('Test_Coverage_Report_')) && 
+          file.endsWith('.json')
+        );
         
         if (testCoverageReports.length === 0) {
           broadcastLog('WARN', 'No test coverage report generated');
@@ -1902,7 +1905,12 @@ export async function registerRoutes(app: Application): Promise<Server> {
           );
           const quickMigrationReports = files.filter(file => (file.startsWith('quick-migration-report-') || file.includes('quick-migration-report')) && file.endsWith('.md'));
           const comprehensiveMigrationReports = files.filter(file => file.includes('comprehensive-migration-report') && file.endsWith('.md'));
-          const testCoverageReports = files.filter(file => (file.startsWith('test-coverage-report-') || file.includes('test-coverage-report')) && file.endsWith('.json'));
+          const testCoverageReports = files.filter(file => 
+            (file.startsWith('test-coverage-report-') || 
+             file.startsWith('Test_Coverage_Report_') || 
+             file.includes('test-coverage-report')) && 
+            file.endsWith('.json')
+          );
           
           for (const reportFile of migrationReports) {
             const filePath = path.join(repoPath, reportFile);
