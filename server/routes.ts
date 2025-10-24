@@ -2455,10 +2455,13 @@ export async function registerRoutes(app: Application): Promise<Server> {
       }
       
       const structuredData = migrationReport.structuredData;
-      console.log(`✅ [Migration Changes] Found migration report, diffs:`, structuredData.diffs?.length || 0);
+      console.log(`✅ [Migration Changes] Found migration report with structuredData`);
       
-      // Extract changes from diffs array
-      const changes = await Promise.all((structuredData.diffs || []).map(async (diff: any) => {
+      // CRITICAL FIX: The field is called code_diffs, not diffs!
+      const diffsArray = structuredData.code_diffs || [];
+      console.log(`📋 [Migration Changes] Found ${diffsArray.length} code diffs`);
+      
+      const changes = await Promise.all(diffsArray.map(async (diff: any) => {
         // Fetch real file contents
         let oldCode = "// Original file not found in repository";
         try {

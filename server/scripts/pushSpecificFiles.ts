@@ -1,5 +1,5 @@
-import { readFileSync, readdirSync, statSync } from 'fs';
-import { join, relative } from 'path';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 interface FileChange {
   path: string;
@@ -40,36 +40,6 @@ class GitHubPusher {
     return response.json();
   }
 
-  private async getChangedFiles(): Promise<string[]> {
-    const { execSync } = await import('child_process');
-    
-    try {
-      // Get all files changed in recent commits AND working directory
-      const committedFiles = execSync('git diff --name-only HEAD~10 HEAD', { 
-        encoding: 'utf-8',
-        cwd: '/home/runner/workspace'
-      });
-      
-      const uncommittedFiles = execSync('git diff --name-only', { 
-        encoding: 'utf-8',
-        cwd: '/home/runner/workspace'
-      });
-      
-      const allFiles = new Set([
-        ...committedFiles.trim().split('\n').filter(f => f.length > 0),
-        ...uncommittedFiles.trim().split('\n').filter(f => f.length > 0)
-      ]);
-      
-      // Exclude attached_assets folder
-      const files = Array.from(allFiles).filter(f => !f.startsWith('attached_assets/'));
-      console.log(`📝 Found files (committed + uncommitted, excluding attached_assets):`, files);
-      return files;
-    } catch (error) {
-      console.error('Failed to get changed files from git:', error);
-      return [];
-    }
-  }
-
   private async getMainBranchOid(): Promise<string> {
     const query = `
       query($owner: String!, $repo: String!) {
@@ -97,9 +67,9 @@ class GitHubPusher {
 
   private async getBranchOid(branchName: string): Promise<string> {
     const query = `
-      query($owner: String!, $repo: String!, $branchName: String!) {
+      query($owner: String!, $repo: String!, $qualifiedName: String!) {
         repository(owner: $owner, name: $repo) {
-          ref(qualifiedName: $branchName) {
+          ref(qualifiedName: $qualifiedName) {
             target {
               oid
             }
@@ -111,11 +81,11 @@ class GitHubPusher {
     const result = await this.graphqlRequest(query, {
       owner: this.owner,
       repo: this.repo,
-      branchName: `refs/heads/${branchName}`,
+      qualifiedName: `refs/heads/${branchName}`,
     });
 
-    if (result.errors) {
-      throw new Error(`Failed to get branch ${branchName}: ${result.errors[0].message}`);
+    if (result.errors || !result.data.repository.ref) {
+      throw new Error(`Branch ${branchName} not found`);
     }
 
     return result.data.repository.ref.target.oid;
@@ -170,7 +140,84 @@ class GitHubPusher {
     return result.data.repository.id;
   }
 
-  private async commitFiles(branchName: string, files: FileChange[], expectedHeadOid: string, message: string): Promise<string> {
+  private async getAllBranches(): Promise<Array<{ name: string; id: string }>> {
+    const query = `
+      query($owner: String!, $repo: String!) {
+        repository(owner: $owner, name: $repo) {
+          refs(refPrefix: "refs/heads/", first: 100) {
+            nodes {
+              id
+              name
+            }
+          }
+        }
+      }
+    `;
+
+    const result = await this.graphqlRequest(query, {
+      owner: this.owner,
+      repo: this.repo,
+    });
+
+    if (result.errors) {
+      throw new Error(`Failed to get branches: ${result.errors[0].message}`);
+    }
+
+    return result.data.repository.refs.nodes;
+  }
+
+  private async deleteBranch(refId: string): Promise<void> {
+    const mutation = `
+      mutation($input: DeleteRefInput!) {
+        deleteRef(input: $input) {
+          clientMutationId
+        }
+      }
+    `;
+
+    const result = await this.graphqlRequest(mutation, {
+      input: {
+        refId,
+      },
+    });
+
+    if (result.errors) {
+      throw new Error(`Failed to delete branch: ${result.errors[0].message}`);
+    }
+  }
+
+  async deleteAllBranchesExceptMain(): Promise<void> {
+    try {
+      console.log('🗑️  Deleting all branches except main...');
+      
+      const branches = await this.getAllBranches();
+      const branchesToDelete = branches.filter(branch => branch.name !== 'main');
+      
+      if (branchesToDelete.length === 0) {
+        console.log('✅ No branches to delete (only main exists)');
+        return;
+      }
+
+      console.log(`🗑️  Found ${branchesToDelete.length} branch(es) to delete:`, branchesToDelete.map(b => b.name).join(', '));
+
+      for (const branch of branchesToDelete) {
+        await this.deleteBranch(branch.id);
+        console.log(`✅ Deleted branch: ${branch.name}`);
+      }
+
+      console.log('🎉 All non-main branches deleted successfully');
+    } catch (error) {
+      console.error('❌ Failed to delete branches:', error);
+      // Don't throw - continue with push even if deletion fails
+    }
+  }
+
+  private async commitFiles(
+    branchName: string,
+    fileChanges: FileChange[],
+    expectedHeadOid: string,
+    message: string
+  ): Promise<string> {
     const mutation = `
       mutation($input: CreateCommitOnBranchInput!) {
         createCommitOnBranch(input: $input) {
@@ -180,6 +227,11 @@ class GitHubPusher {
         }
       }
     `;
+
+    const additions = fileChanges.map(file => ({
+      path: file.path,
+      contents: file.contents,
+    }));
 
     const result = await this.graphqlRequest(mutation, {
       input: {
@@ -191,12 +243,9 @@ class GitHubPusher {
           headline: message,
         },
         fileChanges: {
-          additions: files.map(file => ({
-            path: file.path,
-            contents: file.contents,
-          })),
+          additions,
         },
-        expectedHeadOid: expectedHeadOid,
+        expectedHeadOid,
       },
     });
 
@@ -207,53 +256,17 @@ class GitHubPusher {
     return result.data.createCommitOnBranch.commit.oid;
   }
 
-  private async createPullRequest(branchName: string, title: string, body: string): Promise<string> {
-    const mutation = `
-      mutation($input: CreatePullRequestInput!) {
-        createPullRequest(input: $input) {
-          pullRequest {
-            url
-          }
-        }
-      }
-    `;
-
-    const result = await this.graphqlRequest(mutation, {
-      input: {
-        repositoryId: await this.getRepositoryId(),
-        baseRefName: 'main',
-        headRefName: branchName,
-        title: title,
-        body: body,
-      },
-    });
-
-    if (result.errors) {
-      throw new Error(`Failed to create pull request: ${result.errors[0].message}`);
-    }
-
-    return result.data.createPullRequest.pullRequest.url;
-  }
-
-  async pushCode(branchName: string, commitMessage: string): Promise<void> {
+  async pushSpecificFiles(branchName: string, commitMessage: string, filePaths: string[]): Promise<void> {
     try {
       console.log('🚀 Starting GitHub push process...');
+      console.log(`📁 Pushing ${filePaths.length} specific files:`, filePaths);
       
-      // Get ALL changed files dynamically from git
       const workspaceDir = '/home/runner/workspace';
-      const allFiles = await this.getChangedFiles();
-      
-      if (allFiles.length === 0) {
-        console.log('📭 No files to push');
-        return;
-      }
-      
-      console.log(`📁 Pushing ${allFiles.length} changed files:`, allFiles);
       
       // Prepare file changes with base64 encoding
       const fileChanges: FileChange[] = [];
       
-      for (const filePath of allFiles) {
+      for (const filePath of filePaths) {
         try {
           const fullPath = join(workspaceDir, filePath);
           const content = readFileSync(fullPath);
@@ -270,25 +283,32 @@ class GitHubPusher {
         }
       }
 
-      console.log(`✅ Prepared ${fileChanges.length} files for push`);
+      if (fileChanges.length === 0) {
+        console.log('⚠️  No files to push');
+        return;
+      }
 
-      console.log('🎯 Pushing to feature branch:', branchName);
+      console.log(`✅ Prepared ${fileChanges.length} files for push`);
       
-      // Get the current OID of the branch
+      // Check if branch already exists
       let currentOid: string;
       try {
         currentOid = await this.getBranchOid(branchName);
-        console.log('📍 Got branch OID:', currentOid.substring(0, 8));
-      } catch (error) {
-        // Branch doesn't exist, create it from main
-        console.log('📍 Branch does not exist, creating from main...');
+        console.log(`📍 Branch '${branchName}' exists, updating it...`);
+      } catch {
+        // Branch doesn't exist, delete all other branches and create new one
+        console.log(`🎯 Branch '${branchName}' doesn't exist, creating it...`);
+        await this.deleteAllBranchesExceptMain();
+        
         const mainOid = await this.getMainBranchOid();
+        console.log('📍 Main branch OID:', mainOid.substring(0, 8));
+        
         currentOid = await this.createBranch(branchName, mainOid);
         console.log('📍 Created branch OID:', currentOid.substring(0, 8));
       }
 
       // Commit files in batches
-      const batchSize = 20; // Files per commit (smaller to stay under 45MB limit)
+      const batchSize = 20;
       const batches = [];
       
       for (let i = 0; i < fileChanges.length; i += batchSize) {
@@ -297,13 +317,14 @@ class GitHubPusher {
 
       console.log(`📦 Pushing in ${batches.length} batch(es)...`);
 
+      let latestOid = currentOid;
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i];
         const batchCommitMessage = batches.length > 1 
           ? `${commitMessage} (batch ${i + 1}/${batches.length})`
           : commitMessage;
         
-        currentOid = await this.commitFiles(branchName, batch, currentOid, batchCommitMessage);
+        latestOid = await this.commitFiles(branchName, batch, latestOid, batchCommitMessage);
         console.log(`✅ Committed batch ${i + 1}/${batches.length} (${batch.length} files)`);
       }
 
@@ -324,15 +345,22 @@ async function main() {
     throw new Error('GITHUB_PERSONAL_ACCESS_TOKEN_NEW1 or GITHUB_PERSONAL_ACCESS_TOKEN environment variable is required');
   }
 
-  // Get branch name and commit message from command line arguments
-  const branchName = process.argv[2] || 'feature/updates';
-  const commitMessage = process.argv[3] || 'Update code changes';
+  // Get branch name, commit message, and file paths from command line arguments
+  const branchName = process.argv[2];
+  const commitMessage = process.argv[3];
+  const filePaths = process.argv.slice(4);
+
+  if (!branchName || !commitMessage || filePaths.length === 0) {
+    console.error('Usage: tsx pushSpecificFiles.ts <branch-name> <commit-message> <file1> [file2] [file3] ...');
+    process.exit(1);
+  }
 
   console.log(`📌 Branch: ${branchName}`);
   console.log(`📝 Commit message: ${commitMessage}`);
+  console.log(`📄 Files: ${filePaths.length} file(s)`);
 
   const pusher = new GitHubPusher(token, 'AbhishekGupta-Landmark', 'RepoCloner');
-  await pusher.pushCode(branchName, commitMessage);
+  await pusher.pushSpecificFiles(branchName, commitMessage, filePaths);
 }
 
 export { GitHubPusher };
