@@ -48,9 +48,10 @@ interface MigrationReportData {
 interface MigrationReportViewerProps {
   repositoryId: string;
   analysisType?: string;
+  iterationNumber?: number; // Iteration number for this report (calculated from parent)
 }
 
-export function MigrationReportViewer({ repositoryId, analysisType }: MigrationReportViewerProps) {
+export function MigrationReportViewer({ repositoryId, analysisType, iterationNumber = 1 }: MigrationReportViewerProps) {
   const [keyChangesOpen, setKeyChangesOpen] = useState(true);
   
   // Get analysis functions and loading state
@@ -244,11 +245,6 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
   // Get report title with timestamp and iteration suffix
   // Format: Title_YYYY-MM-DDTHH-MM-SS_Iteration[N]
   const timestamp = new Date(data.createdAt).toISOString().replace(/:/g, '-').split('.')[0];
-  
-  // Calculate iteration number: we need to fetch all reports and count same-type reports before this one
-  // For now, use a placeholder - this should be passed from parent or calculated from context
-  const iterationNumber = 1; // TODO: Calculate from all reports of same type
-  
   const suffix = `_${timestamp}_Iteration${iterationNumber}`;
   const reportTitle = `Kafka → Azure Service Bus Migration Report${suffix}`;
   const reportSubtitle = `Generated on ${new Date(data.createdAt).toLocaleDateString()}`;
@@ -406,7 +402,7 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
-              Important Notes
+              Important Notes{suffix}
             </CardTitle>
             <CardDescription>
               Key observations and recommendations from the migration analysis

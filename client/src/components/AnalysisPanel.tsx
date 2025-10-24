@@ -123,13 +123,40 @@ export default function AnalysisPanel() {
   const analysisTypes = analysisTypesData?.types || [];
   
   // Check if report exists for selected analysis type (for button text)
-  const { data: existingReport } = useQuery<{ structuredData?: any; status?: string }>({
+  const { data: existingReport } = useQuery<{ structuredData?: any; status?: string; createdAt?: string; id?: string }>({
     queryKey: ['structured-report', currentRepository?.id, selectedAnalysisTypeId],
     enabled: !!currentRepository?.id && !!selectedAnalysisTypeId,
     staleTime: 0, // Always check for latest
   });
   
   const hasExistingReport = !!(existingReport?.structuredData);
+  
+  // Fetch all reports for iteration number calculation
+  const { data: allReportsData } = useQuery<{ reports: Array<{ id: string; analysisType: string; createdAt: string }> }>({
+    queryKey: ['/api/analysis/reports', currentRepository?.id],
+    enabled: !!currentRepository?.id,
+    staleTime: 0,
+  });
+  
+  // Calculate iteration number for current report
+  const calculateIterationNumber = () => {
+    if (!allReportsData?.reports || !existingReport?.createdAt || !selectedAnalysisTypeId) {
+      return 1;
+    }
+    
+    const currentReportTime = new Date(existingReport.createdAt).getTime();
+    const iterationNumber = allReportsData.reports
+      .filter(r => r.analysisType === selectedAnalysisTypeId)
+      .filter(r => {
+        const rTime = new Date(r.createdAt).getTime();
+        return rTime <= currentReportTime;
+      })
+      .length;
+    
+    return iterationNumber || 1;
+  };
+  
+  const iterationNumber = calculateIterationNumber();
   
   // Reset selection when repository changes
   useEffect(() => {
@@ -381,6 +408,7 @@ export default function AnalysisPanel() {
             key={`${currentRepository.id}-${selectedAnalysisTypeId}`}
             repositoryId={currentRepository.id}
             analysisType={selectedAnalysisTypeId}
+            iterationNumber={iterationNumber}
           />
         ) : null}
       </ScrollArea>
