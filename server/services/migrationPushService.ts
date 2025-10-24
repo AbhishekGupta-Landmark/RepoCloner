@@ -53,17 +53,36 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
       
       const fileReports = testCoverageReport.structuredData.fileReports;
       
+      // Detect existing test folder structure
+      let testFolder = 'Test'; // Default
+      try {
+        const repoContents = await fs.readdir(repository.localPath, { withFileTypes: true });
+        const testDirs = repoContents.filter(entry => 
+          entry.isDirectory() && 
+          (entry.name.toLowerCase() === 'test' || 
+           entry.name.toLowerCase() === 'tests' ||
+           entry.name.toLowerCase().endsWith('.tests') ||
+           entry.name.toLowerCase().endsWith('tests'))
+        );
+        if (testDirs.length > 0) {
+          testFolder = testDirs[0].name;
+          console.log(`🔍 Detected test folder: ${testFolder}`);
+        }
+      } catch (err) {
+        console.log('⚠️ Could not detect test folder, using default: Test');
+      }
+      
       for (const fileReport of fileReports) {
         if (fileReport.generatedTests && fileReport.testFile) {
           // Determine test file path
           let testFilePath = fileReport.testFile;
           
-          // If testFile is "None" or doesn't exist, generate a test file name
+          // If testFile is "None" or doesn't exist, generate a test file name in the test folder
           if (testFilePath === 'None' || !testFilePath) {
             const sourceFile = fileReport.file;
             const baseName = path.basename(sourceFile, path.extname(sourceFile));
-            const sourceDir = path.dirname(sourceFile);
-            testFilePath = path.join(sourceDir, `${baseName}Tests${path.extname(sourceFile)}`);
+            // Place all generated test files in the detected test folder
+            testFilePath = path.join(testFolder, `${baseName}Tests${path.extname(sourceFile)}`);
           }
           
           // Write the generated test file

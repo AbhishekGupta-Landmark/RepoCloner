@@ -2603,9 +2603,16 @@ export async function registerRoutes(app: Application): Promise<Server> {
         
         broadcastLog('INFO', `Migration successfully pushed to branch: ${branchName}`);
         
+        // Construct branch URL using clonedUrl if available (for forked repos)
+        const targetRepoUrl = (repository.clonedUrl && repository.clonedUrl.trim() !== '') 
+          ? repository.clonedUrl 
+          : repository.url;
+        const branchUrl = `${targetRepoUrl.replace(/\.git$/, '')}/tree/${branchName}`;
+        
         res.json({
           success: true,
           branchName,
+          branchUrl,
           message: "Changes approved and pushed successfully"
         });
       } catch (pushError: any) {
