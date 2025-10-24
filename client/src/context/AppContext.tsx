@@ -35,6 +35,7 @@ interface AppContextType {
   isTestCoverageComplete: boolean;
   canAccessMigration: (reportId: string) => boolean;
   enableMigrationAccess: (reportId: string) => void;
+  hasMigrationAccess: boolean;
   switchToTab: (tab: string) => void;
   logService: LogService;
   showRepoPanel: boolean;
@@ -252,6 +253,12 @@ export function AppProvider({ children }: AppProviderProps) {
     repositoryStatus.cloneStatus === 'cloned' &&
     isTestCoverageComplete;
 
+  // Compute if any migration report has been granted access (for Code Migration tab)
+  const latestMigrationReport = reportsData?.reports
+    ?.filter(r => r.analysisType?.includes('migration') || r.analysisType === 'default')
+    ?.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  const hasMigrationAccess = latestMigrationReport ? canAccessMigration(latestMigrationReport.id) : false;
+
   const value = {
     currentRepository,
     setCurrentRepository,
@@ -262,6 +269,7 @@ export function AppProvider({ children }: AppProviderProps) {
     isTestCoverageComplete,
     canAccessMigration,
     enableMigrationAccess,
+    hasMigrationAccess,
     switchToTab,
     logService,
     showRepoPanel,
@@ -294,6 +302,7 @@ export const useAppContext = () => {
       isTestCoverageComplete: false,
       canAccessMigration: () => false,
       enableMigrationAccess: () => {},
+      hasMigrationAccess: false,
       switchToTab: () => {},
       logService: {
         logs: [],
