@@ -1903,8 +1903,14 @@ export async function registerRoutes(app: Application): Promise<Server> {
           const migrationReports = files.filter(file => 
             (file.startsWith('migration-report-') || file === 'migration-report.md' || file.includes('migration-report.md')) && file.endsWith('.md')
           );
-          const quickMigrationReports = files.filter(file => (file.startsWith('quick-migration-report-') || file.includes('quick-migration-report')) && file.endsWith('.md'));
-          const comprehensiveMigrationReports = files.filter(file => file.includes('comprehensive-migration-report') && file.endsWith('.md'));
+          const quickMigrationReports = files.filter(file => {
+            const lowerFile = file.toLowerCase();
+            return (lowerFile.includes('quick') && lowerFile.includes('migration')) && file.endsWith('.md');
+          });
+          const comprehensiveMigrationReports = files.filter(file => {
+            const lowerFile = file.toLowerCase();
+            return lowerFile.includes('comprehensive') && lowerFile.includes('migration') && file.endsWith('.md');
+          });
           const testCoverageReports = files.filter(file => 
             (file.startsWith('test-coverage-report-') || 
              file.startsWith('Test_Coverage_Report_') || 
