@@ -2462,15 +2462,40 @@ export async function registerRoutes(app: Application): Promise<Server> {
       console.log(`📋 [Migration Changes] Found ${diffsArray.length} code diffs`);
       
       const changes = await Promise.all(diffsArray.map(async (diff: any) => {
-        // Fetch real file contents
-        let oldCode = "// Original file not found in repository";
-        try {
-          const fileBuffer = await storage.getFileContent(repositoryId, diff.file);
-          if (fileBuffer) {
-            oldCode = fileBuffer.toString('utf-8');
+        // Use original_code from Python script if available, otherwise try fallbacks
+        let oldCode = diff.original_code || "// Original file not found in repository";
+        
+        // If original_code not in report, try to parse from unified diff
+        if (!diff.original_code && diff.diff && typeof diff.diff === 'string') {
+          const diffLines = diff.diff.split('\n');
+          const oldCodeLines: string[] = [];
+          
+          for (const line of diffLines) {
+            if (line.startsWith('---') || line.startsWith('+++') || line.startsWith('@@')) {
+              continue;
+            }
+            if (line.startsWith('-')) {
+              oldCodeLines.push(line.substring(1));
+            } else if (line.startsWith(' ')) {
+              oldCodeLines.push(line.substring(1));
+            }
           }
-        } catch (error) {
-          console.warn(`Could not fetch original file: ${diff.file}`);
+          
+          if (oldCodeLines.length > 0) {
+            oldCode = oldCodeLines.join('\n');
+          }
+        }
+        
+        // Last resort: fetch from file system
+        if (oldCode === "// Original file not found in repository") {
+          try {
+            const fileBuffer = await storage.getFileContent(repositoryId, diff.file);
+            if (fileBuffer) {
+              oldCode = fileBuffer.toString('utf-8');
+            }
+          } catch (error) {
+            console.warn(`Could not fetch original file: ${diff.file}`);
+          }
         }
         
         return {

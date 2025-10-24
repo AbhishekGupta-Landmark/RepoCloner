@@ -571,6 +571,7 @@ def main():
                     "diff": diff_content,
                     "description": description,
                     "key_changes": key_changes if key_changes else [f"Replace Kafka {role} with Azure Service Bus"],
+                    "original_code": file_content,  # Original Kafka code
                     "migrated_code": migrated_code  # Full migrated code
                 })
             else:
@@ -611,6 +612,7 @@ def main():
                     "diff": diff_content,
                     "description": description,
                     "key_changes": key_changes if key_changes else ["Replace Kafka with Azure Service Bus"],
+                    "original_code": file_content,  # Original Kafka code
                     "migrated_code": migrated_code
                 })
             else:
