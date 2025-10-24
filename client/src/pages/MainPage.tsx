@@ -78,15 +78,11 @@ export default function MainPage() {
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   
-  // Fetch all reports to get the latest migration report ID for checking access
-  const { data: allReportsData } = useQuery<{ reports: Array<{ id: string; analysisType: string; createdAt: string }> }>({
-    queryKey: ['/api/analysis/reports', currentRepository?.id],
-    enabled: !!currentRepository?.id,
-    staleTime: 0,
-  });
+  // Get cached reports data instead of making a new query
+  const cachedReportsData = queryClient.getQueryData<{ reports: Array<{ id: string; analysisType: string; createdAt: string }> }>(['/api/analysis/reports', currentRepository?.id]);
   
-  // Find the latest migration report
-  const latestMigrationReport = allReportsData?.reports
+  // Find the latest migration report from cached data
+  const latestMigrationReport = cachedReportsData?.reports
     ?.filter(r => r.analysisType === 'default' || r.analysisType === 'migration' || r.analysisType === 'quick-migration-1' || r.analysisType === 'comprehensive-migration')
     ?.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
   
