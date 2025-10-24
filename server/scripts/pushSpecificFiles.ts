@@ -319,8 +319,12 @@ class GitHubPusher {
           // Convert to base64
           const base64Content = content.toString('base64');
           
+          // CRITICAL: Normalize path to use forward slashes (Git standard)
+          // Windows uses backslashes, but Git always uses forward slashes
+          const normalizedPath = filePath.replace(/\\/g, '/');
+          
           fileChanges.push({
-            path: filePath,
+            path: normalizedPath,
             contents: base64Content,
           });
         } catch (error) {
