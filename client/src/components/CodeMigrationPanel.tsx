@@ -43,16 +43,35 @@ interface CoverageData {
   }>;
 }
 
-// Helper function to construct GitHub branch URL
-// IMPORTANT: This uses the hardcoded repository where code is pushed (AbhishekGupta-Landmark/RepoCloner)
-// NOT the cloned repository URL
+// Helper function to construct GitHub branch URL from the cloned repository
 const constructGitHubBranchUrl = (repositoryUrl: string, branchName: string): string | null => {
   try {
-    // Hardcoded target repository where all code changes are pushed
-    const targetOwner = 'AbhishekGupta-Landmark';
-    const targetRepo = 'RepoCloner';
+    // Extract owner and repo from the cloned repository URL
+    let owner = '';
+    let repo = '';
     
-    return `https://github.com/${targetOwner}/${targetRepo}/tree/${branchName}`;
+    if (repositoryUrl.startsWith('https://github.com/')) {
+      // HTTPS: https://github.com/owner/repo.git or https://github.com/owner/repo
+      const path = repositoryUrl.replace('https://github.com/', '').replace(/\.git$/, '');
+      const parts = path.split('/');
+      if (parts.length >= 2) {
+        owner = parts[0];
+        repo = parts[1];
+      }
+    } else if (repositoryUrl.startsWith('git@github.com:')) {
+      // SSH: git@github.com:owner/repo.git or git@github.com:owner/repo
+      const path = repositoryUrl.replace('git@github.com:', '').replace(/\.git$/, '');
+      const parts = path.split('/');
+      if (parts.length >= 2) {
+        owner = parts[0];
+        repo = parts[1];
+      }
+    }
+    
+    if (owner && repo) {
+      return `https://github.com/${owner}/${repo}/tree/${branchName}`;
+    }
+    return null;
   } catch (error) {
     console.error('Error parsing GitHub URL:', error);
     return null;
