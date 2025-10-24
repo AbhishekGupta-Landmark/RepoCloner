@@ -2648,6 +2648,15 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
         };
       }));
       
+      // CRITICAL FIX: Deduplicate changes by filePath (keep the last occurrence for each file)
+      const uniqueChangesMap = new Map();
+      for (const change of changes) {
+        uniqueChangesMap.set(change.filePath, change);
+      }
+      const uniqueChanges = Array.from(uniqueChangesMap.values());
+      
+      console.log(`🔍 [Migration Changes] Deduplication: ${changes.length} changes → ${uniqueChanges.length} unique changes`);
+      
       // Get latest iteration number for this migration type
       const rawMigrationType = migrationReport.structuredData?.analysisTypeLabel || "KafkaToAzureServiceBusMigration";
       const migrationType = sanitizeMigrationType(rawMigrationType);
@@ -2676,10 +2685,10 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
         };
       }
       
-      console.log(`📤 [Migration Changes] Returning ${changes.length} changes`);
+      console.log(`📤 [Migration Changes] Returning ${uniqueChanges.length} unique changes`);
       
       res.json({
-        changes,
+        changes: uniqueChanges,
         migrationType,
         oldCoverage,
         newCoverage,
