@@ -164,6 +164,13 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, [repositoriesData, currentRepository]);
 
+  // Query reports to watch for new migration analyses
+  const { data: migrationReportsData } = useQuery<{ reports: any[] }>({
+    queryKey: ['/api/analysis/reports', currentRepository?.id],
+    enabled: !!currentRepository?.id,
+    staleTime: 0,
+  });
+
   // Refresh repository status when current repository changes
   useEffect(() => {
     if (currentRepository?.id) {
@@ -174,6 +181,25 @@ export function AppProvider({ children }: AppProviderProps) {
     // Reset migration access when repository changes (clear all accessed reports)
     setAccessedReports(new Set());
   }, [currentRepository]);
+
+  // Clear accessed reports when new migration reports are generated
+  useEffect(() => {
+    if (migrationReportsData?.reports) {
+      const migrationReports = migrationReportsData.reports.filter((r: any) => 
+        r.analysisType?.includes('migration') || r.analysisType === 'default'
+      );
+      
+      if (migrationReports.length > 0) {
+        // Get the most recent migration report
+        const mostRecentReport = migrationReports.sort((a: any, b: any) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )[0];
+        
+        // Clear accessed reports so the "Proceed" button shows for new analyses
+        setAccessedReports(new Set());
+      }
+    }
+  }, [migrationReportsData?.reports?.length, migrationReportsData?.reports?.[0]?.createdAt]);
 
   // Check if a specific report has migration access enabled
   const canAccessMigration = (reportId: string): boolean => {
