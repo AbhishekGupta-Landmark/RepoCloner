@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { useQuery, useIsMutating } from '@tanstack/react-query';
+import { useQuery, useIsMutating, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileText, Code, BarChart3, Loader2, AlertTriangle, GitBranch, Code2, CheckCircle, ChevronDown, RotateCw, Brain } from 'lucide-react';
+import { FileText, Code, BarChart3, Loader2, AlertTriangle, GitBranch, Code2, CheckCircle, ChevronDown, RotateCw, Brain, ArrowRight, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAnalysis } from '@/hooks/useAnalysis';
 import DiffViewer from '@/components/ui/DiffViewer';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useAppContext } from '@/context/AppContext';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface KafkaUsageItem {
   file: string;
@@ -53,12 +55,18 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
   
   // Get analysis functions and loading state
   const { analyzeCode, isLoading } = useAnalysis();
+  const queryClient = useQueryClient();
+  const { canAccessMigration, enableMigrationAccess } = useAppContext();
   
   // Track global analysis mutations (works across all components)
   const isMutating = useIsMutating({ mutationKey: ['analysis'] });
   const isAnalyzing = isLoading || isMutating > 0;
   
-  const { data, isLoading: isQueryLoading, error, refetch } = useQuery({
+  // Check cache for failed status first
+  const cachedData = queryClient.getQueryData(['structured-report', repositoryId, analysisType || 'all']) as any;
+  const hasCachedFailure = cachedData?.status === 'failed';
+  
+  const { data: queryData, isLoading: isQueryLoading, error, refetch } = useQuery({
     queryKey: ['structured-report', repositoryId, analysisType || 'all'],
     queryFn: async () => {
       const url = analysisType 
@@ -80,16 +88,20 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
       
       return response.json();
     },
-    enabled: !!repositoryId,
-    // Only poll when analysis might be in progress, stop when completed
+    // CRITICAL: Don't fetch if we have a cached failure - this prevents overwriting the error state
+    enabled: !!repositoryId && !hasCachedFailure,
+    // Only poll when analysis might be in progress, stop when completed OR failed
     refetchInterval: (query) => {
       const currentData = query.state.data as any;
-      // Stop polling if we have a ready report or if there's no analysis yet
-      return currentData?.status === 'ready' || currentData?.status === 'completed' || currentData?.status === 'no_analysis' ? false : 5000;
+      // Stop polling if we have a ready report, failed status, or if there's no analysis yet
+      return currentData?.status === 'ready' || currentData?.status === 'completed' || currentData?.status === 'no_analysis' || currentData?.status === 'failed' ? false : 5000;
     },
     staleTime: 0, // Always consider data stale to ensure fresh fetches
     retry: false // Don't retry to avoid showing stale errors
   });
+  
+  // Use cached data if we have a failure, otherwise use query data
+  const data = hasCachedFailure ? cachedData : queryData;
   
   // Show loading state when initially loading OR when analysis is running
   if ((isQueryLoading && !data) || isAnalyzing) {
@@ -134,20 +146,7 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
 
   // Handle different analysis states
   if (!data || !data.structuredData) {
-    // No analysis run yet - show prompt
-    if (data?.status === 'no_analysis' || !data) {
-      return (
-        <Card>
-          <CardContent className="text-center py-12">
-            <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
-            <h3 className="text-lg font-medium mb-2">Ready to Analyze</h3>
-            <p className="text-sm text-muted-foreground">Click the "Analyze Code" button above to start the analysis</p>
-          </CardContent>
-        </Card>
-      );
-    }
-    
-    // Analysis failed - show error message
+    // Analysis failed - show error message (CHECK THIS FIRST!)
     if (data?.status === 'failed') {
       return (
         <div className="space-y-4">
@@ -177,7 +176,7 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
                   variant="outline" 
                   size="sm" 
                   onClick={async () => {
-                    await analyzeCode(repositoryId);
+                    await analyzeCode(repositoryId, analysisType);
                     refetch(); // Force refresh the query immediately after analysis
                   }}
                   disabled={isAnalyzing}
@@ -193,39 +192,15 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
       );
     }
 
-    // No analysis has been run yet - show setup instructions
+    // No analysis has been run yet - show simple ready state
     return (
-      <div className="space-y-4">
-        <Card className="border-blue-200 dark:border-blue-800">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
-              <FileText className="h-5 w-5" />
-              Migration Analysis Setup
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm mb-3">
-              No structured migration report available yet. To generate one:
-            </p>
-            <ol className="list-decimal list-inside text-sm space-y-1 text-muted-foreground">
-              <li>Configure AI settings with your AI API credentials</li>
-              <li>Clone a repository containing Kafka code</li>
-              <li>The AI will automatically analyze and generate a migration report</li>
-            </ol>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-8">
-            <div className="text-center">
-              <BarChart3 className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
-              <h3 className="text-lg font-medium mb-2">Migration Analysis Setup</h3>
-              <p className="text-muted-foreground">
-                Once you run AI analysis on a Kafka repository, the structured migration data will appear here.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardContent className="text-center py-12">
+          <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
+          <h3 className="text-lg font-medium mb-2">Ready to Analyze</h3>
+          <p className="text-sm text-muted-foreground">Click the "Analyze Code" button above to start the analysis</p>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -308,6 +283,72 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
           </div>
         </CardContent>
       </Card>
+
+      {/* Proceed to Code Migration Button - Only shown if not already accessed */}
+      {!canAccessMigration && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+        >
+          <Card className="border-2 border-primary/50 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5">
+            <CardContent className="pt-6">
+              <div className="flex flex-col items-center text-center gap-4">
+                <motion.div
+                  animate={{ 
+                    scale: [1, 1.1, 1],
+                  }}
+                  transition={{ 
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                >
+                  <Sparkles className="h-12 w-12 text-primary" />
+                </motion.div>
+                <div>
+                  <h3 className="text-xl font-semibold mb-2">Analysis Complete!</h3>
+                  <p className="text-muted-foreground max-w-2xl">
+                    Your migration analysis is ready. Review the insights above, and when you're satisfied, 
+                    proceed to the Code Migration tab where you can review AI-generated changes, 
+                    modify them if needed, and push approved updates to your Git repository.
+                  </p>
+                </div>
+                <Button
+                  onClick={() => {
+                    enableMigrationAccess();
+                    // Optionally scroll to top or show a toast
+                  }}
+                  size="lg"
+                  className="group relative overflow-hidden bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-white font-semibold px-8 py-6 text-base"
+                  data-testid="button-proceed-to-migration"
+                >
+                  <motion.div
+                    className="flex items-center gap-2"
+                    whileHover={{ scale: 1.05 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                  >
+                    <span>Proceed to Code Migration</span>
+                    <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                  </motion.div>
+                  
+                  {/* Animated background shimmer */}
+                  <motion.div
+                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                    initial={{ x: '-100%' }}
+                    animate={{ x: '200%' }}
+                    transition={{ 
+                      duration: 3,
+                      repeat: Infinity,
+                      ease: "linear"
+                    }}
+                  />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
 
       {/* Key Changes Section */}
       {uniqueKeyChanges.length > 0 && (

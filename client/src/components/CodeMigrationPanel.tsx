@@ -43,6 +43,43 @@ interface CoverageData {
   }>;
 }
 
+// Helper function to construct GitHub branch URL
+const constructGitHubBranchUrl = (repositoryUrl: string, branchName: string): string | null => {
+  try {
+    // Handle both HTTPS and SSH formats
+    let owner = '';
+    let repo = '';
+    
+    if (repositoryUrl.startsWith('https://github.com/')) {
+      // HTTPS: https://github.com/owner/repo.git or https://github.com/owner/repo
+      // Extract path after github.com/ and remove optional .git suffix
+      const path = repositoryUrl.replace('https://github.com/', '').replace(/\.git$/, '');
+      const parts = path.split('/');
+      if (parts.length >= 2) {
+        owner = parts[0];
+        repo = parts[1];
+      }
+    } else if (repositoryUrl.startsWith('git@github.com:')) {
+      // SSH: git@github.com:owner/repo.git or git@github.com:owner/repo
+      // Extract path after git@github.com: and remove optional .git suffix
+      const path = repositoryUrl.replace('git@github.com:', '').replace(/\.git$/, '');
+      const parts = path.split('/');
+      if (parts.length >= 2) {
+        owner = parts[0];
+        repo = parts[1];
+      }
+    }
+    
+    if (owner && repo) {
+      return `https://github.com/${owner}/${repo}/tree/${branchName}`;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error parsing GitHub URL:', error);
+    return null;
+  }
+};
+
 export default function CodeMigrationPanel() {
   const { currentRepository } = useAppContext();
   const queryClient = useQueryClient();
@@ -50,6 +87,7 @@ export default function CodeMigrationPanel() {
   const [editMode, setEditMode] = useState(false);
   const [editedChanges, setEditedChanges] = useState<Record<string, string>>({});
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [approvalSuccess, setApprovalSuccess] = useState<{ branchName: string; branchUrl: string | null } | null>(null);
 
   // Fetch migration changes
   const { data: migrationData, isLoading: isLoadingChanges, error: queryError } = useQuery<{
@@ -82,10 +120,25 @@ export default function CodeMigrationPanel() {
       return response.json();
     },
     onSuccess: (data) => {
+      // Construct GitHub branch URL
+      const branchUrl = currentRepository?.url 
+        ? constructGitHubBranchUrl(currentRepository.url, data.branchName)
+        : null;
+      
+      // Store approval success state with branch info
+      setApprovalSuccess({
+        branchName: data.branchName,
+        branchUrl
+      });
+      
       toast({
         title: "✅ Migration Approved!",
-        description: `Changes pushed to branch: ${data.branchName}`,
+        description: branchUrl 
+          ? `Changes pushed successfully!` 
+          : `Changes pushed to branch: ${data.branchName}`,
       });
+      
+      // Clear the migration changes from cache
       queryClient.invalidateQueries({ queryKey: ['/api/migration/changes'] });
     },
     onError: (error: any) => {
@@ -209,6 +262,111 @@ export default function CodeMigrationPanel() {
             </div>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
+
+  // Show success card after approval
+  if (approvalSuccess) {
+    return (
+      <div className="flex items-center justify-center h-full p-6">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="w-full max-w-2xl"
+        >
+          <Card className="border-2 border-green-500/50 bg-gradient-to-br from-green-50/50 to-emerald-50/50 dark:from-green-950/20 dark:to-emerald-950/20">
+            <CardHeader>
+              <div className="flex flex-col items-center text-center gap-4">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ 
+                    type: "spring",
+                    stiffness: 200,
+                    damping: 15,
+                    delay: 0.2
+                  }}
+                >
+                  <div className="w-20 h-20 rounded-full bg-green-500 flex items-center justify-center">
+                    <CheckCircle className="h-12 w-12 text-white" />
+                  </div>
+                </motion.div>
+                <div>
+                  <CardTitle className="text-3xl text-green-600 dark:text-green-400 mb-2">
+                    Migration Approved!
+                  </CardTitle>
+                  <CardDescription className="text-base">
+                    Your changes have been successfully pushed to the repository
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="p-4 rounded-lg bg-card border border-border">
+                  <div className="flex items-center gap-2 mb-2">
+                    <GitBranch className="h-5 w-5 text-primary" />
+                    <p className="font-semibold">Branch Created</p>
+                  </div>
+                  <p className="text-sm text-muted-foreground font-mono">
+                    {approvalSuccess.branchName}
+                  </p>
+                </div>
+
+                {approvalSuccess.branchUrl && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                  >
+                    <a
+                      href={approvalSuccess.branchUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block"
+                    >
+                      <Button
+                        size="lg"
+                        className="w-full group relative overflow-hidden bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold"
+                        data-testid="button-view-branch"
+                      >
+                        <motion.div
+                          className="flex items-center gap-2"
+                          whileHover={{ scale: 1.05 }}
+                          transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                        >
+                          <GitPullRequest className="h-5 w-5" />
+                          <span>View Branch on GitHub</span>
+                          <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                        </motion.div>
+                      </Button>
+                    </a>
+                  </motion.div>
+                )}
+
+                <Separator />
+
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setApprovalSuccess(null);
+                      setEditMode(false);
+                      setEditedChanges({});
+                    }}
+                    data-testid="button-new-migration"
+                    className="gap-2"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Start New Migration
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
     );
   }

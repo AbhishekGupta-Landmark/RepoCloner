@@ -33,6 +33,8 @@ interface AppContextType {
   refreshRepositoryStatus: (repositoryId: string) => Promise<void>;
   isCodeAnalysisEnabled: boolean;
   isTestCoverageComplete: boolean;
+  canAccessMigration: boolean;
+  enableMigrationAccess: () => void;
   logService: LogService;
   showRepoPanel: boolean;
   toggleRepoPanel: () => void;
@@ -55,6 +57,7 @@ export function AppProvider({ children }: AppProviderProps) {
   const [currentRepository, setCurrentRepository] = useState<Repository | null>(null);
   const [repositoryStatus, setRepositoryStatus] = useState<RepositoryStatus | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [canAccessMigration, setCanAccessMigration] = useState<boolean>(false);
   
   // Sidebar visibility state with localStorage persistence
   const [showRepoPanel, setShowRepoPanel] = useState<boolean>(() => {
@@ -166,7 +169,15 @@ export function AppProvider({ children }: AppProviderProps) {
     } else {
       setRepositoryStatus(null);
     }
+    // Reset migration access when repository changes
+    setCanAccessMigration(false);
   }, [currentRepository]);
+
+  // Enable migration access (called from Code Analysis proceed button)
+  const enableMigrationAccess = () => {
+    setCanAccessMigration(true);
+    logService.addLog('INFO', 'Code Migration access enabled', 'AppContext');
+  };
 
   // LogService implementation
   const logService: LogService = {
@@ -229,6 +240,8 @@ export function AppProvider({ children }: AppProviderProps) {
     refreshRepositoryStatus,
     isCodeAnalysisEnabled,
     isTestCoverageComplete,
+    canAccessMigration,
+    enableMigrationAccess,
     logService,
     showRepoPanel,
     toggleRepoPanel,
@@ -258,6 +271,8 @@ export const useAppContext = () => {
       refreshRepositoryStatus: async () => {},
       isCodeAnalysisEnabled: false,
       isTestCoverageComplete: false,
+      canAccessMigration: false,
+      enableMigrationAccess: () => {},
       logService: {
         logs: [],
         addLog: () => {},

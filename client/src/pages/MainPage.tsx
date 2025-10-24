@@ -64,7 +64,8 @@ export default function MainPage() {
     lastExpandedWidth, 
     setLastExpandedWidth, 
     handleToggleRepoPanel,
-    isCodeAnalysisEnabled
+    isCodeAnalysisEnabled,
+    canAccessMigration
   } = useAppContext();
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
@@ -573,9 +574,9 @@ export default function MainPage() {
                         </TabsTrigger>
                         <TabsTrigger 
                           value="migration" 
-                          disabled={!isCodeAnalysisEnabled}
+                          disabled={!isCodeAnalysisEnabled || !canAccessMigration}
                           className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden ${
-                            !isCodeAnalysisEnabled 
+                            !isCodeAnalysisEnabled || !canAccessMigration
                               ? 'opacity-50 cursor-not-allowed' 
                               : 'hover:bg-amber-500/10 hover:text-amber-500'
                           }`}
