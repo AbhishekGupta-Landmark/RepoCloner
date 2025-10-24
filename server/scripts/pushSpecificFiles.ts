@@ -41,10 +41,12 @@ class GitHubPusher {
   }
 
   private async getMainBranchOid(): Promise<string> {
-    const query = `
+    // First, get the default branch name
+    const defaultBranchQuery = `
       query($owner: String!, $repo: String!) {
         repository(owner: $owner, name: $repo) {
-          ref(qualifiedName: "refs/heads/main") {
+          defaultBranchRef {
+            name
             target {
               oid
             }
@@ -53,16 +55,22 @@ class GitHubPusher {
       }
     `;
 
-    const result = await this.graphqlRequest(query, {
+    const result = await this.graphqlRequest(defaultBranchQuery, {
       owner: this.owner,
       repo: this.repo,
     });
 
     if (result.errors) {
-      throw new Error(`Failed to get main branch: ${result.errors[0].message}`);
+      throw new Error(`Failed to get default branch: ${result.errors[0].message}`);
     }
 
-    return result.data.repository.ref.target.oid;
+    const defaultBranchRef = result.data.repository.defaultBranchRef;
+    if (!defaultBranchRef) {
+      throw new Error('Repository has no default branch');
+    }
+
+    console.log(`📍 Using default branch: ${defaultBranchRef.name}`);
+    return defaultBranchRef.target.oid;
   }
 
   private async getBranchOid(branchName: string): Promise<string> {
@@ -186,26 +194,61 @@ class GitHubPusher {
     }
   }
 
+  private async getDefaultBranchName(): Promise<string> {
+    const query = `
+      query($owner: String!, $repo: String!) {
+        repository(owner: $owner, name: $repo) {
+          defaultBranchRef {
+            name
+          }
+        }
+      }
+    `;
+
+    const result = await this.graphqlRequest(query, {
+      owner: this.owner,
+      repo: this.repo,
+    });
+
+    if (result.errors) {
+      throw new Error(`Failed to get default branch: ${result.errors[0].message}`);
+    }
+
+    const defaultBranchRef = result.data.repository.defaultBranchRef;
+    if (!defaultBranchRef) {
+      throw new Error('Repository has no default branch');
+    }
+
+    return defaultBranchRef.name;
+  }
+
   async deleteAllBranchesExceptMain(): Promise<void> {
     try {
-      console.log('🗑️  Deleting all branches except main...');
+      // Get the actual default branch name (could be "main", "master", etc.)
+      const defaultBranch = await this.getDefaultBranchName();
+      console.log(`🗑️  Deleting all branches except ${defaultBranch}...`);
       
       const branches = await this.getAllBranches();
-      const branchesToDelete = branches.filter(branch => branch.name !== 'main');
+      const branchesToDelete = branches.filter(branch => branch.name !== defaultBranch);
       
       if (branchesToDelete.length === 0) {
-        console.log('✅ No branches to delete (only main exists)');
+        console.log(`✅ No branches to delete (only ${defaultBranch} exists)`);
         return;
       }
 
       console.log(`🗑️  Found ${branchesToDelete.length} branch(es) to delete:`, branchesToDelete.map(b => b.name).join(', '));
 
       for (const branch of branchesToDelete) {
-        await this.deleteBranch(branch.id);
-        console.log(`✅ Deleted branch: ${branch.name}`);
+        try {
+          await this.deleteBranch(branch.id);
+          console.log(`✅ Deleted branch: ${branch.name}`);
+        } catch (error: any) {
+          console.warn(`⚠️  Could not delete branch ${branch.name}: ${error.message}`);
+          // Continue with other branches even if one fails
+        }
       }
 
-      console.log('🎉 All non-main branches deleted successfully');
+      console.log('🎉 Branch cleanup completed');
     } catch (error) {
       console.error('❌ Failed to delete branches:', error);
       // Don't throw - continue with push even if deletion fails
