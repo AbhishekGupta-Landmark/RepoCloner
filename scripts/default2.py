@@ -624,24 +624,63 @@ def main():
                     "key_changes": ["Replace Kafka with Azure Service Bus"]
                 })
     
-    # Add NuGet package changes as diffs
+    # Add NuGet package changes as diffs with full file content
     for change in report.get("csproj_changes", []):
         csproj_file = change.get("file", "")
         remove_pkg = change.get("remove", "")
         add_pkg = change.get("add", "")
         
-        diff_content = f"""--- a/{csproj_file}
-+++ b/{csproj_file}
-@@ NuGet Package Update @@
--    <PackageReference Include="{remove_pkg}" />
-+    <PackageReference Include="{add_pkg}" />
-"""
+        # Read original .csproj file
+        csproj_path = os.path.join(root_dir, csproj_file)
+        original_content = ""
+        migrated_content = ""
+        
+        try:
+            with open(csproj_path, "r", encoding="utf-8") as f:
+                original_content = f.read()
+            
+            # Generate migrated content by replacing the Kafka package reference
+            # Extract package name and version from "PackageName (version)" format
+            pkg_name_only = remove_pkg.split(" (")[0] if " (" in remove_pkg else remove_pkg
+            
+            # Extract target package name and version
+            add_pkg_name_only = add_pkg.split(" (")[0] if " (" in add_pkg else add_pkg
+            add_pkg_version = "8.0.0"  # Default version for Azure.Messaging.ServiceBus
+            if " (" in add_pkg:
+                version_part = add_pkg.split(" (")[1].rstrip(")")
+                # If version is "latest", use sensible default, otherwise use specified version
+                if version_part and version_part.lower() != "latest":
+                    add_pkg_version = version_part
+            
+            # Replace the package reference line
+            import re
+            # Match: <PackageReference Include="confluent.kafka" Version="1.0-beta2" />
+            pattern = f'<PackageReference\\s+Include="{re.escape(pkg_name_only)}"[^/>]*/?>'
+            replacement = f'<PackageReference Include="{add_pkg_name_only}" Version="{add_pkg_version}" />'
+            migrated_content = re.sub(pattern, replacement, original_content, flags=re.IGNORECASE)
+            
+            # Also handle the case where package reference spans multiple lines
+            if migrated_content == original_content:
+                # Try multiline pattern
+                pattern_multiline = f'<PackageReference\\s+Include="{re.escape(pkg_name_only)}"[^>]*>.*?</PackageReference>'
+                replacement_multiline = f'<PackageReference Include="{add_pkg_name_only}" Version="{add_pkg_version}" />'
+                migrated_content = re.sub(pattern_multiline, replacement_multiline, original_content, flags=re.IGNORECASE | re.DOTALL)
+            
+        except Exception as e:
+            print(f"Warning: Could not read .csproj file {csproj_file}: {e}", file=sys.stderr)
+            original_content = f"// Could not read {csproj_file}"
+            migrated_content = f"// Could not read {csproj_file}"
+        
+        # Generate proper unified diff
+        diff_content = generate_unified_diff(original_content, migrated_content, csproj_file)
         
         transformed_report["diffs"].append({
             "file": csproj_file,
             "diff": diff_content,
             "description": f"Update NuGet package: Remove {remove_pkg}, Add {add_pkg}",
-            "key_changes": [f"Remove {remove_pkg}", f"Add {add_pkg}"]
+            "key_changes": [f"Remove {remove_pkg}", f"Add {add_pkg}"],
+            "original_code": original_content,  # Original .csproj with Kafka
+            "migrated_code": migrated_content   # Migrated .csproj with Azure Service Bus
         })
     
     # Generate markdown report file with embedded JSON

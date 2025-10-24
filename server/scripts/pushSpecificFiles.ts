@@ -385,6 +385,54 @@ class GitHubPusher {
       throw error;
     }
   }
+
+  /**
+   * Create a draft pull request from a branch to the default branch
+   * @param branchName The source branch for the PR
+   * @param title PR title
+   * @param body PR description
+   * @returns PR URL
+   */
+  async createDraftPR(branchName: string, title: string, body: string): Promise<string> {
+    try {
+      console.log(`📝 Creating draft PR from ${branchName}...`);
+      
+      // Use GitHub REST API for PR creation (not GraphQL)
+      const restApiUrl = `https://api.github.com/repos/${this.owner}/${this.repo}/pulls`;
+      
+      // Get default branch name
+      const defaultBranch = await this.getDefaultBranchName();
+      
+      const response = await fetch(restApiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/vnd.github+json',
+        },
+        body: JSON.stringify({
+          title,
+          head: branchName,
+          base: defaultBranch,
+          body,
+          draft: true,  // Create as draft PR
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Failed to create PR: ${response.status} ${error}`);
+      }
+
+      const prData = await response.json();
+      console.log(`✅ Draft PR created: ${prData.html_url}`);
+      
+      return prData.html_url;
+    } catch (error) {
+      console.error('❌ Failed to create draft PR:', error);
+      throw error;
+    }
+  }
 }
 
 // Main execution

@@ -2612,7 +2612,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
         const { pushMigrationChanges } = await import('./services/migrationPushService.js');
         
         // Push the changes (includes migrated code + generated test files)
-        await pushMigrationChanges({
+        const pushResult = await pushMigrationChanges({
           repository,
           branchName,
           changes,
@@ -2638,6 +2638,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
           success: true,
           branchName,
           branchUrl,
+          prUrl: pushResult.prUrl,  // Include draft PR URL
           message: "Changes approved and pushed successfully"
         });
       } catch (pushError: any) {

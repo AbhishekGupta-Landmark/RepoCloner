@@ -85,7 +85,7 @@ export default function CodeMigrationPanel() {
   const [editMode, setEditMode] = useState(false);
   const [editedChanges, setEditedChanges] = useState<Record<string, string>>({});
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [approvalSuccess, setApprovalSuccess] = useState<{ branchName: string; branchUrl: string | null } | null>(null);
+  const [approvalSuccess, setApprovalSuccess] = useState<{ branchName: string; branchUrl: string | null; prUrl?: string | null } | null>(null);
 
   // Fetch migration changes
   const { data: migrationData, isLoading: isLoadingChanges, error: queryError } = useQuery<{
@@ -118,20 +118,24 @@ export default function CodeMigrationPanel() {
       return response.json();
     },
     onSuccess: (data) => {
-      // Use the branch URL from backend response (already points to correct repo - fork or original)
+      // Use the branch URL and PR URL from backend response (already points to correct repo - fork or original)
       const branchUrl = data.branchUrl || null;
+      const prUrl = data.prUrl || null;
       
-      // Store approval success state with branch info
+      // Store approval success state with branch and PR info
       setApprovalSuccess({
         branchName: data.branchName,
-        branchUrl
+        branchUrl,
+        prUrl
       });
       
       toast({
         title: "✅ Migration Approved!",
-        description: branchUrl 
-          ? `Changes pushed successfully!` 
-          : `Changes pushed to branch: ${data.branchName}`,
+        description: prUrl 
+          ? `Draft PR created successfully!` 
+          : branchUrl 
+            ? `Changes pushed successfully!` 
+            : `Changes pushed to branch: ${data.branchName}`,
       });
       
       // Clear the migration changes from cache
@@ -311,11 +315,42 @@ export default function CodeMigrationPanel() {
                   </p>
                 </div>
 
-                {approvalSuccess.branchUrl && (
+                {approvalSuccess.prUrl && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
+                  >
+                    <a
+                      href={approvalSuccess.prUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block"
+                    >
+                      <Button
+                        size="lg"
+                        className="w-full group relative overflow-hidden bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white font-semibold"
+                        data-testid="button-view-pr"
+                      >
+                        <motion.div
+                          className="flex items-center gap-2"
+                          whileHover={{ scale: 1.05 }}
+                          transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                        >
+                          <GitPullRequest className="h-5 w-5" />
+                          <span>View Draft Pull Request</span>
+                          <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                        </motion.div>
+                      </Button>
+                    </a>
+                  </motion.div>
+                )}
+
+                {approvalSuccess.branchUrl && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
                   >
                     <a
                       href={approvalSuccess.branchUrl}
@@ -325,7 +360,10 @@ export default function CodeMigrationPanel() {
                     >
                       <Button
                         size="lg"
-                        className="w-full group relative overflow-hidden bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold"
+                        variant={approvalSuccess.prUrl ? "outline" : "default"}
+                        className={approvalSuccess.prUrl 
+                          ? "w-full group" 
+                          : "w-full group relative overflow-hidden bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold"}
                         data-testid="button-view-branch"
                       >
                         <motion.div
@@ -333,7 +371,7 @@ export default function CodeMigrationPanel() {
                           whileHover={{ scale: 1.05 }}
                           transition={{ type: "spring", stiffness: 400, damping: 10 }}
                         >
-                          <GitPullRequest className="h-5 w-5" />
+                          <GitBranch className="h-5 w-5" />
                           <span>View Branch on GitHub</span>
                           <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
                         </motion.div>

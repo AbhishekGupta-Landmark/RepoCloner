@@ -14,7 +14,7 @@ interface PushMigrationChangesParams {
   storage: IStorage;
 }
 
-export async function pushMigrationChanges(params: PushMigrationChangesParams): Promise<void> {
+export async function pushMigrationChanges(params: PushMigrationChangesParams): Promise<{ prUrl?: string }> {
   const { repository, branchName, changes, storage, accessToken, commitMessage } = params;
   
   // Import the GitHub pusher class
@@ -73,25 +73,23 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
       }
       
       for (const fileReport of fileReports) {
-        if (fileReport.generatedTests && fileReport.testFile) {
-          // Determine test file path
-          let testFilePath = fileReport.testFile;
-          
-          // If testFile is "None" or doesn't exist, generate a test file name in the test folder
-          if (testFilePath === 'None' || !testFilePath) {
-            const sourceFile = fileReport.file;
-            const baseName = path.basename(sourceFile, path.extname(sourceFile));
-            // Place all generated test files in the detected test folder
-            testFilePath = path.join(testFolder, `${baseName}Tests${path.extname(sourceFile)}`);
-          }
+        if (fileReport.generatedTests) {
+          // ALWAYS place test files in the detected test folder (Test/, Tests/, etc.)
+          // Ignore the testFile path from the report as it may point to wrong location
+          const sourceFile = fileReport.file;
+          const baseName = path.basename(sourceFile, path.extname(sourceFile));
+          const testFilePath = path.join(testFolder, `${baseName}Tests${path.extname(sourceFile)}`);
           
           // Write the generated test file
           const fullTestPath = path.join(repository.localPath, testFilePath);
           await fs.mkdir(path.dirname(fullTestPath), { recursive: true });
           await fs.writeFile(fullTestPath, fileReport.generatedTests, 'utf-8');
-          filesList.push(testFilePath);
           
-          console.log(`✅ Added test file: ${testFilePath}`);
+          // CRITICAL: Normalize path to forward slashes for Git compatibility
+          const normalizedPath = testFilePath.replace(/\\/g, '/');
+          filesList.push(normalizedPath);
+          
+          console.log(`✅ Added test file: ${normalizedPath}`);
         }
       }
       
@@ -105,6 +103,34 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
     await pusher.pushSpecificFiles(branchName, commitMessage, filesList, repository.localPath);
     
     console.log(`🎉 Successfully pushed ${filesList.length} files to branch: ${branchName}`);
+    
+    // Create draft PR
+    let prUrl: string | undefined;
+    try {
+      const prTitle = `🤖 AI Migration: ${branchName}`;
+      const prBody = `# AI-Generated Migration Changes
+
+${commitMessage}
+
+## Summary
+- **Files Changed**: ${filesList.length}
+- **Branch**: \`${branchName}\`
+
+## Changes Include:
+- Migrated code (Kafka → Azure Service Bus)
+- Generated test files with improved coverage
+
+---
+*This is a draft pull request. Review the changes and mark as ready when satisfied.*`;
+
+      prUrl = await pusher.createDraftPR(branchName, prTitle, prBody);
+      console.log(`✅ Draft PR created: ${prUrl}`);
+    } catch (prError) {
+      console.warn(`⚠️ Failed to create draft PR (push succeeded): ${prError}`);
+      // Don't throw - push succeeded, PR is optional
+    }
+    
+    return { prUrl };
   } catch (error) {
     console.error('Failed to push migration changes:', error);
     throw error;
