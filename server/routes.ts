@@ -2413,8 +2413,12 @@ export async function registerRoutes(app: Application): Promise<Server> {
 
   // Helper function to generate migrated code using AI
   async function generateMigratedCode(originalCode: string, filePath: string, aiSettings: any): Promise<string> {
+    console.log(`🔧 [AI Migration] Starting code generation for ${filePath}`);
+    console.log(`🔧 [AI Migration] Original code length: ${originalCode.length} characters`);
+    
     try {
       // Initialize OpenAI client with configured settings
+      console.log(`🔧 [AI Migration] Initializing OpenAI client with baseURL: ${aiSettings.apiEndpointUrl}`);
       const client = new OpenAI({
         apiKey: aiSettings.apiKey,
         baseURL: aiSettings.apiEndpointUrl
@@ -2438,6 +2442,7 @@ Return ONLY valid JSON with this exact structure:
 
 IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should contain actual working C# code.`;
 
+      console.log(`🔧 [AI Migration] Calling AI API with model: ${aiSettings.model}`);
       const response = await client.chat.completions.create({
         model: aiSettings.model,
         messages: [
@@ -2446,10 +2451,13 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
         temperature: 0
       });
 
+      console.log(`🔧 [AI Migration] Received response from AI`);
       const content = response.choices[0]?.message?.content;
       if (!content) {
         throw new Error("AI returned no response");
       }
+
+      console.log(`🔧 [AI Migration] Response length: ${content.length} characters`);
 
       // Parse JSON response
       let result: any;
@@ -2459,16 +2467,25 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
         const jsonString = jsonMatch ? jsonMatch[1] : content;
         result = JSON.parse(jsonString.trim());
       } catch (parseError) {
+        console.error(`❌ [AI Migration] JSON parse error:`, parseError);
+        console.error(`❌ [AI Migration] Raw content:`, content.substring(0, 500));
         throw new Error(`Failed to parse AI response as JSON: ${parseError}`);
       }
 
       if (result && result.migrated_code) {
+        console.log(`✅ [AI Migration] Successfully parsed migrated code (${result.migrated_code.length} characters)`);
         return result.migrated_code;
       } else {
+        console.error(`❌ [AI Migration] Response missing migrated_code field. Keys:`, Object.keys(result || {}));
         throw new Error("AI response missing migrated_code field");
       }
-    } catch (error) {
-      console.error(`❌ [AI Migration] Error generating code for ${filePath}:`, error);
+    } catch (error: any) {
+      console.error(`❌ [AI Migration] Error generating code for ${filePath}:`);
+      console.error(`❌ [AI Migration] Error name: ${error.name}`);
+      console.error(`❌ [AI Migration] Error message: ${error.message}`);
+      if (error.stack) {
+        console.error(`❌ [AI Migration] Stack trace:`, error.stack);
+      }
       throw error;
     }
   }
@@ -2569,10 +2586,19 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
         let newCode = diff.migrated_code;
         if (!newCode && aiSettings?.apiKey && oldCode !== "// Original file not found in repository") {
           console.log(`🤖 [Migration Changes] Generating migrated code on-demand for: ${diff.file}`);
+          console.log(`🤖 [Migration Changes] AI Settings:`, {
+            hasApiKey: !!aiSettings.apiKey,
+            model: aiSettings.model,
+            baseUrl: aiSettings.apiEndpointUrl
+          });
           try {
             newCode = await generateMigratedCode(oldCode, diff.file, aiSettings);
-          } catch (error) {
-            console.warn(`⚠️ [Migration Changes] Failed to generate code for ${diff.file}:`, error);
+            console.log(`✅ [Migration Changes] Successfully generated code for: ${diff.file} (${newCode.length} characters)`);
+          } catch (error: any) {
+            console.error(`❌ [Migration Changes] Failed to generate code for ${diff.file}:`);
+            console.error(`❌ [Migration Changes] Error type: ${error.constructor?.name}`);
+            console.error(`❌ [Migration Changes] Error message: ${error.message}`);
+            console.error(`❌ [Migration Changes] Full error:`, error);
             newCode = "// AI-generated migration code not available";
           }
         } else if (!newCode) {
