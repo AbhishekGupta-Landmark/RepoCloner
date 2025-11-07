@@ -57,7 +57,7 @@ export function MigrationReportViewer({ repositoryId, analysisType, iterationNum
   // Get analysis functions and loading state
   const { analyzeCode, isLoading } = useAnalysis();
   const queryClient = useQueryClient();
-  const { canAccessMigration, enableMigrationAccess, switchToTab } = useAppContext();
+  const { canAccessMigration, enableMigrationAccess, switchToTab, unlockTab } = useAppContext();
   
   // Track global analysis mutations (works across all components)
   const isMutating = useIsMutating({ mutationKey: ['analysis'] });
@@ -287,6 +287,7 @@ export function MigrationReportViewer({ repositoryId, analysisType, iterationNum
                 <Button
                   onClick={() => {
                     enableMigrationAccess(data.id);
+                    unlockTab('code-migration'); // Unlock the tab so it's accessible
                     switchToTab('migration');
                   }}
                   className="group relative overflow-hidden bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-white font-medium flex-shrink-0 w-full sm:w-auto"
