@@ -79,7 +79,7 @@ const constructGitHubBranchUrl = (repositoryUrl: string, branchName: string): st
 };
 
 export default function CodeMigrationPanel() {
-  const { currentRepository, setHasPushedSuccessfully, unlockTab } = useAppContext();
+  const { currentRepository, setHasPushedSuccessfully, unlockTab, switchToTab } = useAppContext();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [editMode, setEditMode] = useState(false);
@@ -396,9 +396,10 @@ export default function CodeMigrationPanel() {
                     size="lg"
                     onClick={() => {
                       unlockTab('cicd-tests');
+                      switchToTab('cicd-tests');
                       toast({
                         title: "CI/CD Tests Unlocked",
-                        description: "You can now view automated test results",
+                        description: "Navigating to CI/CD Tests tab",
                       });
                     }}
                     className="w-full group relative overflow-hidden bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-semibold"

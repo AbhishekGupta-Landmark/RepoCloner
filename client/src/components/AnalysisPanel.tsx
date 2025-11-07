@@ -54,7 +54,7 @@ export default function AnalysisPanel() {
   const [selectedAnalysisTypeId, setSelectedAnalysisTypeId] = useState<string>("");
   const [selectedMigrationTypes, setSelectedMigrationTypes] = useState<string[]>(['kafka-to-service-bus']);
   const [migrationTypesOpen, setMigrationTypesOpen] = useState(true);
-  const { currentRepository, isCodeAnalysisEnabled, unlockTab } = useAppContext();
+  const { currentRepository, isCodeAnalysisEnabled, unlockTab, switchToTab } = useAppContext();
   const { toast } = useToast();
   
   // Load analysis types from API
@@ -360,9 +360,10 @@ export default function AnalysisPanel() {
             <Button
               onClick={() => {
                 unlockTab('code-migration');
+                switchToTab('code-migration');
                 toast({
                   title: "Code Migration Unlocked",
-                  description: "You can now access the Code Migration tab",
+                  description: "Navigating to Code Migration tab",
                 });
               }}
               className="flex items-center gap-2"

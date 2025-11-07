@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import TestCoverageViewer from "./TestCoverageViewer";
 
 export default function TestCoveragePanel() {
-  const { currentRepository, unlockTab } = useAppContext();
+  const { currentRepository, unlockTab, switchToTab } = useAppContext();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -201,9 +201,10 @@ export default function TestCoveragePanel() {
         <Button
           onClick={() => {
             unlockTab('code-analysis');
+            switchToTab('code-analysis');
             toast({
               title: "Code Analysis Unlocked",
-              description: "You can now access the Code Analysis tab",
+              description: "Navigating to Code Analysis tab",
             });
           }}
           className="flex items-center gap-2"

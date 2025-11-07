@@ -585,7 +585,7 @@ export default function TechnologyShowcase({ repositoryName }: TechnologyShowcas
   const [viewMode, setViewMode] = useState<'simple' | 'details'>('simple');
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [rowHeights, setRowHeights] = useState<number[]>([]);
-  const { currentRepository, unlockTab } = useAppContext();
+  const { currentRepository, unlockTab, switchToTab } = useAppContext();
   const { toast } = useToast();
   
   // Extract repository information
@@ -932,9 +932,10 @@ export default function TechnologyShowcase({ repositoryName }: TechnologyShowcas
           <Button
             onClick={() => {
               unlockTab('test-coverage');
+              switchToTab('test-coverage');
               toast({
                 title: "Test Coverage Unlocked",
-                description: "You can now access the Test Coverage tab",
+                description: "Navigating to Test Coverage tab",
               });
             }}
             className="flex items-center gap-2"
