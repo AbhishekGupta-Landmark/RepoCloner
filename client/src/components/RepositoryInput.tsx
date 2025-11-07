@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,6 +25,15 @@ export default function RepositoryInput() {
   const { user, isAuthenticated } = useAuth();
   const { logService } = useAppContext();
   const { toast } = useToast();
+
+  // Auto-check "Clone in Personal Account" when user is authenticated with GitHub or GitLab
+  useEffect(() => {
+    if (isAuthenticated && (selectedProvider === 'github' || selectedProvider === 'gitlab')) {
+      setCloneOptions(prev => ({ ...prev, personalAccount: true }));
+    } else if (!isAuthenticated) {
+      setCloneOptions(prev => ({ ...prev, personalAccount: false }));
+    }
+  }, [isAuthenticated, selectedProvider]);
 
   // Logging helper
   const addLogEntry = (level: 'INFO' | 'DEBUG' | 'WARN' | 'ERROR', message: string, source?: string) => {
