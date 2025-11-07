@@ -126,26 +126,38 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
       console.warn('⚠️ No test coverage report found, pushing migration changes only');
     }
     
-    // Always include GitHub Actions workflow file for CI/CD tests
-    const workflowFilePath = '.github/workflows/dotnet-tests.yml';
-    const workflowSourcePath = path.join(process.cwd(), workflowFilePath);
-    const workflowDestPath = path.join(repository.localPath!, workflowFilePath);
+    // Include appropriate CI/CD workflow file based on provider
+    let workflowFilePath: string;
+    let workflowSourcePath: string;
+    let workflowDestPath: string;
     
-    try {
-      // Check if workflow file exists in source (this repo)
-      await fs.access(workflowSourcePath);
+    if (isGitHub) {
+      workflowFilePath = '.github/workflows/dotnet-tests.yml';
+      workflowSourcePath = path.join(process.cwd(), workflowFilePath);
+      workflowDestPath = path.join(repository.localPath!, workflowFilePath);
       
-      // Create .github/workflows directory in target repo
-      await fs.mkdir(path.dirname(workflowDestPath), { recursive: true });
+      try {
+        await fs.access(workflowSourcePath);
+        await fs.mkdir(path.dirname(workflowDestPath), { recursive: true });
+        await fs.copyFile(workflowSourcePath, workflowDestPath);
+        filesList.push(workflowFilePath);
+        console.log(`✅ Added GitHub Actions workflow: ${workflowFilePath}`);
+      } catch (err) {
+        console.warn(`⚠️ Could not add GitHub Actions workflow: ${err}`);
+      }
+    } else if (isGitLab) {
+      workflowFilePath = '.gitlab-ci.yml';
+      workflowSourcePath = path.join(process.cwd(), workflowFilePath);
+      workflowDestPath = path.join(repository.localPath!, workflowFilePath);
       
-      // Copy workflow file to target repo
-      await fs.copyFile(workflowSourcePath, workflowDestPath);
-      
-      // Add to files list for push
-      filesList.push(workflowFilePath);
-      console.log(`✅ Added GitHub Actions workflow: ${workflowFilePath}`);
-    } catch (err) {
-      console.warn(`⚠️ Could not add workflow file: ${err}`);
+      try {
+        await fs.access(workflowSourcePath);
+        await fs.copyFile(workflowSourcePath, workflowDestPath);
+        filesList.push(workflowFilePath);
+        console.log(`✅ Added GitLab CI configuration: ${workflowFilePath}`);
+      } catch (err) {
+        console.warn(`⚠️ Could not add GitLab CI configuration: ${err}`);
+      }
     }
     
     // Use appropriate pusher based on provider
