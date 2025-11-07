@@ -115,7 +115,7 @@ export default function AnalysisPanel() {
         setSelectedAnalysisTypeId(defaultType.id);
       }
     }
-  }, [analysisTypes, currentRepository]);
+  }, [analysisTypes, currentRepository, selectedAnalysisTypeId]);
   
   const handleAnalysisTypeChange = (typeId: string) => {
     setSelectedAnalysisTypeId(typeId);
