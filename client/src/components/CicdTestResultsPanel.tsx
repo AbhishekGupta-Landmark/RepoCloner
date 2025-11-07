@@ -51,7 +51,7 @@ export default function CicdTestResultsPanel({ repositoryId, provider }: CicdTes
         description: "CI/CD test results have been updated",
       });
     },
-    onError: (error) {
+    onError: (error) => {
       toast({
         title: "Refresh failed",
         description: (error as Error).message || "Failed to refresh test results",
