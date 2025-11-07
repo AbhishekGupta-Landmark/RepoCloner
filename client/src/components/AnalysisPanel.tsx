@@ -105,18 +105,6 @@ export default function AnalysisPanel() {
     setSelectedAnalysisTypeId("");
   }, [currentRepository?.id]);
   
-  // Auto-select first available analysis type if none is selected
-  useEffect(() => {
-    if (!selectedAnalysisTypeId && analysisTypes.length > 0 && currentRepository) {
-      // Default to Quick Migration Analysis if available, otherwise first type
-      const defaultType = analysisTypes.find(t => t.id === 'quick-migration-1') || analysisTypes[0];
-      if (defaultType) {
-        console.log('[AnalysisPanel] Auto-selecting analysis type:', defaultType.id);
-        setSelectedAnalysisTypeId(defaultType.id);
-      }
-    }
-  }, [analysisTypes, currentRepository, selectedAnalysisTypeId]);
-  
   const handleAnalysisTypeChange = (typeId: string) => {
     setSelectedAnalysisTypeId(typeId);
   };
@@ -337,25 +325,7 @@ export default function AnalysisPanel() {
           <div className="text-center py-12 text-muted-foreground" data-testid="analysis-no-type">
             <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
             <h3 className="text-lg font-medium mb-2">Select Analysis Type</h3>
-            <p className="text-sm mb-4">Choose an analysis type from the dropdown above, then click "Analyze Code"</p>
-            <div className="grid grid-cols-2 gap-4 max-w-md mx-auto mt-6">
-              <Card className="p-3">
-                <GitCompare className="h-6 w-6 text-primary mb-2" />
-                <p className="text-xs font-medium">Migration Analysis</p>
-              </Card>
-              <Card className="p-3">
-                <Code className="h-6 w-6 text-green-500 mb-2" />
-                <p className="text-xs font-medium">Code Quality</p>
-              </Card>
-              <Card className="p-3">
-                <Shield className="h-6 w-6 text-yellow-500 mb-2" />
-                <p className="text-xs font-medium">Security Scan</p>
-              </Card>
-              <Card className="p-3">
-                <Brain className="h-6 w-6 text-purple-500 mb-2" />
-                <p className="text-xs font-medium">Quick Analysis</p>
-              </Card>
-            </div>
+            <p className="text-sm mb-4">Select an analysis type from the dropdown above</p>
           </div>
         ) : selectedAnalysisTypeId && currentRepository?.id ? (
           // Show MigrationReportViewer when analysis type is selected
