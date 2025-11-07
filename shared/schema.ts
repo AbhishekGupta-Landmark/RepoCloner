@@ -104,20 +104,21 @@ export const migrationIterations = pgTable("migration_iterations", {
   pushedAt: timestamp("pushed_at"),
 });
 
-// GitHub Actions test results table
-export const githubActionsTestResults = pgTable("github_actions_test_results", {
+// CI/CD test results table (supports GitHub Actions, GitLab CI/CD, etc.)
+export const cicdTestResults = pgTable("cicd_test_results", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   repositoryId: varchar("repository_id").references(() => repositories.id),
-  workflowRunId: text("workflow_run_id").notNull(), // GitHub workflow run ID
+  provider: text("provider").notNull(), // github, gitlab, azure, etc.
+  pipelineId: text("pipeline_id").notNull(), // GitHub workflow run ID or GitLab pipeline ID
   branchName: text("branch_name").notNull(),
   commitSha: text("commit_sha").notNull(),
-  status: text("status").notNull(), // completed, in_progress, queued, etc.
+  status: text("status").notNull(), // completed, in_progress, queued, running, etc.
   conclusion: text("conclusion"), // success, failure, cancelled, etc.
   testsPassed: text("tests_passed"),
   testsFailed: text("tests_failed"),
   testsTotal: text("tests_total"),
   coveragePercent: text("coverage_percent"),
-  workflowUrl: text("workflow_url"),
+  pipelineUrl: text("pipeline_url"),
   artifactUrls: jsonb("artifact_urls"), // Links to test result artifacts
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -205,7 +206,7 @@ export const insertMigrationIterationSchema = createInsertSchema(migrationIterat
   pushedAt: true,
 });
 
-export const insertGithubActionsTestResultSchema = createInsertSchema(githubActionsTestResults).omit({
+export const insertCicdTestResultSchema = createInsertSchema(cicdTestResults).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -229,8 +230,8 @@ export type InsertAISettings = z.infer<typeof insertAISettingsSchema>;
 export type AISettings = typeof aiSettings.$inferSelect;
 export type InsertMigrationIteration = z.infer<typeof insertMigrationIterationSchema>;
 export type MigrationIteration = typeof migrationIterations.$inferSelect;
-export type InsertGithubActionsTestResult = z.infer<typeof insertGithubActionsTestResultSchema>;
-export type GithubActionsTestResult = typeof githubActionsTestResults.$inferSelect;
+export type InsertCicdTestResult = z.infer<typeof insertCicdTestResultSchema>;
+export type CicdTestResult = typeof cicdTestResults.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 

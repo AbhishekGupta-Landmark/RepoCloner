@@ -2811,8 +2811,8 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
     }
   });
 
-  // GitHub Actions test results endpoint
-  app.get("/api/github-actions/test-results/:repositoryId", async (req, res) => {
+  // CI/CD test results endpoint (supports GitHub Actions, GitLab CI/CD, etc.)
+  app.get("/api/cicd/test-results/:repositoryId", async (req, res) => {
     try {
       const { repositoryId } = req.params;
       
@@ -2821,17 +2821,21 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
         return res.status(404).json({ error: "Repository not found" });
       }
       
-      // Get cached test results
-      const cachedResults = await storage.getGithubActionsTestResultsByRepository(repositoryId);
-      res.json({ testResults: cachedResults });
+      // Get active account to determine provider
+      const activeAccount = getActiveAccount(req);
+      const provider = activeAccount?.provider || repository.provider;
+      
+      // Get cached test results (filter by provider if available)
+      const cachedResults = await storage.getCicdTestResultsByRepository(repositoryId, provider);
+      res.json({ testResults: cachedResults, provider });
     } catch (error: any) {
-      console.error("Failed to fetch GitHub Actions test results:", error);
+      console.error("Failed to fetch CI/CD test results:", error);
       res.status(500).json({ error: error.message || "Failed to fetch test results" });
     }
   });
   
-  // Refresh GitHub Actions test results for a repository
-  app.post("/api/github-actions/refresh/:repositoryId", async (req, res) => {
+  // Refresh CI/CD test results for a repository (supports GitHub Actions, GitLab CI/CD, etc.)
+  app.post("/api/cicd/refresh/:repositoryId", async (req, res) => {
     try {
       const { repositoryId } = req.params;
       
@@ -2846,63 +2850,126 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
         return res.status(401).json({ error: "No authenticated account found" });
       }
       
+      const provider = activeAccount.provider;
+      
       // Extract owner and repo from URL
       const targetUrl = (repository.clonedUrl && repository.clonedUrl.trim() !== '') 
         ? repository.clonedUrl 
         : repository.url;
-      const urlMatch = targetUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
-      if (!urlMatch) {
-        return res.status(400).json({ error: "Invalid GitHub repository URL" });
-      }
-      const [, owner, repoName] = urlMatch;
       
-      // Fetch workflow runs from GitHub
-      const { Octokit } = await import('@octokit/rest');
-      const octokit = new Octokit({ auth: activeAccount.accessToken });
+      let refreshedCount = 0;
       
-      const { data } = await octokit.actions.listWorkflowRunsForRepo({
-        owner,
-        repo: repoName,
-        per_page: 20,
-        status: 'completed'
-      });
-      
-      // Store/update test results
-      for (const run of data.workflow_runs) {
-        // Check if this run is already stored
-        const existing = await storage.getGithubActionsTestResultByWorkflowRunId(run.id.toString());
-        
-        if (existing) {
-          // Update existing record
-          await storage.updateGithubActionsTestResult(existing.id, {
-            status: run.status ?? 'unknown',
-            conclusion: run.conclusion ?? null,
-            workflowUrl: run.html_url
-          });
-        } else {
-          // Create new record
-          await storage.createGithubActionsTestResult({
-            repositoryId,
-            workflowRunId: run.id.toString(),
-            branchName: run.head_branch ?? 'unknown',
-            commitSha: run.head_sha,
-            status: run.status ?? 'unknown',
-            conclusion: run.conclusion ?? null,
-            workflowUrl: run.html_url,
-            testsPassed: null,
-            testsFailed: null,
-            testsTotal: null,
-            coveragePercent: null,
-            artifactUrls: null
-          });
+      if (provider === 'github') {
+        // GitHub Actions implementation
+        const urlMatch = targetUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+        if (!urlMatch) {
+          return res.status(400).json({ error: "Invalid GitHub repository URL" });
         }
+        const [, owner, repoName] = urlMatch;
+        
+        // Fetch workflow runs from GitHub
+        const { Octokit } = await import('@octokit/rest');
+        const octokit = new Octokit({ auth: activeAccount.accessToken });
+        
+        const { data } = await octokit.actions.listWorkflowRunsForRepo({
+          owner,
+          repo: repoName,
+          per_page: 20,
+          status: 'completed'
+        });
+        
+        // Store/update test results
+        for (const run of data.workflow_runs) {
+          const existing = await storage.getCicdTestResultByPipelineId(run.id.toString(), 'github');
+          
+          if (existing) {
+            await storage.updateCicdTestResult(existing.id, {
+              status: run.status ?? 'unknown',
+              conclusion: run.conclusion ?? null,
+              pipelineUrl: run.html_url
+            });
+          } else {
+            await storage.createCicdTestResult({
+              repositoryId,
+              provider: 'github',
+              pipelineId: run.id.toString(),
+              branchName: run.head_branch ?? 'unknown',
+              commitSha: run.head_sha,
+              status: run.status ?? 'unknown',
+              conclusion: run.conclusion ?? null,
+              pipelineUrl: run.html_url,
+              testsPassed: null,
+              testsFailed: null,
+              testsTotal: null,
+              coveragePercent: null,
+              artifactUrls: null
+            });
+          }
+        }
+        refreshedCount = data.workflow_runs.length;
+        
+      } else if (provider === 'gitlab') {
+        // GitLab CI/CD implementation
+        const urlMatch = targetUrl.match(/gitlab\.com[/:]([^/]+\/[^/]+)/);
+        if (!urlMatch) {
+          return res.status(400).json({ error: "Invalid GitLab repository URL" });
+        }
+        const projectPath = urlMatch[1].replace(/\.git$/, '');
+        const encodedPath = encodeURIComponent(projectPath);
+        
+        // Fetch pipelines from GitLab
+        const gitlabApiUrl = `https://gitlab.com/api/v4/projects/${encodedPath}/pipelines?per_page=20&status=success,failed,canceled`;
+        const gitlabResponse = await fetch(gitlabApiUrl, {
+          headers: {
+            'Authorization': `Bearer ${activeAccount.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!gitlabResponse.ok) {
+          throw new Error(`GitLab API error: ${gitlabResponse.statusText}`);
+        }
+        
+        const pipelines = await gitlabResponse.json();
+        
+        // Store/update test results
+        for (const pipeline of pipelines) {
+          const existing = await storage.getCicdTestResultByPipelineId(pipeline.id.toString(), 'gitlab');
+          
+          if (existing) {
+            await storage.updateCicdTestResult(existing.id, {
+              status: pipeline.status,
+              conclusion: pipeline.status === 'success' ? 'success' : pipeline.status === 'failed' ? 'failure' : 'cancelled',
+              pipelineUrl: pipeline.web_url
+            });
+          } else {
+            await storage.createCicdTestResult({
+              repositoryId,
+              provider: 'gitlab',
+              pipelineId: pipeline.id.toString(),
+              branchName: pipeline.ref ?? 'unknown',
+              commitSha: pipeline.sha,
+              status: pipeline.status,
+              conclusion: pipeline.status === 'success' ? 'success' : pipeline.status === 'failed' ? 'failure' : 'cancelled',
+              pipelineUrl: pipeline.web_url,
+              testsPassed: null,
+              testsFailed: null,
+              testsTotal: null,
+              coveragePercent: null,
+              artifactUrls: null
+            });
+          }
+        }
+        refreshedCount = pipelines.length;
+      } else {
+        return res.status(400).json({ error: `Provider ${provider} not supported for CI/CD test results` });
       }
       
       // Return updated results
-      const results = await storage.getGithubActionsTestResultsByRepository(repositoryId);
-      res.json({ testResults: results, refreshed: data.workflow_runs.length });
+      const results = await storage.getCicdTestResultsByRepository(repositoryId, provider);
+      res.json({ testResults: results, refreshed: refreshedCount, provider });
     } catch (error: any) {
-      console.error("Failed to refresh GitHub Actions test results:", error);
+      console.error("Failed to refresh CI/CD test results:", error);
       res.status(500).json({ error: error.message || "Failed to refresh test results" });
     }
   });

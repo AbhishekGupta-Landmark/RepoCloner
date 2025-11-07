@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Repository, type InsertRepository, type AnalysisReport, type InsertAnalysisReport, type OAuthConfig, type InsertOAuthConfig, type AISettings, type InsertAISettings, type MigrationIteration, type InsertMigrationIteration, type GithubActionsTestResult, type InsertGithubActionsTestResult } from "@shared/schema";
+import { type User, type InsertUser, type Repository, type InsertRepository, type AnalysisReport, type InsertAnalysisReport, type OAuthConfig, type InsertOAuthConfig, type AISettings, type InsertAISettings, type MigrationIteration, type InsertMigrationIteration, type CicdTestResult, type InsertCicdTestResult } from "@shared/schema";
 import { randomUUID } from "crypto";
 
 // modify the interface with any CRUD methods
@@ -43,11 +43,11 @@ export interface IStorage {
   getLatestIterationNumber(repositoryId: string, migrationType: string): Promise<number>;
   updateMigrationIterationStatus(id: string, status: string, pushedAt?: Date): Promise<MigrationIteration | undefined>;
   
-  // GitHub Actions test results methods
-  createGithubActionsTestResult(result: InsertGithubActionsTestResult): Promise<GithubActionsTestResult>;
-  getGithubActionsTestResultsByRepository(repositoryId: string): Promise<GithubActionsTestResult[]>;
-  getGithubActionsTestResultByWorkflowRunId(workflowRunId: string): Promise<GithubActionsTestResult | undefined>;
-  updateGithubActionsTestResult(id: string, updates: Partial<InsertGithubActionsTestResult>): Promise<GithubActionsTestResult | undefined>;
+  // CI/CD test results methods (GitHub Actions, GitLab CI/CD, etc.)
+  createCicdTestResult(result: InsertCicdTestResult): Promise<CicdTestResult>;
+  getCicdTestResultsByRepository(repositoryId: string, provider?: string): Promise<CicdTestResult[]>;
+  getCicdTestResultByPipelineId(pipelineId: string, provider: string): Promise<CicdTestResult | undefined>;
+  updateCicdTestResult(id: string, updates: Partial<InsertCicdTestResult>): Promise<CicdTestResult | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -57,7 +57,7 @@ export class MemStorage implements IStorage {
   private oauthConfigs: Map<string, OAuthConfig>;
   private aiSettings: AISettings | undefined;
   private migrationIterations: Map<string, MigrationIteration>;
-  private githubActionsTestResults: Map<string, GithubActionsTestResult>;
+  private cicdTestResults: Map<string, CicdTestResult>;
 
   constructor() {
     this.users = new Map();
@@ -66,7 +66,7 @@ export class MemStorage implements IStorage {
     this.oauthConfigs = new Map();
     this.aiSettings = undefined;
     this.migrationIterations = new Map();
-    this.githubActionsTestResults = new Map();
+    this.cicdTestResults = new Map();
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -402,6 +402,7 @@ export class MemStorage implements IStorage {
       pushedAt: null,
       oldCoverage: insertIteration.oldCoverage ?? null,
       newCoverage: insertIteration.newCoverage ?? null,
+      status: insertIteration.status ?? 'pending',
     };
     this.migrationIterations.set(id, iteration);
     return iteration;
@@ -449,49 +450,57 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
-  async createGithubActionsTestResult(insertResult: InsertGithubActionsTestResult): Promise<GithubActionsTestResult> {
+  async createCicdTestResult(insertResult: InsertCicdTestResult): Promise<CicdTestResult> {
     const id = randomUUID();
-    const result: GithubActionsTestResult = {
-      ...insertResult,
+    const result: CicdTestResult = {
       id,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      repositoryId: insertResult.repositoryId ?? null,
+      provider: insertResult.provider,
+      pipelineId: insertResult.pipelineId,
+      branchName: insertResult.branchName,
+      commitSha: insertResult.commitSha,
+      status: insertResult.status,
       conclusion: insertResult.conclusion ?? null,
       testsPassed: insertResult.testsPassed ?? null,
       testsFailed: insertResult.testsFailed ?? null,
       testsTotal: insertResult.testsTotal ?? null,
       coveragePercent: insertResult.coveragePercent ?? null,
-      workflowUrl: insertResult.workflowUrl ?? null,
+      pipelineUrl: insertResult.pipelineUrl ?? null,
       artifactUrls: insertResult.artifactUrls ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
-    this.githubActionsTestResults.set(id, result);
+    this.cicdTestResults.set(id, result);
     return result;
   }
 
-  async getGithubActionsTestResultsByRepository(repositoryId: string): Promise<GithubActionsTestResult[]> {
-    return Array.from(this.githubActionsTestResults.values())
-      .filter(result => result.repositoryId === repositoryId)
+  async getCicdTestResultsByRepository(repositoryId: string, provider?: string): Promise<CicdTestResult[]> {
+    return Array.from(this.cicdTestResults.values())
+      .filter(result => 
+        result.repositoryId === repositoryId && 
+        (!provider || result.provider === provider)
+      )
       .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
   }
 
-  async getGithubActionsTestResultByWorkflowRunId(workflowRunId: string): Promise<GithubActionsTestResult | undefined> {
-    return Array.from(this.githubActionsTestResults.values())
-      .find(result => result.workflowRunId === workflowRunId);
+  async getCicdTestResultByPipelineId(pipelineId: string, provider: string): Promise<CicdTestResult | undefined> {
+    return Array.from(this.cicdTestResults.values())
+      .find(result => result.pipelineId === pipelineId && result.provider === provider);
   }
 
-  async updateGithubActionsTestResult(id: string, updates: Partial<InsertGithubActionsTestResult>): Promise<GithubActionsTestResult | undefined> {
-    const existing = this.githubActionsTestResults.get(id);
+  async updateCicdTestResult(id: string, updates: Partial<InsertCicdTestResult>): Promise<CicdTestResult | undefined> {
+    const existing = this.cicdTestResults.get(id);
     if (!existing) {
       return undefined;
     }
     
-    const updated: GithubActionsTestResult = {
+    const updated: CicdTestResult = {
       ...existing,
       ...updates,
       updatedAt: new Date()
     };
     
-    this.githubActionsTestResults.set(id, updated);
+    this.cicdTestResults.set(id, updated);
     return updated;
   }
 }

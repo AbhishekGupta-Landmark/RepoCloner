@@ -13,7 +13,7 @@ import RepositoryInput from "@/components/RepositoryInput";
 import TechnologyShowcase from "@/components/TechnologyShowcase";
 import TestCoveragePanel from "@/components/TestCoveragePanel";
 import CodeMigrationPanel from "@/components/CodeMigrationPanel";
-import GitHubActionsPanel from "@/components/GitHubActionsPanel";
+import CicdTestResultsPanel from "@/components/CicdTestResultsPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppContext } from "@/context/AppContext";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -627,14 +627,14 @@ export default function MainPage() {
                           )}
                         </TabsTrigger>
                         <TabsTrigger 
-                          value="github-actions" 
+                          value="cicd-tests" 
                           disabled={!currentRepository}
                           className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden ${
                             !currentRepository 
                               ? 'opacity-50 cursor-not-allowed' 
                               : 'hover:bg-blue-500/10 hover:text-blue-500'
                           }`}
-                          data-testid="tab-github-actions"
+                          data-testid="tab-cicd-tests"
                         >
                           <motion.div
                             whileHover={currentRepository ? { scale: 1.1, rotate: 5 } : {}}
@@ -642,8 +642,8 @@ export default function MainPage() {
                           >
                             <FlaskConical className="h-4 w-4" />
                           </motion.div>
-                          GitHub Actions Tests
-                          {activeTab === "github-actions" && (
+                          {activeAccount?.provider === 'gitlab' ? 'GitLab CI/CD Tests' : activeAccount?.provider === 'azure' ? 'Azure Pipelines Tests' : 'GitHub Actions Tests'}
+                          {activeTab === "cicd-tests" && (
                             <motion.div
                               className="absolute inset-0 bg-primary/5 -z-10"
                               layoutId="activeMainTab"
@@ -707,8 +707,8 @@ export default function MainPage() {
                             <ReportsPanel />
                           </TabsContent>
                           
-                          <TabsContent value="github-actions" className="h-full m-0 overflow-y-auto p-4">
-                            {currentRepository && <GitHubActionsPanel repositoryId={currentRepository.id} />}
+                          <TabsContent value="cicd-tests" className="h-full m-0 overflow-y-auto p-4">
+                            {currentRepository && <CicdTestResultsPanel repositoryId={currentRepository.id} />}
                           </TabsContent>
                           
                           <TabsContent value="logs" className="h-full m-0">
