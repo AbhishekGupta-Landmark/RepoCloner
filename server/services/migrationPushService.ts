@@ -54,6 +54,9 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
   try {
     // Write changed files to repository directory (migrated code)
     const filesList: string[] = [];
+    if (!repository.localPath) {
+      throw new Error('Repository local path is not set');
+    }
     for (const [filePath, content] of Object.entries(changes)) {
       const fullPath = path.join(repository.localPath, filePath);
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
@@ -71,15 +74,15 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
     const reports = await storage.getAnalysisReportsByRepository(repository.id);
     const testCoverageReport = reports.find(r => r.analysisType === 'test-coverage');
     
-    if (testCoverageReport?.structuredData?.fileReports) {
+    if (testCoverageReport?.structuredData && 'fileReports' in testCoverageReport.structuredData) {
       console.log('📝 Extracting generated test files from test coverage report...');
       
-      const fileReports = testCoverageReport.structuredData.fileReports;
+      const fileReports = (testCoverageReport.structuredData as any).fileReports;
       
       // Detect existing test folder structure
       let testFolder = 'Test'; // Default
       try {
-        const repoContents = await fs.readdir(repository.localPath, { withFileTypes: true });
+        const repoContents = await fs.readdir(repository.localPath!, { withFileTypes: true });
         const testDirs = repoContents.filter(entry => 
           entry.isDirectory() && 
           (entry.name.toLowerCase() === 'test' || 
@@ -104,7 +107,7 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
           const testFilePath = path.join(testFolder, `${baseName}Tests${path.extname(sourceFile)}`);
           
           // Write the generated test file
-          const fullTestPath = path.join(repository.localPath, testFilePath);
+          const fullTestPath = path.join(repository.localPath!, testFilePath);
           await fs.mkdir(path.dirname(fullTestPath), { recursive: true });
           
           // CRITICAL FIX: Write in binary mode to preserve line endings from generated tests
@@ -126,7 +129,7 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
     // Always include GitHub Actions workflow file for CI/CD tests
     const workflowFilePath = '.github/workflows/dotnet-tests.yml';
     const workflowSourcePath = path.join(process.cwd(), workflowFilePath);
-    const workflowDestPath = path.join(repository.localPath, workflowFilePath);
+    const workflowDestPath = path.join(repository.localPath!, workflowFilePath);
     
     try {
       // Check if workflow file exists in source (this repo)
@@ -151,7 +154,7 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
     if (isGitHub) {
       const { GitHubPusher } = await import('../scripts/pushSpecificFiles.js');
       const pusher = new GitHubPusher(accessToken, owner, repoName);
-      await pusher.pushSpecificFiles(branchName, commitMessage, filesList, repository.localPath);
+      await pusher.pushSpecificFiles(branchName, commitMessage, filesList, repository.localPath!);
       
       console.log(`🎉 Successfully pushed ${filesList.length} files to GitHub branch: ${branchName}`);
       
@@ -181,7 +184,7 @@ ${commitMessage}
     } else {
       const { GitLabPusher } = await import('../scripts/pushSpecificFilesGitLab.js');
       const pusher = new GitLabPusher(accessToken, projectPath);
-      await pusher.pushSpecificFiles(branchName, commitMessage, filesList, repository.localPath);
+      await pusher.pushSpecificFiles(branchName, commitMessage, filesList, repository.localPath!);
       
       console.log(`🎉 Successfully pushed ${filesList.length} files to GitLab branch: ${branchName}`);
       
