@@ -103,35 +103,14 @@ export default function TestCoveragePanel() {
     <div className="space-y-6" data-testid="test-coverage-panel">
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <CardTitle className="flex items-center gap-2">
-                <FileCode className="h-5 w-5" />
-                Initial Test Coverage & Validation
-              </CardTitle>
-              <CardDescription>
-                AI-powered comprehensive test coverage analysis for your codebase.
-                Identifies missing tests, generates test cases, and provides coverage metrics.
-              </CardDescription>
-            </div>
-            {latestTestCoverageReport && (
-              <Button
-                onClick={() => {
-                  unlockTab('code-analysis');
-                  switchToTab('analysis');
-                  toast({
-                    title: "Code Analysis Unlocked",
-                    description: "Navigating to Code Analysis tab",
-                  });
-                }}
-                className="flex items-center gap-2 ml-auto"
-                data-testid="button-goto-code-analysis"
-              >
-                Go to Code Analysis
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
+          <CardTitle className="flex items-center gap-2">
+            <FileCode className="h-5 w-5" />
+            Initial Test Coverage & Validation
+          </CardTitle>
+          <CardDescription>
+            AI-powered comprehensive test coverage analysis for your codebase.
+            Identifies missing tests, generates test cases, and provides coverage metrics.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-4">
@@ -153,6 +132,24 @@ export default function TestCoveragePanel() {
                 </>
               )}
             </Button>
+            
+            {latestTestCoverageReport && (
+              <Button
+                onClick={() => {
+                  unlockTab('code-analysis');
+                  switchToTab('analysis');
+                  toast({
+                    title: "Code Analysis Unlocked",
+                    description: "Navigating to Code Analysis tab",
+                  });
+                }}
+                className="flex items-center gap-2 ml-auto"
+                data-testid="button-goto-code-analysis"
+              >
+                Go to Code Analysis
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            )}
           </div>
 
           {runAnalysisMutation.isError && (
