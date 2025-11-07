@@ -43,7 +43,7 @@ export default function CicdTestResultsPanel({ repositoryId, provider }: CicdTes
   // Refresh test results mutation
   const refreshMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest(`/api/cicd/refresh/${repositoryId}`, 'POST');
+      return await apiRequest('POST', `/api/cicd/refresh/${repositoryId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/cicd/test-results/${repositoryId}`] });
