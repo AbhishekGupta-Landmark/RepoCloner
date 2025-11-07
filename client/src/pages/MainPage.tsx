@@ -585,7 +585,12 @@ export default function MainPage() {
                         </TabsTrigger>
                         <TabsTrigger 
                           value="migration" 
-                          className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden hover:bg-amber-500/10 hover:text-amber-500`}
+                          disabled={!isTabUnlocked('code-migration')}
+                          className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden ${
+                            !isTabUnlocked('code-migration')
+                              ? 'opacity-50 cursor-not-allowed' 
+                              : 'hover:bg-amber-500/10 hover:text-amber-500'
+                          }`}
                           data-testid="tab-migration"
                         >
                           <motion.div
