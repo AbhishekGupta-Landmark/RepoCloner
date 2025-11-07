@@ -27,10 +27,11 @@ export default function RepositoryInput() {
   const { toast } = useToast();
 
   // Auto-check "Clone in Personal Account" when user is authenticated with GitHub or GitLab
+  // Clear it when switching to other providers
   useEffect(() => {
     if (isAuthenticated && (selectedProvider === 'github' || selectedProvider === 'gitlab')) {
       setCloneOptions(prev => ({ ...prev, personalAccount: true }));
-    } else if (!isAuthenticated) {
+    } else {
       setCloneOptions(prev => ({ ...prev, personalAccount: false }));
     }
   }, [isAuthenticated, selectedProvider]);
