@@ -110,7 +110,9 @@ export default function AnalysisPanel() {
     if (!selectedAnalysisTypeId && analysisTypes.length > 0 && currentRepository) {
       // Default to Quick Migration Analysis if available, otherwise first type
       const defaultType = analysisTypes.find(t => t.id === 'quick-migration-1') || analysisTypes[0];
-      setSelectedAnalysisTypeId(defaultType.id);
+      if (defaultType) {
+        setSelectedAnalysisTypeId(defaultType.id);
+      }
     }
   }, [analysisTypes, currentRepository, selectedAnalysisTypeId]);
   
