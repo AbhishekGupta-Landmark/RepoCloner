@@ -145,8 +145,7 @@ export default function AnalysisPanel() {
       <div className="p-4 border-b border-border">
         <h2 className="text-lg font-semibold text-foreground mb-4">AI Code Analysis</h2>
         
-        {/* Horizontal button layout: Analyze Code (left) + Proceed to Migration (right, only when complete) */}
-        <div className="flex items-center justify-between gap-4 mb-4">
+        <div className="mb-4">
           <Button 
             onClick={handleAnalysis}
             disabled={
@@ -211,25 +210,6 @@ export default function AnalysisPanel() {
               />
             )}
           </Button>
-          
-          {/* Proceed to Migration button - only show when analysis complete */}
-          {hasExistingReport && (
-            <Button
-              onClick={() => {
-                unlockTab('code-migration');
-                switchToTab('migration');
-                toast({
-                  title: "Code Migration Unlocked",
-                  description: "Navigating to Code Migration tab",
-                });
-              }}
-              className="flex items-center gap-2"
-              data-testid="button-proceed-to-migration"
-            >
-              Proceed to Code Migration
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          )}
         </div>
         
         <div className="flex gap-4">
@@ -329,6 +309,47 @@ export default function AnalysisPanel() {
                 </CollapsibleContent>
               </Card>
             </Collapsible>
+          </motion.div>
+        )}
+        
+        {/* Analysis Complete Banner - Show when report exists */}
+        {hasExistingReport && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mt-4"
+          >
+            <Card className="bg-primary/10 border-primary/20">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-start gap-3 flex-1">
+                    <Sparkles className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                    <div>
+                      <h3 className="font-semibold text-foreground mb-1">Analysis Complete!</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Your migration analysis is ready. Review the insights above, and when you're satisfied, proceed to the Code Migration tab where you can review AI-generated changes, modify them if needed, and push approved updates to your Git repository.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      unlockTab('code-migration');
+                      switchToTab('migration');
+                      toast({
+                        title: "Code Migration Unlocked",
+                        description: "Navigating to Code Migration tab",
+                      });
+                    }}
+                    className="flex items-center gap-2 flex-shrink-0"
+                    data-testid="button-proceed-to-migration"
+                  >
+                    Proceed to Code Migration
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </motion.div>
         )}
       </div>
