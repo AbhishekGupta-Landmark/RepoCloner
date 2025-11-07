@@ -118,7 +118,7 @@ export default function TestCoveragePanel() {
               <Button
                 onClick={() => {
                   unlockTab('code-analysis');
-                  switchToTab('code-analysis');
+                  switchToTab('analysis');
                   toast({
                     title: "Code Analysis Unlocked",
                     description: "Navigating to Code Analysis tab",

@@ -111,10 +111,11 @@ export default function AnalysisPanel() {
       // Default to Quick Migration Analysis if available, otherwise first type
       const defaultType = analysisTypes.find(t => t.id === 'quick-migration-1') || analysisTypes[0];
       if (defaultType) {
+        console.log('[AnalysisPanel] Auto-selecting analysis type:', defaultType.id);
         setSelectedAnalysisTypeId(defaultType.id);
       }
     }
-  }, [analysisTypes, currentRepository, selectedAnalysisTypeId]);
+  }, [analysisTypes, currentRepository]);
   
   const handleAnalysisTypeChange = (typeId: string) => {
     setSelectedAnalysisTypeId(typeId);
@@ -373,7 +374,7 @@ export default function AnalysisPanel() {
                 <Button
                   onClick={() => {
                     unlockTab('code-migration');
-                    switchToTab('code-migration');
+                    switchToTab('migration');
                     toast({
                       title: "Code Migration Unlocked",
                       description: "Navigating to Code Migration tab",
