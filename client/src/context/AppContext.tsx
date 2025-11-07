@@ -43,6 +43,8 @@ interface AppContextType {
   lastExpandedWidth: number;
   setLastExpandedWidth: (width: number) => void;
   handleToggleRepoPanel: (getCurrentSize?: () => number) => void;
+  hasPushedSuccessfully: boolean;
+  setHasPushedSuccessfully: (pushed: boolean) => void;
 }
 
 interface RepositoriesResponse {
@@ -84,6 +86,18 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   });
 
+  // Push success state with localStorage persistence (per repository)
+  const [hasPushedSuccessfully, setHasPushedSuccessfullyState] = useState<boolean>(() => {
+    try {
+      if (!currentRepository?.id) return false;
+      const savedState = localStorage.getItem(`git-analyzer-push-success-${currentRepository.id}`);
+      return savedState ? JSON.parse(savedState) : false;
+    } catch (error) {
+      console.warn('Failed to parse localStorage data for hasPushedSuccessfully:', error);
+      return false;
+    }
+  });
+
   // Toggle repository panel visibility
   const toggleRepoPanel = () => {
     setShowRepoPanel(prev => {
@@ -102,6 +116,19 @@ export function AppProvider({ children }: AppProviderProps) {
       localStorage.setItem('git-analyzer-last-expanded-width', validWidth.toString());
     } catch (error) {
       console.warn('Failed to save lastExpandedWidth to localStorage:', error);
+    }
+  };
+
+  // Set push success state with localStorage persistence (per repository)
+  const setHasPushedSuccessfully = (pushed: boolean) => {
+    setHasPushedSuccessfullyState(pushed);
+    if (currentRepository?.id) {
+      try {
+        localStorage.setItem(`git-analyzer-push-success-${currentRepository.id}`, JSON.stringify(pushed));
+        logService.addLog('INFO', `Git push success state set to: ${pushed}`, 'AppContext');
+      } catch (error) {
+        console.warn('Failed to save hasPushedSuccessfully to localStorage:', error);
+      }
     }
   };
 
@@ -175,8 +202,17 @@ export function AppProvider({ children }: AppProviderProps) {
   useEffect(() => {
     if (currentRepository?.id) {
       refreshRepositoryStatus(currentRepository.id);
+      // Load push success state from localStorage for this repository
+      try {
+        const savedState = localStorage.getItem(`git-analyzer-push-success-${currentRepository.id}`);
+        setHasPushedSuccessfullyState(savedState ? JSON.parse(savedState) : false);
+      } catch (error) {
+        console.warn('Failed to load push success state:', error);
+        setHasPushedSuccessfullyState(false);
+      }
     } else {
       setRepositoryStatus(null);
+      setHasPushedSuccessfullyState(false);
     }
     // Reset migration access when repository changes (clear all accessed reports)
     setAccessedReports(new Set());
@@ -302,7 +338,9 @@ export function AppProvider({ children }: AppProviderProps) {
     toggleRepoPanel,
     lastExpandedWidth,
     setLastExpandedWidth,
-    handleToggleRepoPanel
+    handleToggleRepoPanel,
+    hasPushedSuccessfully,
+    setHasPushedSuccessfully
   };
 
   return (
@@ -340,7 +378,9 @@ export const useAppContext = () => {
       toggleRepoPanel: () => {},
       lastExpandedWidth: 22,
       setLastExpandedWidth: () => {},
-      handleToggleRepoPanel: () => {}
+      handleToggleRepoPanel: () => {},
+      hasPushedSuccessfully: false,
+      setHasPushedSuccessfully: () => {}
     };
     
     if (import.meta.env.DEV) {

@@ -79,7 +79,7 @@ const constructGitHubBranchUrl = (repositoryUrl: string, branchName: string): st
 };
 
 export default function CodeMigrationPanel() {
-  const { currentRepository } = useAppContext();
+  const { currentRepository, setHasPushedSuccessfully } = useAppContext();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [editMode, setEditMode] = useState(false);
@@ -128,6 +128,9 @@ export default function CodeMigrationPanel() {
         branchUrl,
         prUrl
       });
+      
+      // Set push success flag in AppContext (enables CI/CD Tests tab)
+      setHasPushedSuccessfully(true);
       
       toast({
         title: "✅ Migration Approved!",

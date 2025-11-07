@@ -74,7 +74,8 @@ export default function MainPage() {
     setLastExpandedWidth, 
     handleToggleRepoPanel,
     isCodeAnalysisEnabled,
-    hasMigrationAccess
+    hasMigrationAccess,
+    hasPushedSuccessfully
   } = useAppContext();
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
@@ -607,6 +608,31 @@ export default function MainPage() {
                           )}
                         </TabsTrigger>
                         <TabsTrigger 
+                          value="cicd-tests" 
+                          disabled={!currentRepository || !hasPushedSuccessfully}
+                          className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden ${
+                            !currentRepository || !hasPushedSuccessfully
+                              ? 'opacity-50 cursor-not-allowed' 
+                              : 'hover:bg-blue-500/10 hover:text-blue-500'
+                          }`}
+                          data-testid="tab-cicd-tests"
+                        >
+                          <motion.div
+                            whileHover={currentRepository && hasPushedSuccessfully ? { scale: 1.1, rotate: 5 } : {}}
+                            transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                          >
+                            <FlaskConical className="h-4 w-4" />
+                          </motion.div>
+                          {activeAccount?.provider === 'gitlab' ? 'GitLab CI/CD Tests' : activeAccount?.provider === 'azure' ? 'Azure Pipelines Tests' : 'GitHub Actions Tests'}
+                          {activeTab === "cicd-tests" && (
+                            <motion.div
+                              className="absolute inset-0 bg-primary/5 -z-10"
+                              layoutId="activeMainTab"
+                              transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                            />
+                          )}
+                        </TabsTrigger>
+                        <TabsTrigger 
                           value="reports" 
                           className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth hover:bg-green-500/10 hover:text-green-500 relative overflow-hidden"
                           data-testid="tab-reports"
@@ -619,31 +645,6 @@ export default function MainPage() {
                           </motion.div>
                           Reports
                           {activeTab === "reports" && (
-                            <motion.div
-                              className="absolute inset-0 bg-primary/5 -z-10"
-                              layoutId="activeMainTab"
-                              transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                            />
-                          )}
-                        </TabsTrigger>
-                        <TabsTrigger 
-                          value="cicd-tests" 
-                          disabled={!currentRepository}
-                          className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden ${
-                            !currentRepository 
-                              ? 'opacity-50 cursor-not-allowed' 
-                              : 'hover:bg-blue-500/10 hover:text-blue-500'
-                          }`}
-                          data-testid="tab-cicd-tests"
-                        >
-                          <motion.div
-                            whileHover={currentRepository ? { scale: 1.1, rotate: 5 } : {}}
-                            transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                          >
-                            <FlaskConical className="h-4 w-4" />
-                          </motion.div>
-                          {activeAccount?.provider === 'gitlab' ? 'GitLab CI/CD Tests' : activeAccount?.provider === 'azure' ? 'Azure Pipelines Tests' : 'GitHub Actions Tests'}
-                          {activeTab === "cicd-tests" && (
                             <motion.div
                               className="absolute inset-0 bg-primary/5 -z-10"
                               layoutId="activeMainTab"
@@ -703,12 +704,12 @@ export default function MainPage() {
                             <CodeMigrationPanel />
                           </TabsContent>
                           
-                          <TabsContent value="reports" className="h-full m-0">
-                            <ReportsPanel />
+                          <TabsContent value="cicd-tests" className="h-full m-0 overflow-y-auto p-4">
+                            {currentRepository && hasPushedSuccessfully && <CicdTestResultsPanel repositoryId={currentRepository.id} />}
                           </TabsContent>
                           
-                          <TabsContent value="cicd-tests" className="h-full m-0 overflow-y-auto p-4">
-                            {currentRepository && <CicdTestResultsPanel repositoryId={currentRepository.id} />}
+                          <TabsContent value="reports" className="h-full m-0">
+                            <ReportsPanel />
                           </TabsContent>
                           
                           <TabsContent value="logs" className="h-full m-0">
