@@ -124,7 +124,7 @@ export default function TestCoveragePanel() {
                     description: "Navigating to Code Analysis tab",
                   });
                 }}
-                className="flex items-center gap-2 ml-4"
+                className="flex items-center gap-2 ml-auto"
                 data-testid="button-goto-code-analysis"
               >
                 Go to Code Analysis
