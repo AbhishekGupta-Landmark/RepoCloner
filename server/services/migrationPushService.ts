@@ -160,6 +160,14 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
       }
     }
     
+    // Validate and fix NuGet package versions before pushing
+    try {
+      const { validateAndFixNuGetPackages } = await import('../utils/nugetValidator.js');
+      await validateAndFixNuGetPackages(repository.localPath!);
+    } catch (validationError) {
+      console.warn(`⚠️ NuGet validation skipped: ${validationError}`);
+    }
+    
     // Use appropriate pusher based on provider
     let prUrl: string | undefined;
     
