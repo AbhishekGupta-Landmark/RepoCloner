@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,7 @@ interface CicdTestResultsPanelProps {
 
 export default function CicdTestResultsPanel({ repositoryId, provider }: CicdTestResultsPanelProps) {
   const { toast } = useToast();
+  const [hasAutoFetched, setHasAutoFetched] = useState(false);
 
   // Fetch test results
   const { data, isLoading } = useQuery<{ testResults: CicdTestResult[], provider: string }>({
@@ -63,6 +64,24 @@ export default function CicdTestResultsPanel({ repositoryId, provider }: CicdTes
   const handleRefresh = () => {
     refreshMutation.mutate();
   };
+
+  // Reset auto-fetch flag when repository changes
+  useEffect(() => {
+    setHasAutoFetched(false);
+  }, [repositoryId]);
+
+  // Auto-fetch CI/CD results when panel first loads
+  useEffect(() => {
+    if (repositoryId && !hasAutoFetched && !isLoading) {
+      // Wait a bit for the repository to be set up, then auto-fetch
+      const timer = setTimeout(() => {
+        refreshMutation.mutate();
+        setHasAutoFetched(true);
+      }, 2000); // 2 second delay to allow push operations to complete
+      
+      return () => clearTimeout(timer);
+    }
+  }, [repositoryId, hasAutoFetched, isLoading]);
 
   const getConclusionBadge = (conclusion: string | null) => {
     switch (conclusion) {

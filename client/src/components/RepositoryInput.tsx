@@ -18,7 +18,7 @@ export default function RepositoryInput() {
   const [repoUrl, setRepoUrl] = useState("");
   const [cloneOptions, setCloneOptions] = useState({
     mirror: true,
-    personalAccount: true
+    personalAccount: false
   });
 
   const { cloneRepository, isLoading } = useCloning();
@@ -228,12 +228,11 @@ export default function RepositoryInput() {
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="personal"
-                      checked={isAuthenticated ? true : false}
-                      onCheckedChange={(checked) => {
-                        // When authenticated, always keep it checked (disabled)
-                        // When not authenticated, do nothing
-                      }}
-                      disabled={true}
+                      checked={cloneOptions.personalAccount}
+                      onCheckedChange={(checked) => 
+                        setCloneOptions(prev => ({ ...prev, personalAccount: !!checked }))
+                      }
+                      disabled={!isAuthenticated}
                       data-testid="checkbox-personal-account"
                     />
                     <Label htmlFor="personal" className={`text-sm flex items-center gap-2 ${!isAuthenticated ? 'text-muted-foreground' : ''}`}>
@@ -244,8 +243,8 @@ export default function RepositoryInput() {
                 </TooltipTrigger>
                 <TooltipContent>
                   {isAuthenticated 
-                    ? `Always enabled when authenticated. Creates a fork in ${user?.username}'s ${user?.provider} account so you can push migration changes.`
-                    : "Sign in with GitHub to enable. Required for pushing migration changes to repositories."
+                    ? `Optional: Creates a copy in ${user?.username}'s ${user?.provider} account so you can push migration changes. Uncheck for read-only analysis.`
+                    : "Sign in with your Git provider to enable. Required for pushing migration changes to repositories."
                   }
                 </TooltipContent>
               </Tooltip>

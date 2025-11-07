@@ -75,7 +75,8 @@ export default function MainPage() {
     handleToggleRepoPanel,
     isCodeAnalysisEnabled,
     hasMigrationAccess,
-    hasPushedSuccessfully
+    hasPushedSuccessfully,
+    isTabUnlocked
   } = useAppContext();
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
@@ -534,9 +535,9 @@ export default function MainPage() {
                         </TabsTrigger>
                         <TabsTrigger 
                           value="test-coverage" 
-                          disabled={!currentRepository}
+                          disabled={!isTabUnlocked('test-coverage')}
                           className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden ${
-                            !currentRepository 
+                            !isTabUnlocked('test-coverage') 
                               ? 'opacity-50 cursor-not-allowed' 
                               : 'hover:bg-purple-500/10 hover:text-purple-500'
                           }`}
@@ -559,9 +560,9 @@ export default function MainPage() {
                         </TabsTrigger>
                         <TabsTrigger 
                           value="analysis" 
-                          disabled={!isCodeAnalysisEnabled}
+                          disabled={!isTabUnlocked('code-analysis')}
                           className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden ${
-                            !isCodeAnalysisEnabled 
+                            !isTabUnlocked('code-analysis') 
                               ? 'opacity-50 cursor-not-allowed' 
                               : 'hover:bg-blue-500/10 hover:text-blue-500'
                           }`}
@@ -584,9 +585,9 @@ export default function MainPage() {
                         </TabsTrigger>
                         <TabsTrigger 
                           value="migration" 
-                          disabled={!isCodeAnalysisEnabled || !hasMigrationAccess}
+                          disabled={!isTabUnlocked('code-migration')}
                           className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden ${
-                            !isCodeAnalysisEnabled || !hasMigrationAccess
+                            !isTabUnlocked('code-migration')
                               ? 'opacity-50 cursor-not-allowed' 
                               : 'hover:bg-amber-500/10 hover:text-amber-500'
                           }`}
@@ -609,9 +610,9 @@ export default function MainPage() {
                         </TabsTrigger>
                         <TabsTrigger 
                           value="cicd-tests" 
-                          disabled={!currentRepository || !hasPushedSuccessfully}
+                          disabled={!isTabUnlocked('cicd-tests')}
                           className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden ${
-                            !currentRepository || !hasPushedSuccessfully
+                            !isTabUnlocked('cicd-tests')
                               ? 'opacity-50 cursor-not-allowed' 
                               : 'hover:bg-blue-500/10 hover:text-blue-500'
                           }`}
@@ -623,7 +624,7 @@ export default function MainPage() {
                           >
                             <FlaskConical className="h-4 w-4" />
                           </motion.div>
-                          {activeAccount?.provider === 'gitlab' ? 'GitLab CI/CD Tests' : activeAccount?.provider === 'azure' ? 'Azure Pipelines Tests' : 'GitHub Actions Tests'}
+                          CI/CD Tests
                           {activeTab === "cicd-tests" && (
                             <motion.div
                               className="absolute inset-0 bg-primary/5 -z-10"

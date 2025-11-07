@@ -1130,37 +1130,25 @@ export async function registerRoutes(app: Application): Promise<Server> {
         return res.status(400).json({ error: "Provider not implemented" });
       }
 
-      // Handle personal account creation for GitHub
+      // Handle personal account creation with cross-platform support
       if (options?.personalAccount) {
         const activeAccount = getActiveAccount(req);
         
-        if (!activeAccount || activeAccount.provider !== 'github') {
-          broadcastLog('ERROR', 'Personal account creation requires GitHub authentication');
+        if (!activeAccount) {
+          broadcastLog('ERROR', 'Personal account creation requires authentication');
           return res.status(401).json({ 
-            error: "Personal account creation requires GitHub authentication. Please sign in with GitHub." 
+            error: "Personal account creation requires authentication. Please sign in with your Git provider." 
           });
         }
         
-        broadcastLog('INFO', '🚀 Personal account repository creation requested');
-
-        // Import GitHub service
-        const { githubService } = await import('./services/githubService');
+        const sourceProvider = provider; // Where we're cloning FROM
+        const destProvider = activeAccount.provider; // Where we're pushing TO
         
-        // Create repository in user's personal account
-        broadcastLog('INFO', `Creating repository in ${activeAccount.username}'s GitHub account`);
-        const createResult = await githubService.createRepositoryInPersonalAccount(
-          activeAccount.accessToken,
-          url
-        );
+        broadcastLog('INFO', `🚀 Cross-platform clone requested: ${sourceProvider} → ${destProvider}`);
         
-        if (!createResult.success) {
-          broadcastLog('ERROR', `Failed to create personal repository: ${createResult.error}`);
-          return res.status(500).json({ error: createResult.error });
-        }
-
-        // STEP 1: Clone source repository for analysis (regular clone)
-        broadcastLog('INFO', 'Cloning source repository for technology detection...');
-        const analysisCloneResult = await gitProviders[provider].cloneRepository(url, { mirror: false });
+        // STEP 1: Clone source repository for analysis (works for any source provider)
+        broadcastLog('INFO', `Cloning ${sourceProvider} repository for technology detection...`);
+        const analysisCloneResult = await gitProviders[sourceProvider].cloneRepository(url, { mirror: false });
         
         if (!analysisCloneResult.success) {
           broadcastLog('ERROR', `Analysis repository clone failed: ${analysisCloneResult.error}`);
@@ -1169,22 +1157,53 @@ export async function registerRoutes(app: Application): Promise<Server> {
 
         // Get file structure and detect technologies from regular clone
         broadcastLog('INFO', 'Analyzing file structure and detecting technologies...');
-        const fileStructure = await gitProviders[provider].getFileStructure(analysisCloneResult.localPath!);
+        const fileStructure = await gitProviders[sourceProvider].getFileStructure(analysisCloneResult.localPath!);
         const detectedTechnologies = await enhancedTechnologyDetectionService.detectTechnologies(analysisCloneResult.localPath!);
         broadcastLog('INFO', `Technology detection completed. Found ${detectedTechnologies.length} technologies`);
 
-        // STEP 2: Clone source repository for pushing (mirror clone)
+        // STEP 2: Create repository in destination account based on destProvider
+        let createResult: any;
+        let destService: any;
+        
+        if (destProvider === 'github') {
+          const { githubService } = await import('./services/githubService');
+          destService = githubService;
+          broadcastLog('INFO', `Creating repository in ${activeAccount.username}'s GitHub account`);
+          createResult = await githubService.createRepositoryInPersonalAccount(
+            activeAccount.accessToken,
+            url
+          );
+        } else if (destProvider === 'gitlab') {
+          const { gitlabService } = await import('./services/gitlabService');
+          destService = gitlabService;
+          broadcastLog('INFO', `Creating repository in ${activeAccount.username}'s GitLab account`);
+          createResult = await gitlabService.createRepositoryInPersonalAccount(
+            activeAccount.accessToken,
+            url
+          );
+        } else {
+          return res.status(400).json({ 
+            error: `Personal account creation not yet supported for ${destProvider}. Supported: GitHub, GitLab` 
+          });
+        }
+        
+        if (!createResult.success) {
+          broadcastLog('ERROR', `Failed to create ${destProvider} repository: ${createResult.error}`);
+          return res.status(500).json({ error: createResult.error });
+        }
+
+        // STEP 3: Clone source repository for pushing (mirror clone)
         broadcastLog('INFO', 'Creating mirror clone for pushing to personal repository...');
-        const mirrorCloneResult = await gitProviders[provider].cloneRepository(url, { mirror: true });
+        const mirrorCloneResult = await gitProviders[sourceProvider].cloneRepository(url, { mirror: true });
         
         if (!mirrorCloneResult.success) {
           broadcastLog('ERROR', `Mirror repository clone failed: ${mirrorCloneResult.error}`);
           return res.status(500).json({ error: mirrorCloneResult.error });
         }
 
-        // Push mirror clone to new personal repository  
-        broadcastLog('INFO', 'Pushing mirror clone to personal repository...');
-        const pushResult = await githubService.pushToPersonalRepository(
+        // STEP 4: Push mirror clone to new personal repository (destination)
+        broadcastLog('INFO', `Pushing mirror clone to ${destProvider} personal repository...`);
+        const pushResult = await destService.pushToPersonalRepository(
           mirrorCloneResult.localPath!,
           activeAccount.accessToken,
           activeAccount.username,
@@ -1192,7 +1211,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
         );
 
         if (!pushResult.success) {
-          broadcastLog('ERROR', `Failed to push to personal repository: ${pushResult.error}`);
+          broadcastLog('ERROR', `Failed to push to ${destProvider} repository: ${pushResult.error}`);
           return res.status(500).json({ error: pushResult.error });
         }
 
@@ -1200,15 +1219,15 @@ export async function registerRoutes(app: Application): Promise<Server> {
         repository = await storage.createRepository({
           name: createResult.repoName!,
           url,
-          provider,
-          clonedUrl: createResult.repoUrl!, // Use the new personal repo URL
+          provider: sourceProvider, // Keep track of original source
+          clonedUrl: createResult.repoUrl!, // Use the new personal repo URL (destination)
           localPath: analysisCloneResult.localPath!, // Store the analysis clone path
           cloneStatus: 'cloned', // Set status to cloned
           fileStructure,
           detectedTechnologies
         });
 
-        broadcastLog('INFO', `🎉 SUCCESS! Repository created and pushed to: ${createResult.repoUrl}`);
+        broadcastLog('INFO', `🎉 SUCCESS! Repository cloned from ${sourceProvider} to ${destProvider}: ${createResult.repoUrl}`);
 
         return res.json({
           success: true,
@@ -1216,89 +1235,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
           fileStructure,
           detectedTechnologies,
           personalRepoUrl: createResult.repoUrl, // Include the new repo URL in response
-          message: `Repository successfully created in your personal account: ${createResult.repoUrl}`
-        });
-      }
-
-      // Handle personal account creation for GitLab
-      const activeAccountGitLab = getActiveAccount(req);
-      if (options?.personalAccount && activeAccountGitLab && activeAccountGitLab.provider === 'gitlab') {
-        broadcastLog('INFO', '🚀 GitLab personal account repository creation requested');
-
-        // Import GitLab service
-        const { gitlabService } = await import('./services/gitlabService');
-        
-        // Create repository in user's personal account
-        broadcastLog('INFO', `Creating repository in ${activeAccountGitLab.username}'s GitLab account`);
-        const createResult = await gitlabService.createRepositoryInPersonalAccount(
-          activeAccountGitLab.accessToken,
-          url
-        );
-        
-        if (!createResult.success) {
-          broadcastLog('ERROR', `Failed to create GitLab personal repository: ${createResult.error}`);
-          return res.status(500).json({ error: createResult.error });
-        }
-
-        // STEP 1: Clone source repository for analysis (regular clone)
-        broadcastLog('INFO', 'Cloning source repository for technology detection...');
-        const analysisCloneResult = await gitProviders[provider].cloneRepository(url, { mirror: false });
-        
-        if (!analysisCloneResult.success) {
-          broadcastLog('ERROR', `Analysis repository clone failed: ${analysisCloneResult.error}`);
-          return res.status(500).json({ error: analysisCloneResult.error });
-        }
-
-        // Get file structure and detect technologies from regular clone
-        broadcastLog('INFO', 'Analyzing file structure and detecting technologies...');
-        const fileStructure = await gitProviders[provider].getFileStructure(analysisCloneResult.localPath!);
-        const detectedTechnologies = await enhancedTechnologyDetectionService.detectTechnologies(analysisCloneResult.localPath!);
-        broadcastLog('INFO', `Technology detection completed. Found ${detectedTechnologies.length} technologies`);
-
-        // STEP 2: Clone source repository for pushing (mirror clone)
-        broadcastLog('INFO', 'Creating mirror clone for pushing to personal repository...');
-        const mirrorCloneResult = await gitProviders[provider].cloneRepository(url, { mirror: true });
-        
-        if (!mirrorCloneResult.success) {
-          broadcastLog('ERROR', `Mirror repository clone failed: ${mirrorCloneResult.error}`);
-          return res.status(500).json({ error: mirrorCloneResult.error });
-        }
-
-        // Push mirror clone to new personal repository  
-        broadcastLog('INFO', 'Pushing mirror clone to GitLab personal repository...');
-        const pushResult = await gitlabService.pushToPersonalRepository(
-          mirrorCloneResult.localPath!,
-          activeAccountGitLab.accessToken,
-          activeAccountGitLab.username,
-          createResult.repoName!
-        );
-
-        if (!pushResult.success) {
-          broadcastLog('ERROR', `Failed to push to GitLab personal repository: ${pushResult.error}`);
-          return res.status(500).json({ error: pushResult.error });
-        }
-
-        // Create repository record with new URL - CLONE STATUS = CLONED
-        repository = await storage.createRepository({
-          name: createResult.repoName!,
-          url,
-          provider,
-          clonedUrl: createResult.repoUrl!, // Use the new personal repo URL
-          localPath: analysisCloneResult.localPath!, // Store the analysis clone path
-          cloneStatus: 'cloned', // Set status to cloned
-          fileStructure,
-          detectedTechnologies
-        });
-
-        broadcastLog('INFO', `🎉 SUCCESS! GitLab repository created and pushed to: ${createResult.repoUrl}`);
-
-        return res.json({
-          success: true,
-          repository,
-          fileStructure,
-          detectedTechnologies,
-          personalRepoUrl: createResult.repoUrl, // Include the new repo URL in response
-          message: `Repository successfully created in your GitLab personal account: ${createResult.repoUrl}`
+          message: `Repository successfully cloned from ${sourceProvider} to your ${destProvider} account: ${createResult.repoUrl}`
         });
       }
 
@@ -2561,7 +2498,7 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
       
       // Sort by createdAt descending to get the most recent first
       const sortedReports = reports.sort((a, b) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
       );
       
       const migrationReport = sortedReports.find(r => 
@@ -2593,7 +2530,7 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
       const aiSettings = await storage.getAISettingsForScript();
       
       // CRITICAL FIX: The field is called code_diffs, not diffs!
-      const diffsArray = structuredData.code_diffs || [];
+      const diffsArray = (structuredData as any).code_diffs || [];
       console.log(`📋 [Migration Changes] Found ${diffsArray.length} code diffs`);
       
       const changes = await Promise.all(diffsArray.map(async (diff: any) => {
@@ -2663,10 +2600,11 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
       
       console.log(`🔍 [Migration Changes] Deduplication: ${changes.length} changes → ${uniqueChanges.length} unique changes`);
       
-      // Get latest iteration number for this migration type
-      const rawMigrationType = migrationReport.structuredData?.analysisTypeLabel || "KafkaToAzureServiceBusMigration";
+      // TODO: Multi-iteration support - for now always return iteration 1
+      // User feedback: Don't auto-increment iterations until multi-iteration workflow is fully implemented
+      // When implementing: fetch from migration iteration records, not auto-increment on GET
+      const rawMigrationType = (migrationReport.structuredData as any)?.analysisTypeLabel || "KafkaToAzureServiceBusMigration";
       const migrationType = sanitizeMigrationType(rawMigrationType);
-      const latestIteration = await storage.getLatestIterationNumber(repositoryId, migrationType);
       
       // Get real coverage data from test coverage reports
       const testCoverageReport = reports.find(r => r.analysisType === 'test-coverage');
@@ -2674,7 +2612,7 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
       let newCoverage = { overall: 0, files: [] as any[] };
       
       if (testCoverageReport?.structuredData) {
-        const coverageData = testCoverageReport.structuredData;
+        const coverageData = testCoverageReport.structuredData as any;
         oldCoverage = {
           overall: coverageData.totalOriginalTestCases || 0,
           files: (coverageData.fileReports || []).map((fr: any) => ({
@@ -2693,12 +2631,13 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
       
       console.log(`📤 [Migration Changes] Returning ${uniqueChanges.length} unique changes`);
       
+      // TODO: Always return iteration 1 until multi-iteration workflow is implemented
       res.json({
         changes: uniqueChanges,
         migrationType,
         oldCoverage,
         newCoverage,
-        iterationNumber: latestIteration + 1
+        iterationNumber: 1
       });
     } catch (error) {
       console.error("Failed to get migration changes:", error);
@@ -2732,7 +2671,7 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
       let newCoverage = { overall: 0, files: [] as any[] };
       
       if (testCoverageReport?.structuredData) {
-        const coverageData = testCoverageReport.structuredData;
+        const coverageData = testCoverageReport.structuredData as any;
         oldCoverage = {
           overall: coverageData.totalOriginalTestCases || 0,
           files: []

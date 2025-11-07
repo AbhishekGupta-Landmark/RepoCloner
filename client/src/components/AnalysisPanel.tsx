@@ -14,6 +14,7 @@ import { useAppContext } from "../context/AppContext";
 import { Brain, CheckCircle, Shield, Wrench, AlertTriangle, Lightbulb, FileText, Code, ArrowRight, GitCompare, Sparkles, ChevronDown } from "lucide-react";
 import { MigrationReportViewer } from "./MigrationReportViewer";
 import { useIsMutating, useQuery } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 interface AnalysisType {
   id: string;
@@ -53,7 +54,8 @@ export default function AnalysisPanel() {
   const [selectedAnalysisTypeId, setSelectedAnalysisTypeId] = useState<string>("");
   const [selectedMigrationTypes, setSelectedMigrationTypes] = useState<string[]>(['kafka-to-service-bus']);
   const [migrationTypesOpen, setMigrationTypesOpen] = useState(true);
-  const { currentRepository, isCodeAnalysisEnabled } = useAppContext();
+  const { currentRepository, isCodeAnalysisEnabled, unlockTab } = useAppContext();
+  const { toast } = useToast();
   
   // Load analysis types from API
   const { data: analysisTypesData, isLoading: isLoadingTypes } = useQuery<{ types: AnalysisType[] }>({
@@ -351,6 +353,26 @@ export default function AnalysisPanel() {
             iterationNumber={iterationNumber}
           />
         ) : null}
+
+        {/* Workflow Progression Button - Persistent */}
+        {selectedAnalysisTypeId && currentRepository?.id && (
+          <div className="flex justify-center py-6 px-4">
+            <Button
+              onClick={() => {
+                unlockTab('code-migration');
+                toast({
+                  title: "Code Migration Unlocked",
+                  description: "You can now access the Code Migration tab",
+                });
+              }}
+              className="flex items-center gap-2"
+              data-testid="button-proceed-to-migration"
+            >
+              Proceed to Migration
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
       </ScrollArea>
     </div>
   );

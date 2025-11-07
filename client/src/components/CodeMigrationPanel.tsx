@@ -79,7 +79,7 @@ const constructGitHubBranchUrl = (repositoryUrl: string, branchName: string): st
 };
 
 export default function CodeMigrationPanel() {
-  const { currentRepository, setHasPushedSuccessfully } = useAppContext();
+  const { currentRepository, setHasPushedSuccessfully, unlockTab } = useAppContext();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [editMode, setEditMode] = useState(false);
@@ -384,6 +384,36 @@ export default function CodeMigrationPanel() {
                 )}
 
                 <Separator />
+
+                {/* Workflow Progression Button */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                  className="flex justify-center"
+                >
+                  <Button
+                    size="lg"
+                    onClick={() => {
+                      unlockTab('cicd-tests');
+                      toast({
+                        title: "CI/CD Tests Unlocked",
+                        description: "You can now view automated test results",
+                      });
+                    }}
+                    className="w-full group relative overflow-hidden bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-semibold"
+                    data-testid="button-goto-cicd-tests"
+                  >
+                    <motion.div
+                      className="flex items-center gap-2"
+                      whileHover={{ scale: 1.05 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                    >
+                      <span>Go to CI/CD Tests</span>
+                      <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                    </motion.div>
+                  </Button>
+                </motion.div>
 
                 <div className="flex justify-center">
                   <Button

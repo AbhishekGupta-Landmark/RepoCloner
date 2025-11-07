@@ -45,6 +45,10 @@ interface AppContextType {
   handleToggleRepoPanel: (getCurrentSize?: () => number) => void;
   hasPushedSuccessfully: boolean;
   setHasPushedSuccessfully: (pushed: boolean) => void;
+  // Workflow progression state
+  unlockedTabs: Set<string>;
+  unlockTab: (tab: string) => void;
+  isTabUnlocked: (tab: string) => boolean;
 }
 
 interface RepositoriesResponse {
@@ -95,6 +99,18 @@ export function AppProvider({ children }: AppProviderProps) {
     } catch (error) {
       console.warn('Failed to parse localStorage data for hasPushedSuccessfully:', error);
       return false;
+    }
+  });
+
+  // Workflow progression: track which tabs have been unlocked via "Go to..." buttons
+  const [unlockedTabs, setUnlockedTabs] = useState<Set<string>>(() => {
+    try {
+      if (!currentRepository?.id) return new Set(['tech-stack']); // Tech stack always unlocked
+      const savedState = localStorage.getItem(`git-analyzer-unlocked-tabs-${currentRepository.id}`);
+      return savedState ? new Set(JSON.parse(savedState)) : new Set(['tech-stack']);
+    } catch (error) {
+      console.warn('Failed to parse unlocked tabs from localStorage:', error);
+      return new Set(['tech-stack']); // Default: only tech stack unlocked
     }
   });
 
@@ -210,9 +226,19 @@ export function AppProvider({ children }: AppProviderProps) {
         console.warn('Failed to load push success state:', error);
         setHasPushedSuccessfullyState(false);
       }
+      
+      // Load unlocked tabs from localStorage for this repository
+      try {
+        const savedTabs = localStorage.getItem(`git-analyzer-unlocked-tabs-${currentRepository.id}`);
+        setUnlockedTabs(savedTabs ? new Set(JSON.parse(savedTabs)) : new Set(['tech-stack']));
+      } catch (error) {
+        console.warn('Failed to load unlocked tabs:', error);
+        setUnlockedTabs(new Set(['tech-stack']));
+      }
     } else {
       setRepositoryStatus(null);
       setHasPushedSuccessfullyState(false);
+      setUnlockedTabs(new Set(['tech-stack']));
     }
     // Reset migration access when repository changes (clear all accessed reports)
     setAccessedReports(new Set());
@@ -260,6 +286,32 @@ export function AppProvider({ children }: AppProviderProps) {
       setActiveTab(tab);
       logService.addLog('INFO', `Switched to ${tab} tab`, 'AppContext');
     }
+  };
+
+  // Unlock a tab (called from "Go to..." buttons)
+  const unlockTab = (tab: string) => {
+    setUnlockedTabs(prev => {
+      const next = new Set(prev);
+      next.add(tab);
+      // Persist to localStorage
+      if (currentRepository?.id) {
+        try {
+          localStorage.setItem(
+            `git-analyzer-unlocked-tabs-${currentRepository.id}`,
+            JSON.stringify(Array.from(next))
+          );
+        } catch (error) {
+          console.warn('Failed to save unlocked tabs to localStorage:', error);
+        }
+      }
+      return next;
+    });
+    logService.addLog('INFO', `Unlocked ${tab} tab`, 'AppContext');
+  };
+
+  // Check if a tab is unlocked
+  const isTabUnlocked = (tab: string): boolean => {
+    return unlockedTabs.has(tab);
   };
 
   // LogService implementation
@@ -340,7 +392,10 @@ export function AppProvider({ children }: AppProviderProps) {
     setLastExpandedWidth,
     handleToggleRepoPanel,
     hasPushedSuccessfully,
-    setHasPushedSuccessfully
+    setHasPushedSuccessfully,
+    unlockedTabs,
+    unlockTab,
+    isTabUnlocked
   };
 
   return (
@@ -380,7 +435,10 @@ export const useAppContext = () => {
       setLastExpandedWidth: () => {},
       handleToggleRepoPanel: () => {},
       hasPushedSuccessfully: false,
-      setHasPushedSuccessfully: () => {}
+      setHasPushedSuccessfully: () => {},
+      unlockedTabs: new Set(['tech-stack']),
+      unlockTab: () => {},
+      isTabUnlocked: () => false
     };
     
     if (import.meta.env.DEV) {
