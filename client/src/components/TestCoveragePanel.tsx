@@ -101,6 +101,28 @@ export default function TestCoveragePanel() {
 
   return (
     <div className="space-y-6" data-testid="test-coverage-panel">
+      {/* Workflow Progression Button - Show at top when test coverage is complete */}
+      {latestTestCoverageReport && (
+        <div className="flex justify-center pt-2 pb-4">
+          <Button
+            onClick={() => {
+              unlockTab('code-analysis');
+              switchToTab('code-analysis');
+              toast({
+                title: "Code Analysis Unlocked",
+                description: "Navigating to Code Analysis tab",
+              });
+            }}
+            size="lg"
+            className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+            data-testid="button-goto-code-analysis"
+          >
+            Go to Code Analysis
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -194,27 +216,6 @@ export default function TestCoveragePanel() {
             </p>
           </CardContent>
         </Card>
-      )}
-
-      {/* Workflow Progression Button - Only show when test coverage is complete */}
-      {latestTestCoverageReport && (
-        <div className="flex justify-center pt-6">
-          <Button
-            onClick={() => {
-              unlockTab('code-analysis');
-              switchToTab('code-analysis');
-              toast({
-                title: "Code Analysis Unlocked",
-                description: "Navigating to Code Analysis tab",
-              });
-            }}
-            className="flex items-center gap-2"
-            data-testid="button-goto-code-analysis"
-          >
-            Go to Code Analysis
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-        </div>
       )}
     </div>
   );
