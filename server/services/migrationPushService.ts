@@ -123,6 +123,28 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
       console.warn('⚠️ No test coverage report found, pushing migration changes only');
     }
     
+    // Always include GitHub Actions workflow file for CI/CD tests
+    const workflowFilePath = '.github/workflows/dotnet-tests.yml';
+    const workflowSourcePath = path.join(process.cwd(), workflowFilePath);
+    const workflowDestPath = path.join(repository.localPath, workflowFilePath);
+    
+    try {
+      // Check if workflow file exists in source (this repo)
+      await fs.access(workflowSourcePath);
+      
+      // Create .github/workflows directory in target repo
+      await fs.mkdir(path.dirname(workflowDestPath), { recursive: true });
+      
+      // Copy workflow file to target repo
+      await fs.copyFile(workflowSourcePath, workflowDestPath);
+      
+      // Add to files list for push
+      filesList.push(workflowFilePath);
+      console.log(`✅ Added GitHub Actions workflow: ${workflowFilePath}`);
+    } catch (err) {
+      console.warn(`⚠️ Could not add workflow file: ${err}`);
+    }
+    
     // Use appropriate pusher based on provider
     let prUrl: string | undefined;
     
