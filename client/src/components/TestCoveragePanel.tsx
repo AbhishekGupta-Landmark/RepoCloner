@@ -196,24 +196,26 @@ export default function TestCoveragePanel() {
         </Card>
       )}
 
-      {/* Workflow Progression Button */}
-      <div className="flex justify-center pt-6">
-        <Button
-          onClick={() => {
-            unlockTab('code-analysis');
-            switchToTab('code-analysis');
-            toast({
-              title: "Code Analysis Unlocked",
-              description: "Navigating to Code Analysis tab",
-            });
-          }}
-          className="flex items-center gap-2"
-          data-testid="button-goto-code-analysis"
-        >
-          Go to Code Analysis
-          <ArrowRight className="h-4 w-4" />
-        </Button>
-      </div>
+      {/* Workflow Progression Button - Only show when test coverage is complete */}
+      {latestTestCoverageReport && (
+        <div className="flex justify-center pt-6">
+          <Button
+            onClick={() => {
+              unlockTab('code-analysis');
+              switchToTab('code-analysis');
+              toast({
+                title: "Code Analysis Unlocked",
+                description: "Navigating to Code Analysis tab",
+              });
+            }}
+            className="flex items-center gap-2"
+            data-testid="button-goto-code-analysis"
+          >
+            Go to Code Analysis
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

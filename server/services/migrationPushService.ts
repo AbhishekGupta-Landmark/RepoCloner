@@ -17,21 +17,39 @@ interface PushMigrationChangesParams {
 export async function pushMigrationChanges(params: PushMigrationChangesParams): Promise<{ prUrl?: string }> {
   const { repository, branchName, changes, storage, accessToken, commitMessage } = params;
   
-  // Import the GitHub pusher class
-  const { GitHubPusher } = await import('../scripts/pushSpecificFiles.js');
-  
-  // Extract owner and repo name from repository URL
   // Use clonedUrl if available (for forked repos), otherwise use url
   const targetUrl = (repository.clonedUrl && repository.clonedUrl.trim() !== '') 
     ? repository.clonedUrl 
     : repository.url;
   console.log(`🎯 Pushing to: ${targetUrl}${repository.clonedUrl ? ' (personal fork)' : ' (original repo)'}`);
   
-  const urlMatch = targetUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
-  if (!urlMatch) {
-    throw new Error(`Invalid GitHub repository URL: ${targetUrl}`);
+  // Detect provider (GitHub or GitLab)
+  const isGitHub = targetUrl.includes('github.com');
+  const isGitLab = targetUrl.includes('gitlab.com');
+  
+  if (!isGitHub && !isGitLab) {
+    throw new Error(`Unsupported Git provider. Only GitHub and GitLab are supported. URL: ${targetUrl}`);
   }
-  const [, owner, repoName] = urlMatch;
+  
+  let owner: string = '';
+  let repoName: string = '';
+  let projectPath: string = '';
+  
+  if (isGitHub) {
+    const urlMatch = targetUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+    if (!urlMatch) {
+      throw new Error(`Invalid GitHub repository URL: ${targetUrl}`);
+    }
+    [, owner, repoName] = urlMatch;
+    console.log(`📍 Detected GitHub: ${owner}/${repoName}`);
+  } else {
+    const urlMatch = targetUrl.match(/gitlab\.com[/:]([^/]+\/[^/.]+)/);
+    if (!urlMatch) {
+      throw new Error(`Invalid GitLab repository URL: ${targetUrl}`);
+    }
+    projectPath = urlMatch[1];
+    console.log(`📍 Detected GitLab: ${projectPath}`);
+  }
   
   try {
     // Write changed files to repository directory (migrated code)
@@ -105,17 +123,20 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
       console.warn('⚠️ No test coverage report found, pushing migration changes only');
     }
     
-    // Use GitHubPusher to push the specific files
-    const pusher = new GitHubPusher(accessToken, owner, repoName);
-    await pusher.pushSpecificFiles(branchName, commitMessage, filesList, repository.localPath);
-    
-    console.log(`🎉 Successfully pushed ${filesList.length} files to branch: ${branchName}`);
-    
-    // Create draft PR
+    // Use appropriate pusher based on provider
     let prUrl: string | undefined;
-    try {
-      const prTitle = `🤖 AI Migration: ${branchName}`;
-      const prBody = `# AI-Generated Migration Changes
+    
+    if (isGitHub) {
+      const { GitHubPusher } = await import('../scripts/pushSpecificFiles.js');
+      const pusher = new GitHubPusher(accessToken, owner, repoName);
+      await pusher.pushSpecificFiles(branchName, commitMessage, filesList, repository.localPath);
+      
+      console.log(`🎉 Successfully pushed ${filesList.length} files to GitHub branch: ${branchName}`);
+      
+      // Create draft PR
+      try {
+        const prTitle = `🤖 AI Migration: ${branchName}`;
+        const prBody = `# AI-Generated Migration Changes
 
 ${commitMessage}
 
@@ -130,11 +151,41 @@ ${commitMessage}
 ---
 *This is a draft pull request. Review the changes and mark as ready when satisfied.*`;
 
-      prUrl = await pusher.createDraftPR(branchName, prTitle, prBody);
-      console.log(`✅ Draft PR created: ${prUrl}`);
-    } catch (prError) {
-      console.warn(`⚠️ Failed to create draft PR (push succeeded): ${prError}`);
-      // Don't throw - push succeeded, PR is optional
+        prUrl = await pusher.createDraftPR(branchName, prTitle, prBody);
+        console.log(`✅ Draft PR created: ${prUrl}`);
+      } catch (prError) {
+        console.warn(`⚠️ Failed to create draft PR (push succeeded): ${prError}`);
+      }
+    } else {
+      const { GitLabPusher } = await import('../scripts/pushSpecificFilesGitLab.js');
+      const pusher = new GitLabPusher(accessToken, projectPath);
+      await pusher.pushSpecificFiles(branchName, commitMessage, filesList, repository.localPath);
+      
+      console.log(`🎉 Successfully pushed ${filesList.length} files to GitLab branch: ${branchName}`);
+      
+      // Create draft MR
+      try {
+        const mrTitle = `🤖 AI Migration: ${branchName}`;
+        const mrBody = `# AI-Generated Migration Changes
+
+${commitMessage}
+
+## Summary
+- **Files Changed**: ${filesList.length}
+- **Branch**: \`${branchName}\`
+
+## Changes Include:
+- Migrated code (Kafka → Azure Service Bus)
+- Generated test files with improved coverage
+
+---
+*This is a draft merge request. Review the changes and mark as ready when satisfied.*`;
+
+        prUrl = await pusher.createDraftMR(branchName, mrTitle, mrBody);
+        console.log(`✅ Draft MR created: ${prUrl}`);
+      } catch (mrError) {
+        console.warn(`⚠️ Failed to create draft MR (push succeeded): ${mrError}`);
+      }
     }
     
     return { prUrl };

@@ -143,8 +143,10 @@ export default function AnalysisPanel() {
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 border-b border-border">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-foreground">AI Code Analysis</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-4">AI Code Analysis</h2>
+        
+        {/* Horizontal button layout: Analyze Code (left) + Proceed to Migration (right, only when complete) */}
+        <div className="flex items-center justify-between gap-4 mb-4">
           <Button 
             onClick={handleAnalysis}
             disabled={
@@ -209,6 +211,25 @@ export default function AnalysisPanel() {
               />
             )}
           </Button>
+
+          {/* Proceed to Migration button - Only show when analysis is complete */}
+          {hasExistingReport && (
+            <Button
+              onClick={() => {
+                unlockTab('code-migration');
+                switchToTab('code-migration');
+                toast({
+                  title: "Code Migration Unlocked",
+                  description: "Navigating to Code Migration tab",
+                });
+              }}
+              className="flex items-center gap-2"
+              data-testid="button-proceed-to-migration"
+            >
+              Proceed to Migration
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          )}
         </div>
         
         <div className="flex gap-4">
@@ -353,27 +374,6 @@ export default function AnalysisPanel() {
             iterationNumber={iterationNumber}
           />
         ) : null}
-
-        {/* Workflow Progression Button - Persistent */}
-        {selectedAnalysisTypeId && currentRepository?.id && (
-          <div className="flex justify-center py-6 px-4">
-            <Button
-              onClick={() => {
-                unlockTab('code-migration');
-                switchToTab('code-migration');
-                toast({
-                  title: "Code Migration Unlocked",
-                  description: "Navigating to Code Migration tab",
-                });
-              }}
-              className="flex items-center gap-2"
-              data-testid="button-proceed-to-migration"
-            >
-              Proceed to Migration
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
       </ScrollArea>
     </div>
   );
