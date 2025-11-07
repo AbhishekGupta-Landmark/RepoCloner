@@ -105,6 +105,15 @@ export default function AnalysisPanel() {
     setSelectedAnalysisTypeId("");
   }, [currentRepository?.id]);
   
+  // Auto-select first available analysis type if none is selected
+  useEffect(() => {
+    if (!selectedAnalysisTypeId && analysisTypes.length > 0 && currentRepository) {
+      // Default to Quick Migration Analysis if available, otherwise first type
+      const defaultType = analysisTypes.find(t => t.id === 'quick-migration-1') || analysisTypes[0];
+      setSelectedAnalysisTypeId(defaultType.id);
+    }
+  }, [analysisTypes, currentRepository, selectedAnalysisTypeId]);
+  
   const handleAnalysisTypeChange = (typeId: string) => {
     setSelectedAnalysisTypeId(typeId);
   };
@@ -211,25 +220,6 @@ export default function AnalysisPanel() {
               />
             )}
           </Button>
-
-          {/* Proceed to Migration button - Only show when analysis is complete */}
-          {hasExistingReport && (
-            <Button
-              onClick={() => {
-                unlockTab('code-migration');
-                switchToTab('code-migration');
-                toast({
-                  title: "Code Migration Unlocked",
-                  description: "Navigating to Code Migration tab",
-                });
-              }}
-              className="flex items-center gap-2"
-              data-testid="button-proceed-to-migration"
-            >
-              Proceed to Migration
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          )}
         </div>
         
         <div className="flex gap-4">
@@ -367,12 +357,35 @@ export default function AnalysisPanel() {
         ) : selectedAnalysisTypeId && currentRepository?.id ? (
           // Show MigrationReportViewer when analysis type is selected
           // It handles its own loading/error/no-data states
-          <MigrationReportViewer 
-            key={`${currentRepository.id}-${selectedAnalysisTypeId}`}
-            repositoryId={currentRepository.id}
-            analysisType={selectedAnalysisTypeId}
-            iterationNumber={iterationNumber}
-          />
+          <>
+            <MigrationReportViewer 
+              key={`${currentRepository.id}-${selectedAnalysisTypeId}`}
+              repositoryId={currentRepository.id}
+              analysisType={selectedAnalysisTypeId}
+              iterationNumber={iterationNumber}
+            />
+            
+            {/* Workflow Progression Button - Show after analysis is complete */}
+            {hasExistingReport && (
+              <div className="flex justify-center py-6 px-4">
+                <Button
+                  onClick={() => {
+                    unlockTab('code-migration');
+                    switchToTab('code-migration');
+                    toast({
+                      title: "Code Migration Unlocked",
+                      description: "Navigating to Code Migration tab",
+                    });
+                  }}
+                  className="flex items-center gap-2"
+                  data-testid="button-proceed-to-migration"
+                >
+                  Proceed to Migration
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </>
         ) : null}
       </ScrollArea>
     </div>
