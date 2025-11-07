@@ -2811,6 +2811,102 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
     }
   });
 
+  // GitHub Actions test results endpoint
+  app.get("/api/github-actions/test-results/:repositoryId", async (req, res) => {
+    try {
+      const { repositoryId } = req.params;
+      
+      const repository = await storage.getRepository(repositoryId);
+      if (!repository) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+      
+      // Get cached test results
+      const cachedResults = await storage.getGithubActionsTestResultsByRepository(repositoryId);
+      res.json({ testResults: cachedResults });
+    } catch (error: any) {
+      console.error("Failed to fetch GitHub Actions test results:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch test results" });
+    }
+  });
+  
+  // Refresh GitHub Actions test results for a repository
+  app.post("/api/github-actions/refresh/:repositoryId", async (req, res) => {
+    try {
+      const { repositoryId } = req.params;
+      
+      const repository = await storage.getRepository(repositoryId);
+      if (!repository) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+      
+      // Get active account for Git operations
+      const activeAccount = getActiveAccount(req);
+      if (!activeAccount) {
+        return res.status(401).json({ error: "No authenticated account found" });
+      }
+      
+      // Extract owner and repo from URL
+      const targetUrl = (repository.clonedUrl && repository.clonedUrl.trim() !== '') 
+        ? repository.clonedUrl 
+        : repository.url;
+      const urlMatch = targetUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+      if (!urlMatch) {
+        return res.status(400).json({ error: "Invalid GitHub repository URL" });
+      }
+      const [, owner, repoName] = urlMatch;
+      
+      // Fetch workflow runs from GitHub
+      const { Octokit } = await import('@octokit/rest');
+      const octokit = new Octokit({ auth: activeAccount.accessToken });
+      
+      const { data } = await octokit.actions.listWorkflowRunsForRepo({
+        owner,
+        repo: repoName,
+        per_page: 20,
+        status: 'completed'
+      });
+      
+      // Store/update test results
+      for (const run of data.workflow_runs) {
+        // Check if this run is already stored
+        const existing = await storage.getGithubActionsTestResultByWorkflowRunId(run.id.toString());
+        
+        if (existing) {
+          // Update existing record
+          await storage.updateGithubActionsTestResult(existing.id, {
+            status: run.status ?? 'unknown',
+            conclusion: run.conclusion ?? null,
+            workflowUrl: run.html_url
+          });
+        } else {
+          // Create new record
+          await storage.createGithubActionsTestResult({
+            repositoryId,
+            workflowRunId: run.id.toString(),
+            branchName: run.head_branch ?? 'unknown',
+            commitSha: run.head_sha,
+            status: run.status ?? 'unknown',
+            conclusion: run.conclusion ?? null,
+            workflowUrl: run.html_url,
+            testsPassed: null,
+            testsFailed: null,
+            testsTotal: null,
+            coveragePercent: null,
+            artifactUrls: null
+          });
+        }
+      }
+      
+      // Return updated results
+      const results = await storage.getGithubActionsTestResultsByRepository(repositoryId);
+      res.json({ testResults: results, refreshed: data.workflow_runs.length });
+    } catch (error: any) {
+      console.error("Failed to refresh GitHub Actions test results:", error);
+      res.status(500).json({ error: error.message || "Failed to refresh test results" });
+    }
+  });
+
   const httpServer = createServer(app);
   
   // Initial log when server starts

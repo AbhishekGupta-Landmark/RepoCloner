@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Repository, type InsertRepository, type AnalysisReport, type InsertAnalysisReport, type OAuthConfig, type InsertOAuthConfig, type AISettings, type InsertAISettings, type MigrationIteration, type InsertMigrationIteration } from "@shared/schema";
+import { type User, type InsertUser, type Repository, type InsertRepository, type AnalysisReport, type InsertAnalysisReport, type OAuthConfig, type InsertOAuthConfig, type AISettings, type InsertAISettings, type MigrationIteration, type InsertMigrationIteration, type GithubActionsTestResult, type InsertGithubActionsTestResult } from "@shared/schema";
 import { randomUUID } from "crypto";
 
 // modify the interface with any CRUD methods
@@ -42,6 +42,12 @@ export interface IStorage {
   getMigrationIterationsByRepository(repositoryId: string): Promise<MigrationIteration[]>;
   getLatestIterationNumber(repositoryId: string, migrationType: string): Promise<number>;
   updateMigrationIterationStatus(id: string, status: string, pushedAt?: Date): Promise<MigrationIteration | undefined>;
+  
+  // GitHub Actions test results methods
+  createGithubActionsTestResult(result: InsertGithubActionsTestResult): Promise<GithubActionsTestResult>;
+  getGithubActionsTestResultsByRepository(repositoryId: string): Promise<GithubActionsTestResult[]>;
+  getGithubActionsTestResultByWorkflowRunId(workflowRunId: string): Promise<GithubActionsTestResult | undefined>;
+  updateGithubActionsTestResult(id: string, updates: Partial<InsertGithubActionsTestResult>): Promise<GithubActionsTestResult | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -51,6 +57,7 @@ export class MemStorage implements IStorage {
   private oauthConfigs: Map<string, OAuthConfig>;
   private aiSettings: AISettings | undefined;
   private migrationIterations: Map<string, MigrationIteration>;
+  private githubActionsTestResults: Map<string, GithubActionsTestResult>;
 
   constructor() {
     this.users = new Map();
@@ -59,6 +66,7 @@ export class MemStorage implements IStorage {
     this.oauthConfigs = new Map();
     this.aiSettings = undefined;
     this.migrationIterations = new Map();
+    this.githubActionsTestResults = new Map();
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -438,6 +446,52 @@ export class MemStorage implements IStorage {
     };
 
     this.migrationIterations.set(id, updated);
+    return updated;
+  }
+
+  async createGithubActionsTestResult(insertResult: InsertGithubActionsTestResult): Promise<GithubActionsTestResult> {
+    const id = randomUUID();
+    const result: GithubActionsTestResult = {
+      ...insertResult,
+      id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      conclusion: insertResult.conclusion ?? null,
+      testsPassed: insertResult.testsPassed ?? null,
+      testsFailed: insertResult.testsFailed ?? null,
+      testsTotal: insertResult.testsTotal ?? null,
+      coveragePercent: insertResult.coveragePercent ?? null,
+      workflowUrl: insertResult.workflowUrl ?? null,
+      artifactUrls: insertResult.artifactUrls ?? null,
+    };
+    this.githubActionsTestResults.set(id, result);
+    return result;
+  }
+
+  async getGithubActionsTestResultsByRepository(repositoryId: string): Promise<GithubActionsTestResult[]> {
+    return Array.from(this.githubActionsTestResults.values())
+      .filter(result => result.repositoryId === repositoryId)
+      .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+  }
+
+  async getGithubActionsTestResultByWorkflowRunId(workflowRunId: string): Promise<GithubActionsTestResult | undefined> {
+    return Array.from(this.githubActionsTestResults.values())
+      .find(result => result.workflowRunId === workflowRunId);
+  }
+
+  async updateGithubActionsTestResult(id: string, updates: Partial<InsertGithubActionsTestResult>): Promise<GithubActionsTestResult | undefined> {
+    const existing = this.githubActionsTestResults.get(id);
+    if (!existing) {
+      return undefined;
+    }
+    
+    const updated: GithubActionsTestResult = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date()
+    };
+    
+    this.githubActionsTestResults.set(id, updated);
     return updated;
   }
 }
