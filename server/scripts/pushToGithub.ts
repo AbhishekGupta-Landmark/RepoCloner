@@ -243,6 +243,14 @@ class GitHubPusher {
       const workspaceDir = '/home/runner/workspace';
       const allFiles = await this.getChangedFiles();
       
+      // Always include GitHub Actions workflow file if it exists
+      const workflowFile = '.github/workflows/dotnet-tests.yml';
+      const { existsSync } = await import('fs');
+      if (existsSync(join(workspaceDir, workflowFile)) && !allFiles.includes(workflowFile)) {
+        allFiles.push(workflowFile);
+        console.log('📄 Including GitHub Actions workflow:', workflowFile);
+      }
+      
       if (allFiles.length === 0) {
         console.log('📭 No files to push');
         return;

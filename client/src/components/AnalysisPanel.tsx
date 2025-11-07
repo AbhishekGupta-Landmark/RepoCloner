@@ -211,6 +211,25 @@ export default function AnalysisPanel() {
               />
             )}
           </Button>
+          
+          {/* Proceed to Migration button - only show when analysis complete */}
+          {hasExistingReport && (
+            <Button
+              onClick={() => {
+                unlockTab('code-migration');
+                switchToTab('migration');
+                toast({
+                  title: "Code Migration Unlocked",
+                  description: "Navigating to Code Migration tab",
+                });
+              }}
+              className="flex items-center gap-2"
+              data-testid="button-proceed-to-migration"
+            >
+              Proceed to Code Migration
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          )}
         </div>
         
         <div className="flex gap-4">
@@ -337,27 +356,6 @@ export default function AnalysisPanel() {
               analysisType={selectedAnalysisTypeId}
               iterationNumber={iterationNumber}
             />
-            
-            {/* Workflow Progression Button - Show after analysis is complete */}
-            {hasExistingReport && (
-              <div className="flex justify-center py-6 px-4">
-                <Button
-                  onClick={() => {
-                    unlockTab('code-migration');
-                    switchToTab('migration');
-                    toast({
-                      title: "Code Migration Unlocked",
-                      description: "Navigating to Code Migration tab",
-                    });
-                  }}
-                  className="flex items-center gap-2"
-                  data-testid="button-proceed-to-migration"
-                >
-                  Proceed to Migration
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
           </>
         ) : null}
       </ScrollArea>
