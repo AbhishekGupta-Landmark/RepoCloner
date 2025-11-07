@@ -74,7 +74,7 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
     const reports = await storage.getAnalysisReportsByRepository(repository.id);
     const testCoverageReport = reports.find(r => r.analysisType === 'test-coverage');
     
-    if (testCoverageReport?.structuredData && 'fileReports' in testCoverageReport.structuredData) {
+    if (testCoverageReport?.structuredData && typeof testCoverageReport.structuredData === 'object' && 'fileReports' in testCoverageReport.structuredData) {
       console.log('📝 Extracting generated test files from test coverage report...');
       
       const fileReports = (testCoverageReport.structuredData as any).fileReports;
