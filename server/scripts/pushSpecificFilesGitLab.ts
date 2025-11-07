@@ -57,11 +57,23 @@ class GitLabPusher {
     }
   }
 
+  private async getFileExists(branchName: string, filePath: string): Promise<boolean> {
+    try {
+      await this.apiRequest('GET', `/projects/${this.projectId}/repository/files/${encodeURIComponent(filePath)}?ref=${branchName}`);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
   private async commitFiles(branchName: string, files: FileChange[], commitMessage: string): Promise<void> {
-    const actions = files.map(file => ({
-      action: 'update',
-      file_path: file.path,
-      content: file.content,
+    const actions = await Promise.all(files.map(async (file) => {
+      const exists = await this.getFileExists(branchName, file.path);
+      return {
+        action: exists ? 'update' : 'create',
+        file_path: file.path,
+        content: file.content,
+      };
     }));
 
     await this.apiRequest('POST', `/projects/${this.projectId}/repository/commits`, {
