@@ -1,0 +1,86 @@
+# GitLab CI/CD Configuration for .NET Unit Tests
+
+variables:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+stages:
+  - test
+
+dotnet-tests:
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:8.0
+  timeout: 15 minutes
+  
+  before_script:
+    - dotnet --version
+    - echo "Checking for .NET projects..."
+    - |
+      # Find .sln file first (preferred - includes all projects)
+      SLN_FILE=$(find . -name "*.sln" -type f | head -n 1)
+      
+      if [ -n "$SLN_FILE" ]; then
+        export HAS_DOTNET=true
+        export DOTNET_TARGET="$SLN_FILE"
+        echo "✅ Found solution file: $SLN_FILE"
+      elif find . -name "*.csproj" -type f | grep -q .; then
+        # If no .sln, use directory with .csproj files
+        CSPROJ_DIR=$(find . -name "*.csproj" -type f | head -n 1 | xargs dirname)
+        export HAS_DOTNET=true
+        export DOTNET_TARGET="$CSPROJ_DIR"
+        echo "✅ Found .NET project in: $CSPROJ_DIR"
+      else
+        export HAS_DOTNET=false
+        echo "⚠️  No .NET project files found - skipping .NET tests"
+      fi
+  
+  script:
+    - |
+      if [ "$HAS_DOTNET" = "true" ]; then
+        echo "Restoring dependencies..."
+        dotnet restore "$DOTNET_TARGET"
+        
+        echo "Building solution..."
+        dotnet build "$DOTNET_TARGET" --configuration Release --no-restore
+        
+        echo "Running unit tests..."
+        dotnet test "$DOTNET_TARGET" --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"
+      else
+        echo "Skipping .NET tests - no .NET projects found"
+      fi
+  
+  after_script:
+    - |
+      echo "## 🧪 Test Execution Summary"
+      echo ""
+      echo "- **Branch**: $CI_COMMIT_REF_NAME"
+      echo "- **Commit**: $CI_COMMIT_SHA"
+      echo "- **Pipeline**: #$CI_PIPELINE_ID"
+      echo ""
+      if [ "$HAS_DOTNET" = "true" ]; then
+        echo "### Test Results"
+        echo "Check the job logs for detailed test outcomes."
+      else
+        echo "### ⚠️ No .NET Tests"
+        echo "No .NET project files (*.csproj or *.sln) were found in this repository."
+      fi
+  
+  artifacts:
+    when: always
+    paths:
+      - "**/TestResults/*.trx"
+      - "**/TestResults/**/coverage.cobertura.xml"
+    reports:
+      junit:
+        - "**/TestResults/*.trx"
+      coverage_report:
+        coverage_format: cobertura
+        path: "**/TestResults/**/coverage.cobertura.xml"
+    expire_in: 30 days
+  
+  only:
+    - /^feature\/.*/
+    - /^KafkaToAzureServiceBusMigration_.*/
+    - /^QuickMigrationAnalysis_.*/
+  
+  coverage: '/Total\s+\|\s+(\d+\.?\d*)%/'

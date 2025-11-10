@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,13 +18,23 @@ export default function RepositoryInput() {
   const [repoUrl, setRepoUrl] = useState("");
   const [cloneOptions, setCloneOptions] = useState({
     mirror: true,
-    personalAccount: true
+    personalAccount: false
   });
 
   const { cloneRepository, isLoading } = useCloning();
   const { user, isAuthenticated } = useAuth();
   const { logService } = useAppContext();
   const { toast } = useToast();
+
+  // Auto-check "Clone in Personal Account" when user is authenticated with GitHub or GitLab
+  // Clear it when switching to other providers
+  useEffect(() => {
+    if (isAuthenticated && (selectedProvider === 'github' || selectedProvider === 'gitlab')) {
+      setCloneOptions(prev => ({ ...prev, personalAccount: true }));
+    } else {
+      setCloneOptions(prev => ({ ...prev, personalAccount: false }));
+    }
+  }, [isAuthenticated, selectedProvider]);
 
   // Logging helper
   const addLogEntry = (level: 'INFO' | 'DEBUG' | 'WARN' | 'ERROR', message: string, source?: string) => {
@@ -228,12 +238,10 @@ export default function RepositoryInput() {
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="personal"
-                      checked={cloneOptions.personalAccount && isAuthenticated}
-                      onCheckedChange={(checked) => {
-                        if (isAuthenticated) {
-                          setCloneOptions(prev => ({ ...prev, personalAccount: !!checked }))
-                        }
-                      }}
+                      checked={cloneOptions.personalAccount}
+                      onCheckedChange={(checked) => 
+                        setCloneOptions(prev => ({ ...prev, personalAccount: !!checked }))
+                      }
                       disabled={!isAuthenticated}
                       data-testid="checkbox-personal-account"
                     />
@@ -245,8 +253,8 @@ export default function RepositoryInput() {
                 </TooltipTrigger>
                 <TooltipContent>
                   {isAuthenticated 
-                    ? `Create repository in ${user?.username}'s ${user?.provider} account`
-                    : "Sign in first to create repository in your personal account"
+                    ? `Optional: Creates a copy in ${user?.username}'s ${user?.provider} account so you can push migration changes. Uncheck for read-only analysis.`
+                    : "Sign in with your Git provider to enable. Required for pushing migration changes to repositories."
                   }
                 </TooltipContent>
               </Tooltip>

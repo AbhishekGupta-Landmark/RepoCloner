@@ -250,6 +250,7 @@ import { insertRepositorySchema, insertAnalysisReportSchema, insertAISettingsSch
 import { z } from "zod";
 import { randomUUID } from "crypto";
 import { url } from "inspector";
+import OpenAI from "openai";
 
 // In-memory OAuth credential storage
 const oauthCredentials = new Map<string, { clientId: string; clientSecret: string; scope?: string; enabled?: boolean }>();
@@ -1129,37 +1130,25 @@ export async function registerRoutes(app: Application): Promise<Server> {
         return res.status(400).json({ error: "Provider not implemented" });
       }
 
-      // Handle personal account creation for GitHub
-      if (options?.personalAccount && req.session?.auth?.provider === 'github') {
-        broadcastLog('INFO', '🚀 Personal account repository creation requested');
+      // Handle personal account creation with cross-platform support
+      if (options?.personalAccount) {
+        const activeAccount = getActiveAccount(req);
         
-        // Check authentication
-        const auth = req.session?.auth;
-        if (!auth || auth.provider !== 'github' || !auth.token) {
-          broadcastLog('ERROR', 'Personal account creation requires GitHub authentication');
+        if (!activeAccount) {
+          broadcastLog('ERROR', 'Personal account creation requires authentication');
           return res.status(401).json({ 
-            error: "Personal account creation requires GitHub authentication. Please sign in with GitHub." 
+            error: "Personal account creation requires authentication. Please sign in with your Git provider." 
           });
         }
-
-        // Import GitHub service
-        const { githubService } = await import('./services/githubService');
         
-        // Create repository in user's personal account
-        broadcastLog('INFO', `Creating repository in ${auth.username}'s GitHub account`);
-        const createResult = await githubService.createRepositoryInPersonalAccount(
-          auth.token,
-          url
-        );
+        const sourceProvider = provider; // Where we're cloning FROM
+        const destProvider = activeAccount.provider; // Where we're pushing TO
         
-        if (!createResult.success) {
-          broadcastLog('ERROR', `Failed to create personal repository: ${createResult.error}`);
-          return res.status(500).json({ error: createResult.error });
-        }
-
-        // STEP 1: Clone source repository for analysis (regular clone)
-        broadcastLog('INFO', 'Cloning source repository for technology detection...');
-        const analysisCloneResult = await gitProviders[provider].cloneRepository(url, { mirror: false });
+        broadcastLog('INFO', `🚀 Cross-platform clone requested: ${sourceProvider} → ${destProvider}`);
+        
+        // STEP 1: Clone source repository for analysis (works for any source provider)
+        broadcastLog('INFO', `Cloning ${sourceProvider} repository for technology detection...`);
+        const analysisCloneResult = await gitProviders[sourceProvider].cloneRepository(url, { mirror: false });
         
         if (!analysisCloneResult.success) {
           broadcastLog('ERROR', `Analysis repository clone failed: ${analysisCloneResult.error}`);
@@ -1168,120 +1157,61 @@ export async function registerRoutes(app: Application): Promise<Server> {
 
         // Get file structure and detect technologies from regular clone
         broadcastLog('INFO', 'Analyzing file structure and detecting technologies...');
-        const fileStructure = await gitProviders[provider].getFileStructure(analysisCloneResult.localPath!);
+        const fileStructure = await gitProviders[sourceProvider].getFileStructure(analysisCloneResult.localPath!);
         const detectedTechnologies = await enhancedTechnologyDetectionService.detectTechnologies(analysisCloneResult.localPath!);
         broadcastLog('INFO', `Technology detection completed. Found ${detectedTechnologies.length} technologies`);
 
-        // STEP 2: Clone source repository for pushing (mirror clone)
-        broadcastLog('INFO', 'Creating mirror clone for pushing to personal repository...');
-        const mirrorCloneResult = await gitProviders[provider].cloneRepository(url, { mirror: true });
+        // STEP 2: Create repository in destination account based on destProvider
+        let createResult: any;
+        let destService: any;
         
-        if (!mirrorCloneResult.success) {
-          broadcastLog('ERROR', `Mirror repository clone failed: ${mirrorCloneResult.error}`);
-          return res.status(500).json({ error: mirrorCloneResult.error });
-        }
-
-        // Push mirror clone to new personal repository  
-        broadcastLog('INFO', 'Pushing mirror clone to personal repository...');
-        const pushResult = await githubService.pushToPersonalRepository(
-          mirrorCloneResult.localPath!,
-          auth.token,
-          auth.username,
-          createResult.repoName!
-        );
-
-        if (!pushResult.success) {
-          broadcastLog('ERROR', `Failed to push to personal repository: ${pushResult.error}`);
-          return res.status(500).json({ error: pushResult.error });
-        }
-
-        // Create repository record with new URL - CLONE STATUS = CLONED
-        repository = await storage.createRepository({
-          name: createResult.repoName!,
-          url,
-          provider,
-          clonedUrl: createResult.repoUrl!, // Use the new personal repo URL
-          localPath: analysisCloneResult.localPath!, // Store the analysis clone path
-          cloneStatus: 'cloned', // Set status to cloned
-          fileStructure,
-          detectedTechnologies
-        });
-
-        broadcastLog('INFO', `🎉 SUCCESS! Repository created and pushed to: ${createResult.repoUrl}`);
-
-        return res.json({
-          success: true,
-          repository,
-          fileStructure,
-          detectedTechnologies,
-          personalRepoUrl: createResult.repoUrl, // Include the new repo URL in response
-          message: `Repository successfully created in your personal account: ${createResult.repoUrl}`
-        });
-      }
-
-      // Handle personal account creation for GitLab
-      if (options?.personalAccount && req.session?.auth?.provider === 'gitlab') {
-        broadcastLog('INFO', '🚀 GitLab personal account repository creation requested');
-        
-        // Check authentication
-        const auth = req.session?.auth;
-        if (!auth || auth.provider !== 'gitlab' || !auth.token) {
-          broadcastLog('ERROR', 'Personal account creation requires GitLab authentication');
-          return res.status(401).json({ 
-            error: "Personal account creation requires GitLab authentication. Please sign in with GitLab." 
+        if (destProvider === 'github') {
+          const { githubService } = await import('./services/githubService');
+          destService = githubService;
+          broadcastLog('INFO', `Creating repository in ${activeAccount.username}'s GitHub account`);
+          createResult = await githubService.createRepositoryInPersonalAccount(
+            activeAccount.accessToken,
+            url
+          );
+        } else if (destProvider === 'gitlab') {
+          const { gitlabService } = await import('./services/gitlabService');
+          destService = gitlabService;
+          broadcastLog('INFO', `Creating repository in ${activeAccount.username}'s GitLab account`);
+          createResult = await gitlabService.createRepositoryInPersonalAccount(
+            activeAccount.accessToken,
+            url
+          );
+        } else {
+          return res.status(400).json({ 
+            error: `Personal account creation not yet supported for ${destProvider}. Supported: GitHub, GitLab` 
           });
         }
-
-        // Import GitLab service
-        const { gitlabService } = await import('./services/gitlabService');
-        
-        // Create repository in user's personal account
-        broadcastLog('INFO', `Creating repository in ${auth.username}'s GitLab account`);
-        const createResult = await gitlabService.createRepositoryInPersonalAccount(
-          auth.token,
-          url
-        );
         
         if (!createResult.success) {
-          broadcastLog('ERROR', `Failed to create GitLab personal repository: ${createResult.error}`);
+          broadcastLog('ERROR', `Failed to create ${destProvider} repository: ${createResult.error}`);
           return res.status(500).json({ error: createResult.error });
         }
 
-        // STEP 1: Clone source repository for analysis (regular clone)
-        broadcastLog('INFO', 'Cloning source repository for technology detection...');
-        const analysisCloneResult = await gitProviders[provider].cloneRepository(url, { mirror: false });
-        
-        if (!analysisCloneResult.success) {
-          broadcastLog('ERROR', `Analysis repository clone failed: ${analysisCloneResult.error}`);
-          return res.status(500).json({ error: analysisCloneResult.error });
-        }
-
-        // Get file structure and detect technologies from regular clone
-        broadcastLog('INFO', 'Analyzing file structure and detecting technologies...');
-        const fileStructure = await gitProviders[provider].getFileStructure(analysisCloneResult.localPath!);
-        const detectedTechnologies = await enhancedTechnologyDetectionService.detectTechnologies(analysisCloneResult.localPath!);
-        broadcastLog('INFO', `Technology detection completed. Found ${detectedTechnologies.length} technologies`);
-
-        // STEP 2: Clone source repository for pushing (mirror clone)
+        // STEP 3: Clone source repository for pushing (mirror clone)
         broadcastLog('INFO', 'Creating mirror clone for pushing to personal repository...');
-        const mirrorCloneResult = await gitProviders[provider].cloneRepository(url, { mirror: true });
+        const mirrorCloneResult = await gitProviders[sourceProvider].cloneRepository(url, { mirror: true });
         
         if (!mirrorCloneResult.success) {
           broadcastLog('ERROR', `Mirror repository clone failed: ${mirrorCloneResult.error}`);
           return res.status(500).json({ error: mirrorCloneResult.error });
         }
 
-        // Push mirror clone to new personal repository  
-        broadcastLog('INFO', 'Pushing mirror clone to GitLab personal repository...');
-        const pushResult = await gitlabService.pushToPersonalRepository(
+        // STEP 4: Push mirror clone to new personal repository (destination)
+        broadcastLog('INFO', `Pushing mirror clone to ${destProvider} personal repository...`);
+        const pushResult = await destService.pushToPersonalRepository(
           mirrorCloneResult.localPath!,
-          auth.token,
-          auth.username,
+          activeAccount.accessToken,
+          activeAccount.username,
           createResult.repoName!
         );
 
         if (!pushResult.success) {
-          broadcastLog('ERROR', `Failed to push to GitLab personal repository: ${pushResult.error}`);
+          broadcastLog('ERROR', `Failed to push to ${destProvider} repository: ${pushResult.error}`);
           return res.status(500).json({ error: pushResult.error });
         }
 
@@ -1289,15 +1219,15 @@ export async function registerRoutes(app: Application): Promise<Server> {
         repository = await storage.createRepository({
           name: createResult.repoName!,
           url,
-          provider,
-          clonedUrl: createResult.repoUrl!, // Use the new personal repo URL
+          provider: sourceProvider, // Keep track of original source
+          clonedUrl: createResult.repoUrl!, // Use the new personal repo URL (destination)
           localPath: analysisCloneResult.localPath!, // Store the analysis clone path
           cloneStatus: 'cloned', // Set status to cloned
           fileStructure,
           detectedTechnologies
         });
 
-        broadcastLog('INFO', `🎉 SUCCESS! GitLab repository created and pushed to: ${createResult.repoUrl}`);
+        broadcastLog('INFO', `🎉 SUCCESS! Repository cloned from ${sourceProvider} to ${destProvider}: ${createResult.repoUrl}`);
 
         return res.json({
           success: true,
@@ -1305,7 +1235,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
           fileStructure,
           detectedTechnologies,
           personalRepoUrl: createResult.repoUrl, // Include the new repo URL in response
-          message: `Repository successfully created in your GitLab personal account: ${createResult.repoUrl}`
+          message: `Repository successfully cloned from ${sourceProvider} to your ${destProvider} account: ${createResult.repoUrl}`
         });
       }
 
@@ -1714,7 +1644,10 @@ export async function registerRoutes(app: Application): Promise<Server> {
         // Find generated test coverage report (JSON format)
         const fs = await import('fs');
         const files = await fs.promises.readdir(repository.localPath);
-        const testCoverageReports = files.filter(file => file.startsWith('test-coverage-report-') && file.endsWith('.json'));
+        const testCoverageReports = files.filter(file => 
+          (file.startsWith('test-coverage-report-') || file.startsWith('Test_Coverage_Report_')) && 
+          file.endsWith('.json')
+        );
         
         if (testCoverageReports.length === 0) {
           broadcastLog('WARN', 'No test coverage report generated');
@@ -1724,13 +1657,30 @@ export async function registerRoutes(app: Application): Promise<Server> {
           });
         }
         
-        const reportFile = testCoverageReports[testCoverageReports.length - 1]; // Get the latest
-        const reportPath = path.join(repository.localPath, reportFile);
+        const originalReportFile = testCoverageReports[testCoverageReports.length - 1]; // Get the latest
+        const originalReportPath = path.join(repository.localPath, originalReportFile);
         
-        broadcastLog('INFO', `Test coverage report generated: ${reportFile}`);
+        // Get iteration number for test coverage
+        const latestIteration = await storage.getLatestIterationNumber(repository.id, 'TestCoverage');
+        const iterationNumber = latestIteration + 1;
+        
+        // Format datetime as YYYY-MM-DDTHH-MM-SS
+        const now = new Date();
+        const formattedDateTime = now.toISOString()
+          .replace(/\.\d{3}Z$/, '')  // Remove milliseconds and Z
+          .replace(/:/g, '-');        // Replace colons with dashes
+        
+        // Create new filename: Report_Name_DateTime_IterationNumber.FileType
+        const newReportFile = `Test_Coverage_Report_${formattedDateTime}_Iteration${iterationNumber}.json`;
+        const newReportPath = path.join(repository.localPath, newReportFile);
+        
+        // Rename the file
+        await fs.promises.rename(originalReportPath, newReportPath);
+        
+        broadcastLog('INFO', `Test coverage report renamed: ${originalReportFile} → ${newReportFile}`);
         
         // Store test coverage report in database - now reading JSON directly
-        const reportContent = await fs.promises.readFile(reportPath, 'utf-8');
+        const reportContent = await fs.promises.readFile(newReportPath, 'utf-8');
         const parsedData = JSON.parse(reportContent);
         
         const report = await storage.createAnalysisReport({
@@ -1741,7 +1691,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
               exitCode: 0,
               stdout,
               stderr,
-              reportFile,
+              reportFile: newReportFile,
               parsedData
             }
           },
@@ -1753,7 +1703,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
         res.json({
           success: true,
           reportId: report.id,
-          reportFile,
+          reportFile: newReportFile,
           data: parsedData
         });
         
@@ -1890,9 +1840,20 @@ export async function registerRoutes(app: Application): Promise<Server> {
           const migrationReports = files.filter(file => 
             (file.startsWith('migration-report-') || file === 'migration-report.md' || file.includes('migration-report.md')) && file.endsWith('.md')
           );
-          const quickMigrationReports = files.filter(file => (file.startsWith('quick-migration-report-') || file.includes('quick-migration-report')) && file.endsWith('.md'));
-          const comprehensiveMigrationReports = files.filter(file => file.includes('comprehensive-migration-report') && file.endsWith('.md'));
-          const testCoverageReports = files.filter(file => (file.startsWith('test-coverage-report-') || file.includes('test-coverage-report')) && file.endsWith('.json'));
+          const quickMigrationReports = files.filter(file => {
+            const lowerFile = file.toLowerCase();
+            return (lowerFile.includes('quick') && lowerFile.includes('migration')) && file.endsWith('.md');
+          });
+          const comprehensiveMigrationReports = files.filter(file => {
+            const lowerFile = file.toLowerCase();
+            return lowerFile.includes('comprehensive') && lowerFile.includes('migration') && file.endsWith('.md');
+          });
+          const testCoverageReports = files.filter(file => 
+            (file.startsWith('test-coverage-report-') || 
+             file.startsWith('Test_Coverage_Report_') || 
+             file.includes('test-coverage-report')) && 
+            file.endsWith('.json')
+          );
           
           for (const reportFile of migrationReports) {
             const filePath = path.join(repoPath, reportFile);
@@ -2415,6 +2376,540 @@ export async function registerRoutes(app: Application): Promise<Server> {
       if (!res.headersSent) {
         res.status(500).json({ error: "Repository download failed" });
       }
+    }
+  });
+
+  // Helper function to generate migrated code using AI
+  async function generateMigratedCode(originalCode: string, filePath: string, aiSettings: any): Promise<string> {
+    console.log(`🔧 [AI Migration] Starting code generation for ${filePath}`);
+    console.log(`🔧 [AI Migration] Original code length: ${originalCode.length} characters`);
+    
+    try {
+      // Clean the baseURL - remove invalid query parameters
+      let cleanedUrl = aiSettings.apiEndpointUrl;
+      if (cleanedUrl) {
+        // Remove anything after "Haiku" in the URL (malformed query params)
+        cleanedUrl = cleanedUrl.replace(/\s+Haiku.*$/, '');
+        // Clean up the api-version parameter if it has invalid value
+        cleanedUrl = cleanedUrl.replace(/api-version=3\.5\b/, 'api-version=2024-02-15-preview');
+      }
+      
+      // Check if this is an Azure endpoint (has /deployments/ in path)
+      const isAzureEndpoint = cleanedUrl?.includes('/deployments/');
+      
+      // For Azure endpoints, the model is in the URL path, so we use a placeholder
+      // For standard OpenAI endpoints, we use the actual model name
+      const modelToUse = isAzureEndpoint ? 'gpt-3.5-turbo' : aiSettings.model;
+      
+      console.log(`🔧 [AI Migration] Original baseURL: ${aiSettings.apiEndpointUrl}`);
+      console.log(`🔧 [AI Migration] Cleaned baseURL: ${cleanedUrl}`);
+      console.log(`🔧 [AI Migration] Is Azure endpoint: ${isAzureEndpoint}`);
+      console.log(`🔧 [AI Migration] Model to use in API call: ${modelToUse}`);
+      
+      // Initialize OpenAI client with configured settings
+      const client = new OpenAI({
+        apiKey: aiSettings.apiKey,
+        baseURL: cleanedUrl
+      });
+
+      const prompt = `You are an expert in migrating Confluent Kafka code to Azure Service Bus. 
+Given the following C# file that uses Confluent Kafka, migrate it to use Azure Service Bus:
+
+File: ${filePath}
+
+Original Kafka code:
+\`\`\`csharp
+${originalCode}
+\`\`\`
+
+Return ONLY valid JSON with this exact structure:
+{
+  "migrated_code": "the actual migrated C# code here",
+  "description": "brief description of what was migrated"
+}
+
+IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should contain actual working C# code.`;
+
+      console.log(`🔧 [AI Migration] Calling AI API...`);
+      const response = await client.chat.completions.create({
+        model: modelToUse,
+        messages: [
+          { role: "user", content: prompt }
+        ],
+        temperature: 0
+      });
+
+      console.log(`🔧 [AI Migration] Received response from AI`);
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error("AI returned no response");
+      }
+
+      console.log(`🔧 [AI Migration] Response length: ${content.length} characters`);
+
+      // Parse JSON response
+      let result: any;
+      try {
+        // Try to extract JSON from markdown code blocks if present
+        const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        const jsonString = jsonMatch ? jsonMatch[1] : content;
+        result = JSON.parse(jsonString.trim());
+      } catch (parseError) {
+        console.error(`❌ [AI Migration] JSON parse error:`, parseError);
+        console.error(`❌ [AI Migration] Raw content:`, content.substring(0, 500));
+        throw new Error(`Failed to parse AI response as JSON: ${parseError}`);
+      }
+
+      if (result && result.migrated_code) {
+        console.log(`✅ [AI Migration] Successfully parsed migrated code (${result.migrated_code.length} characters)`);
+        return result.migrated_code;
+      } else {
+        console.error(`❌ [AI Migration] Response missing migrated_code field. Keys:`, Object.keys(result || {}));
+        throw new Error("AI response missing migrated_code field");
+      }
+    } catch (error: any) {
+      console.error(`❌ [AI Migration] Error generating code for ${filePath}:`);
+      console.error(`❌ [AI Migration] Error name: ${error.name}`);
+      console.error(`❌ [AI Migration] Error message: ${error.message}`);
+      if (error.stack) {
+        console.error(`❌ [AI Migration] Stack trace:`, error.stack);
+      }
+      throw error;
+    }
+  }
+
+  // Helper function to sanitize migration type for branch names
+  function sanitizeMigrationType(migrationType: string): string {
+    return migrationType
+      .replace(/[^a-zA-Z0-9]+/g, '')  // Remove non-alphanumeric characters
+      .replace(/^[0-9]+/, '');         // Remove leading numbers
+  }
+
+  // Migration approval endpoints
+  app.get("/api/migration/changes/:repositoryId", async (req, res) => {
+    try {
+      const { repositoryId } = req.params;
+      console.log(`🔍 [Migration Changes] Request for repository: ${repositoryId}`);
+      
+      // Get the latest migration report (sort by createdAt DESC to get newest first)
+      const reports = await storage.getAnalysisReportsByRepository(repositoryId);
+      console.log(`📊 [Migration Changes] Found ${reports.length} reports`);
+      console.log(`📊 [Migration Changes] Report types:`, reports.map(r => r.analysisType));
+      
+      // Sort by createdAt descending to get the most recent first
+      const sortedReports = reports.sort((a, b) => 
+        new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      );
+      
+      const migrationReport = sortedReports.find(r => 
+        r.analysisType === 'default' ||            // Regular Migration Analysis (new)
+        r.analysisType === 'migration' ||          // Regular Migration Analysis (legacy - stored as 'migration')
+        r.analysisType === 'quick-migration-1' ||  // Quick Migration Analysis
+        r.analysisType === 'comprehensive-migration' // Comprehensive Migration Analysis
+      );
+      
+      if (!migrationReport) {
+        console.log(`❌ [Migration Changes] No migration report found`);
+        return res.status(404).json({ 
+          error: "No migration report found. Please run a migration analysis first." 
+        });
+      }
+      
+      if (!migrationReport.structuredData) {
+        console.log(`❌ [Migration Changes] Migration report has no structuredData`);
+        console.log(`📊 [Migration Changes] Report:`, JSON.stringify(migrationReport, null, 2));
+        return res.status(404).json({ 
+          error: "Migration report has no structured data. Please re-run the analysis." 
+        });
+      }
+      
+      const structuredData = migrationReport.structuredData;
+      console.log(`✅ [Migration Changes] Found migration report with structuredData`);
+      
+      // Get AI settings for on-demand code generation
+      const aiSettings = await storage.getAISettingsForScript();
+      
+      // CRITICAL FIX: The field is called code_diffs, not diffs!
+      const diffsArray = (structuredData as any).code_diffs || [];
+      console.log(`📋 [Migration Changes] Found ${diffsArray.length} code diffs`);
+      
+      const changes = await Promise.all(diffsArray.map(async (diff: any) => {
+        // Use original_code from Python script if available, otherwise try fallbacks
+        let oldCode = diff.original_code || "// Original file not found in repository";
+        
+        // If original_code not in report, try to parse from unified diff
+        if (!diff.original_code && diff.diff && typeof diff.diff === 'string') {
+          const diffLines = diff.diff.split('\n');
+          const oldCodeLines: string[] = [];
+          
+          for (const line of diffLines) {
+            if (line.startsWith('---') || line.startsWith('+++') || line.startsWith('@@')) {
+              continue;
+            }
+            if (line.startsWith('-')) {
+              oldCodeLines.push(line.substring(1));
+            } else if (line.startsWith(' ')) {
+              oldCodeLines.push(line.substring(1));
+            }
+          }
+          
+          if (oldCodeLines.length > 0) {
+            oldCode = oldCodeLines.join('\n');
+          }
+        }
+        
+        // Last resort: fetch from file system
+        if (oldCode === "// Original file not found in repository") {
+          try {
+            const fileBuffer = await storage.getFileContent(repositoryId, diff.file);
+            if (fileBuffer) {
+              oldCode = fileBuffer.toString('utf-8');
+            }
+          } catch (error) {
+            console.warn(`Could not fetch original file: ${diff.file}`);
+          }
+        }
+        
+        // Use migrated_code if available from Python script, otherwise apply diff to show changes
+        let newCode = diff.migrated_code;
+        
+        // If no migrated_code but we have a diff, apply it to the old code
+        if (!newCode && diff.diff_content) {
+          // For now, just use the diff content as-is
+          // The frontend will parse and display it in a side-by-side view
+          newCode = diff.diff_content;
+          console.log(`📝 [Migration Changes] Using diff content for: ${diff.file}`);
+        } else if (!newCode) {
+          newCode = "// Migration code not available - diff content missing";
+        }
+        
+        return {
+          filePath: diff.file,
+          oldCode,
+          newCode,
+          description: diff.key_changes?.join(", ") || diff.description || "Code migration changes"
+        };
+      }));
+      
+      // CRITICAL FIX: Deduplicate changes by filePath (keep the last occurrence for each file)
+      const uniqueChangesMap = new Map();
+      for (const change of changes) {
+        uniqueChangesMap.set(change.filePath, change);
+      }
+      const uniqueChanges = Array.from(uniqueChangesMap.values());
+      
+      console.log(`🔍 [Migration Changes] Deduplication: ${changes.length} changes → ${uniqueChanges.length} unique changes`);
+      
+      // TODO: Multi-iteration support - for now always return iteration 1
+      // User feedback: Don't auto-increment iterations until multi-iteration workflow is fully implemented
+      // When implementing: fetch from migration iteration records, not auto-increment on GET
+      const rawMigrationType = (migrationReport.structuredData as any)?.analysisTypeLabel || "KafkaToAzureServiceBusMigration";
+      const migrationType = sanitizeMigrationType(rawMigrationType);
+      
+      // Get real coverage data from test coverage reports
+      const testCoverageReport = reports.find(r => r.analysisType === 'test-coverage');
+      let oldCoverage = { overall: 0, files: [] as any[] };
+      let newCoverage = { overall: 0, files: [] as any[] };
+      
+      if (testCoverageReport?.structuredData) {
+        const coverageData = testCoverageReport.structuredData as any;
+        oldCoverage = {
+          overall: coverageData.totalOriginalTestCases || 0,
+          files: (coverageData.fileReports || []).map((fr: any) => ({
+            path: fr.file,
+            coverage: fr.testCasesFound || 0
+          }))
+        };
+        newCoverage = {
+          overall: coverageData.totalTestCasesAfterImprovements || coverageData.totalOriginalTestCases || 0,
+          files: (coverageData.fileReports || []).map((fr: any) => ({
+            path: fr.file,
+            coverage: (fr.testCasesFound || 0) + (fr.newTestCasesAdded || 0)
+          }))
+        };
+      }
+      
+      console.log(`📤 [Migration Changes] Returning ${uniqueChanges.length} unique changes`);
+      
+      // TODO: Always return iteration 1 until multi-iteration workflow is implemented
+      res.json({
+        changes: uniqueChanges,
+        migrationType,
+        oldCoverage,
+        newCoverage,
+        iterationNumber: 1
+      });
+    } catch (error) {
+      console.error("Failed to get migration changes:", error);
+      res.status(500).json({ error: "Failed to fetch migration changes" });
+    }
+  });
+  
+  app.post("/api/migration/approve", async (req, res) => {
+    try {
+      const { repositoryId, changes, migrationType, iterationNumber } = req.body;
+      
+      if (!repositoryId || !changes || !migrationType || !iterationNumber) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      
+      const repository = await storage.getRepository(repositoryId);
+      if (!repository) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+      
+      // Sanitize migration type and generate branch name
+      const sanitizedMigrationType = sanitizeMigrationType(migrationType);
+      const now = new Date();
+      const dateTime = now.toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const branchName = `${sanitizedMigrationType}_${dateTime}_Iteration${iterationNumber}`;
+      
+      // Get real coverage data from test coverage reports
+      const reports = await storage.getAnalysisReportsByRepository(repositoryId);
+      const testCoverageReport = reports.find(r => r.analysisType === 'test-coverage');
+      let oldCoverage = { overall: 0, files: [] as any[] };
+      let newCoverage = { overall: 0, files: [] as any[] };
+      
+      if (testCoverageReport?.structuredData) {
+        const coverageData = testCoverageReport.structuredData as any;
+        oldCoverage = {
+          overall: coverageData.totalOriginalTestCases || 0,
+          files: []
+        };
+        newCoverage = {
+          overall: coverageData.totalTestCasesAfterImprovements || coverageData.totalOriginalTestCases || 0,
+          files: []
+        };
+      }
+      
+      // Create migration iteration record with sanitized migration type
+      const iteration = await storage.createMigrationIteration({
+        repositoryId,
+        migrationType: sanitizedMigrationType,
+        iterationNumber: iterationNumber.toString(),
+        branchName,
+        changes,
+        oldCoverage,
+        newCoverage,
+        status: 'pending'
+      });
+      
+      // Get active account for Git operations
+      const activeAccount = getActiveAccount(req);
+      if (!activeAccount) {
+        return res.status(401).json({ error: "No authenticated account found" });
+      }
+      
+      // Push to Git (simplified version - actual implementation would use pushSpecificFiles.ts)
+      try {
+        broadcastLog('INFO', `Starting migration push to branch: ${branchName}`);
+        
+        // Import the push service
+        const { pushMigrationChanges } = await import('./services/migrationPushService.js');
+        
+        // Push the changes (includes migrated code + generated test files)
+        const pushResult = await pushMigrationChanges({
+          repository,
+          branchName,
+          changes,
+          oldCoverage,
+          newCoverage,
+          storage,
+          accessToken: activeAccount.accessToken,
+          commitMessage: `Migration iteration ${iterationNumber}: ${migrationType}\n\nAI-generated migration changes with test files.\nIncludes migrated code and generated tests from Test Coverage analysis.`
+        });
+        
+        // Update iteration status
+        await storage.updateMigrationIterationStatus(iteration.id, 'pushed', new Date());
+        
+        broadcastLog('INFO', `Migration successfully pushed to branch: ${branchName}`);
+        
+        // Construct branch URL using clonedUrl if available (for forked repos)
+        const targetRepoUrl = (repository.clonedUrl && repository.clonedUrl.trim() !== '') 
+          ? repository.clonedUrl 
+          : repository.url;
+        const branchUrl = `${targetRepoUrl.replace(/\.git$/, '')}/tree/${branchName}`;
+        
+        res.json({
+          success: true,
+          branchName,
+          branchUrl,
+          prUrl: pushResult.prUrl,  // Include draft PR URL
+          message: "Changes approved and pushed successfully"
+        });
+      } catch (pushError: any) {
+        await storage.updateMigrationIterationStatus(iteration.id, 'failed');
+        broadcastLog('ERROR', `Migration push failed: ${pushError.message}`);
+        throw pushError;
+      }
+    } catch (error: any) {
+      console.error("Failed to approve migration:", error);
+      res.status(500).json({ 
+        error: error.message || "Failed to approve and push changes" 
+      });
+    }
+  });
+
+  // CI/CD test results endpoint (supports GitHub Actions, GitLab CI/CD, etc.)
+  app.get("/api/cicd/test-results/:repositoryId", async (req, res) => {
+    try {
+      const { repositoryId } = req.params;
+      
+      const repository = await storage.getRepository(repositoryId);
+      if (!repository) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+      
+      // Get active account to determine provider
+      const activeAccount = getActiveAccount(req);
+      const provider = activeAccount?.provider || repository.provider;
+      
+      // Get cached test results (filter by provider if available)
+      const cachedResults = await storage.getCicdTestResultsByRepository(repositoryId, provider);
+      res.json({ testResults: cachedResults, provider });
+    } catch (error: any) {
+      console.error("Failed to fetch CI/CD test results:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch test results" });
+    }
+  });
+  
+  // Refresh CI/CD test results for a repository (supports GitHub Actions, GitLab CI/CD, etc.)
+  app.post("/api/cicd/refresh/:repositoryId", async (req, res) => {
+    try {
+      const { repositoryId } = req.params;
+      
+      const repository = await storage.getRepository(repositoryId);
+      if (!repository) {
+        return res.status(404).json({ error: "Repository not found" });
+      }
+      
+      // Get active account for Git operations
+      const activeAccount = getActiveAccount(req);
+      if (!activeAccount) {
+        return res.status(401).json({ error: "No authenticated account found" });
+      }
+      
+      const provider = activeAccount.provider;
+      
+      // Extract owner and repo from URL
+      const targetUrl = (repository.clonedUrl && repository.clonedUrl.trim() !== '') 
+        ? repository.clonedUrl 
+        : repository.url;
+      
+      let refreshedCount = 0;
+      
+      if (provider === 'github') {
+        // GitHub Actions implementation
+        const urlMatch = targetUrl.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
+        if (!urlMatch) {
+          return res.status(400).json({ error: "Invalid GitHub repository URL" });
+        }
+        const [, owner, repoName] = urlMatch;
+        
+        // Fetch workflow runs from GitHub
+        const { Octokit } = await import('@octokit/rest');
+        const octokit = new Octokit({ auth: activeAccount.accessToken });
+        
+        const { data } = await octokit.actions.listWorkflowRunsForRepo({
+          owner,
+          repo: repoName,
+          per_page: 20,
+          status: 'completed'
+        });
+        
+        // Store/update test results
+        for (const run of data.workflow_runs) {
+          const existing = await storage.getCicdTestResultByPipelineId(run.id.toString(), 'github');
+          
+          if (existing) {
+            await storage.updateCicdTestResult(existing.id, {
+              status: run.status ?? 'unknown',
+              conclusion: run.conclusion ?? null,
+              pipelineUrl: run.html_url
+            });
+          } else {
+            await storage.createCicdTestResult({
+              repositoryId,
+              provider: 'github',
+              pipelineId: run.id.toString(),
+              branchName: run.head_branch ?? 'unknown',
+              commitSha: run.head_sha,
+              status: run.status ?? 'unknown',
+              conclusion: run.conclusion ?? null,
+              pipelineUrl: run.html_url,
+              testsPassed: null,
+              testsFailed: null,
+              testsTotal: null,
+              coveragePercent: null,
+              artifactUrls: null
+            });
+          }
+        }
+        refreshedCount = data.workflow_runs.length;
+        
+      } else if (provider === 'gitlab') {
+        // GitLab CI/CD implementation
+        const urlMatch = targetUrl.match(/gitlab\.com[/:]([^/]+\/[^/]+)/);
+        if (!urlMatch) {
+          return res.status(400).json({ error: "Invalid GitLab repository URL" });
+        }
+        const projectPath = urlMatch[1].replace(/\.git$/, '');
+        const encodedPath = encodeURIComponent(projectPath);
+        
+        // Fetch pipelines from GitLab
+        const gitlabApiUrl = `https://gitlab.com/api/v4/projects/${encodedPath}/pipelines?per_page=20&status=success,failed,canceled`;
+        const gitlabResponse = await fetch(gitlabApiUrl, {
+          headers: {
+            'Authorization': `Bearer ${activeAccount.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!gitlabResponse.ok) {
+          throw new Error(`GitLab API error: ${gitlabResponse.statusText}`);
+        }
+        
+        const pipelines = await gitlabResponse.json();
+        
+        // Store/update test results
+        for (const pipeline of pipelines) {
+          const existing = await storage.getCicdTestResultByPipelineId(pipeline.id.toString(), 'gitlab');
+          
+          if (existing) {
+            await storage.updateCicdTestResult(existing.id, {
+              status: pipeline.status,
+              conclusion: pipeline.status === 'success' ? 'success' : pipeline.status === 'failed' ? 'failure' : 'cancelled',
+              pipelineUrl: pipeline.web_url
+            });
+          } else {
+            await storage.createCicdTestResult({
+              repositoryId,
+              provider: 'gitlab',
+              pipelineId: pipeline.id.toString(),
+              branchName: pipeline.ref ?? 'unknown',
+              commitSha: pipeline.sha,
+              status: pipeline.status,
+              conclusion: pipeline.status === 'success' ? 'success' : pipeline.status === 'failed' ? 'failure' : 'cancelled',
+              pipelineUrl: pipeline.web_url,
+              testsPassed: null,
+              testsFailed: null,
+              testsTotal: null,
+              coveragePercent: null,
+              artifactUrls: null
+            });
+          }
+        }
+        refreshedCount = pipelines.length;
+      } else {
+        return res.status(400).json({ error: `Provider ${provider} not supported for CI/CD test results` });
+      }
+      
+      // Return updated results
+      const results = await storage.getCicdTestResultsByRepository(repositoryId, provider);
+      res.json({ testResults: results, refreshed: refreshedCount, provider });
+    } catch (error: any) {
+      console.error("Failed to refresh CI/CD test results:", error);
+      res.status(500).json({ error: error.message || "Failed to refresh test results" });
     }
   });
 

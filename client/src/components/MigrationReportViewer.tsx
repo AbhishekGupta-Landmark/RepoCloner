@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { useQuery, useIsMutating } from '@tanstack/react-query';
+import { useQuery, useIsMutating, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { FileText, Code, BarChart3, Loader2, AlertTriangle, GitBranch, Code2, CheckCircle, ChevronDown, RotateCw, Brain } from 'lucide-react';
+import { FileText, Code, BarChart3, Loader2, AlertTriangle, GitBranch, Code2, CheckCircle, ChevronDown, RotateCw, Brain, ArrowRight, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAnalysis } from '@/hooks/useAnalysis';
 import DiffViewer from '@/components/ui/DiffViewer';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useAppContext } from '@/context/AppContext';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface KafkaUsageItem {
   file: string;
@@ -46,19 +48,26 @@ interface MigrationReportData {
 interface MigrationReportViewerProps {
   repositoryId: string;
   analysisType?: string;
+  iterationNumber?: number; // Iteration number for this report (calculated from parent)
 }
 
-export function MigrationReportViewer({ repositoryId, analysisType }: MigrationReportViewerProps) {
+export function MigrationReportViewer({ repositoryId, analysisType, iterationNumber = 1 }: MigrationReportViewerProps) {
   const [keyChangesOpen, setKeyChangesOpen] = useState(true);
   
   // Get analysis functions and loading state
   const { analyzeCode, isLoading } = useAnalysis();
+  const queryClient = useQueryClient();
+  const { canAccessMigration, enableMigrationAccess, switchToTab, unlockTab } = useAppContext();
   
   // Track global analysis mutations (works across all components)
   const isMutating = useIsMutating({ mutationKey: ['analysis'] });
   const isAnalyzing = isLoading || isMutating > 0;
   
-  const { data, isLoading: isQueryLoading, error, refetch } = useQuery({
+  // Check cache for failed status first
+  const cachedData = queryClient.getQueryData(['structured-report', repositoryId, analysisType || 'all']) as any;
+  const hasCachedFailure = cachedData?.status === 'failed';
+  
+  const { data: queryData, isLoading: isQueryLoading, error, refetch } = useQuery({
     queryKey: ['structured-report', repositoryId, analysisType || 'all'],
     queryFn: async () => {
       const url = analysisType 
@@ -80,16 +89,20 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
       
       return response.json();
     },
-    enabled: !!repositoryId,
-    // Only poll when analysis might be in progress, stop when completed
+    // CRITICAL: Don't fetch if we have a cached failure - this prevents overwriting the error state
+    enabled: !!repositoryId && !hasCachedFailure,
+    // Only poll when analysis might be in progress, stop when completed OR failed
     refetchInterval: (query) => {
       const currentData = query.state.data as any;
-      // Stop polling if we have a ready report or if there's no analysis yet
-      return currentData?.status === 'ready' || currentData?.status === 'completed' || currentData?.status === 'no_analysis' ? false : 5000;
+      // Stop polling if we have a ready report, failed status, or if there's no analysis yet
+      return currentData?.status === 'ready' || currentData?.status === 'completed' || currentData?.status === 'no_analysis' || currentData?.status === 'failed' ? false : 5000;
     },
     staleTime: 0, // Always consider data stale to ensure fresh fetches
     retry: false // Don't retry to avoid showing stale errors
   });
+  
+  // Use cached data if we have a failure, otherwise use query data
+  const data = hasCachedFailure ? cachedData : queryData;
   
   // Show loading state when initially loading OR when analysis is running
   if ((isQueryLoading && !data) || isAnalyzing) {
@@ -134,20 +147,7 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
 
   // Handle different analysis states
   if (!data || !data.structuredData) {
-    // No analysis run yet - show prompt
-    if (data?.status === 'no_analysis' || !data) {
-      return (
-        <Card>
-          <CardContent className="text-center py-12">
-            <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
-            <h3 className="text-lg font-medium mb-2">Ready to Analyze</h3>
-            <p className="text-sm text-muted-foreground">Click the "Analyze Code" button above to start the analysis</p>
-          </CardContent>
-        </Card>
-      );
-    }
-    
-    // Analysis failed - show error message
+    // Analysis failed - show error message (CHECK THIS FIRST!)
     if (data?.status === 'failed') {
       return (
         <div className="space-y-4">
@@ -177,7 +177,7 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
                   variant="outline" 
                   size="sm" 
                   onClick={async () => {
-                    await analyzeCode(repositoryId);
+                    await analyzeCode(repositoryId, analysisType);
                     refetch(); // Force refresh the query immediately after analysis
                   }}
                   disabled={isAnalyzing}
@@ -193,39 +193,15 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
       );
     }
 
-    // No analysis has been run yet - show setup instructions
+    // No analysis has been run yet - show simple ready state
     return (
-      <div className="space-y-4">
-        <Card className="border-blue-200 dark:border-blue-800">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
-              <FileText className="h-5 w-5" />
-              Migration Analysis Setup
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm mb-3">
-              No structured migration report available yet. To generate one:
-            </p>
-            <ol className="list-decimal list-inside text-sm space-y-1 text-muted-foreground">
-              <li>Configure AI settings with your AI API credentials</li>
-              <li>Clone a repository containing Kafka code</li>
-              <li>The AI will automatically analyze and generate a migration report</li>
-            </ol>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="py-8">
-            <div className="text-center">
-              <BarChart3 className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
-              <h3 className="text-lg font-medium mb-2">Migration Analysis Setup</h3>
-              <p className="text-muted-foreground">
-                Once you run AI analysis on a Kafka repository, the structured migration data will appear here.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardContent className="text-center py-12">
+          <Brain className="h-16 w-16 mx-auto mb-4 opacity-30" />
+          <h3 className="text-lg font-medium mb-2">Ready to Analyze</h3>
+          <p className="text-sm text-muted-foreground">Click the "Analyze Code" button above to start the analysis</p>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -266,12 +242,84 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
     });
   }
 
-  // Get report title - use descriptive migration-specific title
-  const reportTitle = "Kafka → Azure Service Bus Migration Report";
+  // Get report title and suffix with iteration number only (no date/time in header)
+  // Format: Title Iteration[N]
+  const suffix = ` Iteration${iterationNumber}`;
+  const reportTitle = `Kafka → Azure Service Bus Migration Report${suffix}`;
   const reportSubtitle = `Generated on ${new Date(data.createdAt).toLocaleDateString()}`;
+
+  // Check if this specific report has been accessed for migration
+  const hasAccessedThisReport = canAccessMigration(data.id);
 
   return (
     <div className="space-y-6" data-testid="migration-report-viewer">
+      {/* Proceed to Code Migration Button - Only shown if not already accessed for THIS report */}
+      {!hasAccessedThisReport && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+        >
+          <Card className="border-2 border-primary/50 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5">
+            <CardContent className="py-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <motion.div
+                    animate={{ 
+                      scale: [1, 1.1, 1],
+                    }}
+                    transition={{ 
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: "easeInOut"
+                    }}
+                    className="flex-shrink-0"
+                  >
+                    <Sparkles className="h-8 w-8 text-primary" />
+                  </motion.div>
+                  <div className="text-left min-w-0">
+                    <h3 className="text-base font-semibold">Analysis Complete!</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Your migration analysis is ready. Review the insights above, and when you're satisfied, proceed to the Code Migration tab where you can review AI-generated changes, modify them if needed, and push approved updates to your Git repository.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  onClick={() => {
+                    enableMigrationAccess(data.id);
+                    unlockTab('code-migration'); // Unlock the tab so it's accessible
+                    switchToTab('migration');
+                  }}
+                  className="group relative overflow-hidden bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-white font-medium flex-shrink-0 w-full sm:w-auto"
+                  data-testid="button-proceed-to-migration"
+                >
+                  <motion.div
+                    className="flex items-center gap-2"
+                    whileHover={{ scale: 1.05 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                  >
+                    <span>Proceed to Code Migration</span>
+                    <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                  </motion.div>
+                  
+                  {/* Animated background shimmer */}
+                  <motion.div
+                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                    initial={{ x: '-100%' }}
+                    animate={{ x: '200%' }}
+                    transition={{ 
+                      duration: 3,
+                      repeat: Infinity,
+                      ease: "linear"
+                    }}
+                  />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
       {/* Header */}
       <Card>
         <CardHeader>
@@ -319,7 +367,7 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
                   <div>
                     <CardTitle className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
                       <CheckCircle className="h-5 w-5" />
-                      Key Changes
+                      Key Changes{suffix}
                       <Badge variant="secondary" className="ml-2">{uniqueKeyChanges.length}</Badge>
                     </CardTitle>
                     <CardDescription>
@@ -354,7 +402,7 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
-              Important Notes
+              Important Notes{suffix}
             </CardTitle>
             <CardDescription>
               Key observations and recommendations from the migration analysis
@@ -380,18 +428,18 @@ export function MigrationReportViewer({ repositoryId, analysisType }: MigrationR
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="inventory" className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
-            Kafka Inventory
+            Kafka Inventory{suffix}
           </TabsTrigger>
           <TabsTrigger value="diffs" className="flex items-center gap-2">
             <Code className="h-4 w-4" />
-            Code Migrations
+            Code Migrations{suffix}
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="inventory" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Kafka Usage Analysis</CardTitle>
+              <CardTitle>Kafka Usage Analysis{suffix}</CardTitle>
               <CardDescription>
                 Files in your repository that use Kafka APIs
               </CardDescription>

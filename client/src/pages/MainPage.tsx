@@ -12,11 +12,13 @@ import SettingsPanel from "@/components/SettingsPanel";
 import RepositoryInput from "@/components/RepositoryInput";
 import TechnologyShowcase from "@/components/TechnologyShowcase";
 import TestCoveragePanel from "@/components/TestCoveragePanel";
+import CodeMigrationPanel from "@/components/CodeMigrationPanel";
+import CicdTestResultsPanel from "@/components/CicdTestResultsPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { useAppContext } from "@/context/AppContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Code, Settings, PanelLeftClose, PanelLeftOpen, Monitor, Shield, FileText, Sparkles, Zap, User, LogOut, ChevronDown, Plus, Github, GitlabIcon as Gitlab, Users, GitBranch, Server, Globe, Check, Loader2 } from "lucide-react";
+import { Code, Settings, PanelLeftClose, PanelLeftOpen, Monitor, Shield, FileText, Sparkles, Zap, User, LogOut, ChevronDown, Plus, Github, GitlabIcon as Gitlab, Users, GitBranch, Server, Globe, Check, Loader2, GitPullRequest, FlaskConical } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,6 +47,14 @@ export default function MainPage() {
   const [initialSettingsTab, setInitialSettingsTab] = useState("ai");
   const [activeTab, setActiveTab] = useState("technology");
   const settingsAppliedRef = useRef(false);
+  
+  // Make setActiveTab available globally through window for context to access
+  useEffect(() => {
+    (window as any).__setActiveTab = setActiveTab;
+    return () => {
+      delete (window as any).__setActiveTab;
+    };
+  }, []);
   const { 
     user, 
     isAuthenticated, 
@@ -63,7 +73,10 @@ export default function MainPage() {
     lastExpandedWidth, 
     setLastExpandedWidth, 
     handleToggleRepoPanel,
-    isCodeAnalysisEnabled
+    isCodeAnalysisEnabled,
+    hasMigrationAccess,
+    hasPushedSuccessfully,
+    isTabUnlocked
   } = useAppContext();
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
@@ -521,10 +534,35 @@ export default function MainPage() {
                           )}
                         </TabsTrigger>
                         <TabsTrigger 
-                          value="analysis" 
-                          disabled={!isCodeAnalysisEnabled}
+                          value="test-coverage" 
+                          disabled={!isTabUnlocked('test-coverage')}
                           className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden ${
-                            !isCodeAnalysisEnabled 
+                            !isTabUnlocked('test-coverage') 
+                              ? 'opacity-50 cursor-not-allowed' 
+                              : 'hover:bg-purple-500/10 hover:text-purple-500'
+                          }`}
+                          data-testid="tab-test-coverage"
+                        >
+                          <motion.div
+                            whileHover={{ scale: 1.1, rotate: 5 }}
+                            transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                          >
+                            <Shield className="h-4 w-4" />
+                          </motion.div>
+                          Test Coverage and Validation
+                          {activeTab === "test-coverage" && (
+                            <motion.div
+                              className="absolute inset-0 bg-primary/5 -z-10"
+                              layoutId="activeMainTab"
+                              transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                            />
+                          )}
+                        </TabsTrigger>
+                        <TabsTrigger 
+                          value="analysis" 
+                          disabled={!isTabUnlocked('code-analysis')}
+                          className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden ${
+                            !isTabUnlocked('code-analysis') 
                               ? 'opacity-50 cursor-not-allowed' 
                               : 'hover:bg-blue-500/10 hover:text-blue-500'
                           }`}
@@ -546,23 +584,48 @@ export default function MainPage() {
                           )}
                         </TabsTrigger>
                         <TabsTrigger 
-                          value="test-coverage" 
-                          disabled={!currentRepository}
+                          value="migration" 
+                          disabled={!isTabUnlocked('code-migration')}
                           className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden ${
-                            !currentRepository 
+                            !isTabUnlocked('code-migration')
                               ? 'opacity-50 cursor-not-allowed' 
-                              : 'hover:bg-blue-500/10 hover:text-blue-500'
+                              : 'hover:bg-amber-500/10 hover:text-amber-500'
                           }`}
-                          data-testid="tab-test-coverage"
+                          data-testid="tab-migration"
                         >
                           <motion.div
                             whileHover={{ scale: 1.1, rotate: 5 }}
                             transition={{ type: "spring", stiffness: 400, damping: 10 }}
                           >
-                            <Shield className="h-4 w-4" />
+                            <GitPullRequest className="h-4 w-4" />
                           </motion.div>
-                          Test Coverage and Validation
-                          {activeTab === "test-coverage" && (
+                          Code Migration
+                          {activeTab === "migration" && (
+                            <motion.div
+                              className="absolute inset-0 bg-primary/5 -z-10"
+                              layoutId="activeMainTab"
+                              transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                            />
+                          )}
+                        </TabsTrigger>
+                        <TabsTrigger 
+                          value="cicd-tests" 
+                          disabled={!isTabUnlocked('cicd-tests')}
+                          className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary flex items-center gap-2 hover-lift transition-smooth relative overflow-hidden ${
+                            !isTabUnlocked('cicd-tests')
+                              ? 'opacity-50 cursor-not-allowed' 
+                              : 'hover:bg-blue-500/10 hover:text-blue-500'
+                          }`}
+                          data-testid="tab-cicd-tests"
+                        >
+                          <motion.div
+                            whileHover={currentRepository && hasPushedSuccessfully ? { scale: 1.1, rotate: 5 } : {}}
+                            transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                          >
+                            <FlaskConical className="h-4 w-4" />
+                          </motion.div>
+                          CI/CD Tests
+                          {activeTab === "cicd-tests" && (
                             <motion.div
                               className="absolute inset-0 bg-primary/5 -z-10"
                               layoutId="activeMainTab"
@@ -636,6 +699,14 @@ export default function MainPage() {
                           
                           <TabsContent value="test-coverage" className="h-full m-0 overflow-y-auto">
                             <TestCoveragePanel />
+                          </TabsContent>
+                          
+                          <TabsContent value="migration" className="h-full m-0 overflow-y-auto">
+                            <CodeMigrationPanel />
+                          </TabsContent>
+                          
+                          <TabsContent value="cicd-tests" className="h-full m-0 overflow-y-auto p-4">
+                            {currentRepository && hasPushedSuccessfully && <CicdTestResultsPanel repositoryId={currentRepository.id} />}
                           </TabsContent>
                           
                           <TabsContent value="reports" className="h-full m-0">

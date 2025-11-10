@@ -1,0 +1,122 @@
+name: .NET Unit Tests
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'KafkaToAzureServiceBusMigration_*'
+      - 'QuickMigrationAnalysis_*'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Check for .NET projects
+      id: check-dotnet
+      run: |
+        # Find .sln file first (preferred - includes all projects)
+        SLN_FILE=$(find . -name "*.sln" -type f | head -n 1)
+        
+        if [ -n "$SLN_FILE" ]; then
+          echo "has_dotnet=true" >> $GITHUB_OUTPUT
+          echo "dotnet_target=$SLN_FILE" >> $GITHUB_OUTPUT
+          echo "✅ Found solution file: $SLN_FILE"
+        elif find . -name "*.csproj" -type f | grep -q .; then
+          # If no .sln, use directory with .csproj files
+          CSPROJ_DIR=$(find . -name "*.csproj" -type f | head -n 1 | xargs dirname)
+          echo "has_dotnet=true" >> $GITHUB_OUTPUT
+          echo "dotnet_target=$CSPROJ_DIR" >> $GITHUB_OUTPUT
+          echo "✅ Found .NET project in: $CSPROJ_DIR"
+        else
+          echo "has_dotnet=false" >> $GITHUB_OUTPUT
+          echo "⚠️  No .NET project files found - skipping .NET tests"
+        fi
+      
+    - name: Setup .NET
+      if: steps.check-dotnet.outputs.has_dotnet == 'true'
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          6.x
+          7.x
+          8.x
+    
+    - name: Display .NET version
+      if: steps.check-dotnet.outputs.has_dotnet == 'true'
+      run: dotnet --version
+      
+    - name: Restore dependencies
+      if: steps.check-dotnet.outputs.has_dotnet == 'true'
+      run: dotnet restore "${{ steps.check-dotnet.outputs.dotnet_target }}"
+      
+    - name: Build solution
+      if: steps.check-dotnet.outputs.has_dotnet == 'true'
+      run: dotnet build "${{ steps.check-dotnet.outputs.dotnet_target }}" --configuration Release --no-restore
+      
+    - name: Run unit tests
+      if: steps.check-dotnet.outputs.has_dotnet == 'true'
+      run: dotnet test "${{ steps.check-dotnet.outputs.dotnet_target }}" --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"
+      
+    - name: Generate test report
+      uses: dorny/test-reporter@v1
+      if: always() && steps.check-dotnet.outputs.has_dotnet == 'true'
+      with:
+        name: '.NET Test Results'
+        path: '**/test-results.trx'
+        reporter: dotnet-trx
+        fail-on-error: true
+        
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always() && steps.check-dotnet.outputs.has_dotnet == 'true'
+      with:
+        name: test-results
+        path: |
+          **/TestResults/*.trx
+          **/TestResults/**/coverage.cobertura.xml
+        retention-days: 30
+        
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      if: always() && steps.check-dotnet.outputs.has_dotnet == 'true'
+      with:
+        name: code-coverage
+        path: '**/TestResults/**/coverage.cobertura.xml'
+        retention-days: 30
+        
+    - name: Test Summary
+      uses: test-summary/action@v2
+      if: always() && steps.check-dotnet.outputs.has_dotnet == 'true'
+      with:
+        paths: '**/test-results.trx'
+        
+    - name: Comment PR with test results
+      uses: EnricoMi/publish-unit-test-result-action@v2
+      if: always() && github.event_name == 'pull_request' && steps.check-dotnet.outputs.has_dotnet == 'true'
+      with:
+        files: '**/test-results.trx'
+        comment_title: '🧪 Unit Test Results'
+        check_name: 'Test Results'
+        
+    - name: Test Report Summary
+      if: always()
+      run: |
+        echo "## 🧪 Test Execution Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Runner**: ubuntu-latest" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ steps.check-dotnet.outputs.has_dotnet }}" == "true" ]; then
+          echo "### Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "Check the 'Test Results' section above for detailed test outcomes." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### ⚠️ No .NET Tests" >> $GITHUB_STEP_SUMMARY
+          echo "No .NET project files (*.csproj or *.sln) were found in this repository." >> $GITHUB_STEP_SUMMARY
+          echo "This workflow is designed for repositories containing .NET projects." >> $GITHUB_STEP_SUMMARY
+        fi

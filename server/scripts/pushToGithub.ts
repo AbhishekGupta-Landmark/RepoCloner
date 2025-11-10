@@ -235,13 +235,21 @@ class GitHubPusher {
     return result.data.createPullRequest.pullRequest.url;
   }
 
-  async pushCode(): Promise<void> {
+  async pushCode(branchName: string, commitMessage: string): Promise<void> {
     try {
       console.log('🚀 Starting GitHub push process...');
       
       // Get ALL changed files dynamically from git
       const workspaceDir = '/home/runner/workspace';
       const allFiles = await this.getChangedFiles();
+      
+      // Always include GitHub Actions workflow file if it exists
+      const workflowFile = '.github/workflows/dotnet-tests.yml';
+      const { existsSync } = await import('fs');
+      if (existsSync(join(workspaceDir, workflowFile)) && !allFiles.includes(workflowFile)) {
+        allFiles.push(workflowFile);
+        console.log('📄 Including GitHub Actions workflow:', workflowFile);
+      }
       
       if (allFiles.length === 0) {
         console.log('📭 No files to push');
@@ -272,9 +280,7 @@ class GitHubPusher {
 
       console.log(`✅ Prepared ${fileChanges.length} files for push`);
 
-      // Use test coverage validation branch
-      const branchName = 'main';
-      console.log('🎯 Pushing to branch:', branchName);
+      console.log('🎯 Pushing to feature branch:', branchName);
       
       // Get the current OID of the branch
       let currentOid: string;
@@ -301,11 +307,11 @@ class GitHubPusher {
 
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i];
-        const commitMessage = batches.length > 1 
-          ? `Update code changes (batch ${i + 1}/${batches.length})`
-          : 'Fix scrollbar visibility in test coverage UI components';
+        const batchCommitMessage = batches.length > 1 
+          ? `${commitMessage} (batch ${i + 1}/${batches.length})`
+          : commitMessage;
         
-        currentOid = await this.commitFiles(branchName, batch, currentOid, commitMessage);
+        currentOid = await this.commitFiles(branchName, batch, currentOid, batchCommitMessage);
         console.log(`✅ Committed batch ${i + 1}/${batches.length} (${batch.length} files)`);
       }
 
@@ -321,13 +327,20 @@ class GitHubPusher {
 
 // Main execution
 async function main() {
-  const token = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
+  const token = process.env.GITHUB_PERSONAL_ACCESS_TOKEN_NEW1 || process.env.GITHUB_PERSONAL_ACCESS_TOKEN_NEW || process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
   if (!token) {
-    throw new Error('GITHUB_PERSONAL_ACCESS_TOKEN environment variable is required');
+    throw new Error('GITHUB_PERSONAL_ACCESS_TOKEN_NEW1 or GITHUB_PERSONAL_ACCESS_TOKEN environment variable is required');
   }
 
+  // Get branch name and commit message from command line arguments
+  const branchName = process.argv[2] || 'feature/updates';
+  const commitMessage = process.argv[3] || 'Update code changes';
+
+  console.log(`📌 Branch: ${branchName}`);
+  console.log(`📝 Commit message: ${commitMessage}`);
+
   const pusher = new GitHubPusher(token, 'AbhishekGupta-Landmark', 'RepoCloner');
-  await pusher.pushCode();
+  await pusher.pushCode(branchName, commitMessage);
 }
 
 export { GitHubPusher };

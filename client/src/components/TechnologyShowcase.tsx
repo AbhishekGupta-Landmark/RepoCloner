@@ -585,7 +585,8 @@ export default function TechnologyShowcase({ repositoryName }: TechnologyShowcas
   const [viewMode, setViewMode] = useState<'simple' | 'details'>('simple');
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [rowHeights, setRowHeights] = useState<number[]>([]);
-  const { currentRepository } = useAppContext();
+  const { currentRepository, unlockTab, switchToTab } = useAppContext();
+  const { toast } = useToast();
   
   // Extract repository information
   const repositoryId = currentRepository?.id;
@@ -918,6 +919,31 @@ export default function TechnologyShowcase({ repositoryName }: TechnologyShowcas
               })}
             </motion.div>
           ))}
+        </motion.div>
+
+        {/* Workflow Progression Button */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.5 }}
+          className="flex justify-center pt-4"
+          data-testid="workflow-button-container"
+        >
+          <Button
+            onClick={() => {
+              unlockTab('test-coverage');
+              switchToTab('test-coverage');
+              toast({
+                title: "Test Coverage Unlocked",
+                description: "Navigating to Test Coverage tab",
+              });
+            }}
+            className="flex items-center gap-2"
+            data-testid="button-goto-test-coverage"
+          >
+            Go to Test Coverage
+            <ArrowRight className="h-4 w-4" />
+          </Button>
         </motion.div>
       </div>
     </motion.div>

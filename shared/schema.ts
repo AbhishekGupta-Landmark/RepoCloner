@@ -89,6 +89,41 @@ export const aiSettings = pgTable("ai_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Migration iteration tracking table
+export const migrationIterations = pgTable("migration_iterations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  repositoryId: varchar("repository_id").references(() => repositories.id),
+  migrationType: text("migration_type").notNull(), // e.g., "KafkaToAzureServiceBusMigration"
+  iterationNumber: text("iteration_number").notNull(), // 1, 2, 3, etc.
+  branchName: text("branch_name").notNull(), // Generated branch name
+  changes: jsonb("changes").notNull(), // Map of filePath -> newCode
+  oldCoverage: jsonb("old_coverage"), // Old coverage data
+  newCoverage: jsonb("new_coverage"), // New coverage data
+  status: text("status").default("pending"), // pending, pushed, failed
+  createdAt: timestamp("created_at").defaultNow(),
+  pushedAt: timestamp("pushed_at"),
+});
+
+// CI/CD test results table (supports GitHub Actions, GitLab CI/CD, etc.)
+export const cicdTestResults = pgTable("cicd_test_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  repositoryId: varchar("repository_id").references(() => repositories.id),
+  provider: text("provider").notNull(), // github, gitlab, azure, etc.
+  pipelineId: text("pipeline_id").notNull(), // GitHub workflow run ID or GitLab pipeline ID
+  branchName: text("branch_name").notNull(),
+  commitSha: text("commit_sha").notNull(),
+  status: text("status").notNull(), // completed, in_progress, queued, running, etc.
+  conclusion: text("conclusion"), // success, failure, cancelled, etc.
+  testsPassed: text("tests_passed"),
+  testsFailed: text("tests_failed"),
+  testsTotal: text("tests_total"),
+  coveragePercent: text("coverage_percent"),
+  pipelineUrl: text("pipeline_url"),
+  artifactUrls: jsonb("artifact_urls"), // Links to test result artifacts
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Migration report structured data types
 export interface KafkaUsageItem {
   file: string;
@@ -165,6 +200,18 @@ export const insertAISettingsSchema = createInsertSchema(aiSettings).omit({
   updatedAt: true,
 });
 
+export const insertMigrationIterationSchema = createInsertSchema(migrationIterations).omit({
+  id: true,
+  createdAt: true,
+  pushedAt: true,
+});
+
+export const insertCicdTestResultSchema = createInsertSchema(cicdTestResults).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -181,6 +228,10 @@ export type InsertOAuthConfig = z.infer<typeof insertOAuthConfigSchema>;
 export type OAuthConfig = typeof oauthConfigs.$inferSelect;
 export type InsertAISettings = z.infer<typeof insertAISettingsSchema>;
 export type AISettings = typeof aiSettings.$inferSelect;
+export type InsertMigrationIteration = z.infer<typeof insertMigrationIterationSchema>;
+export type MigrationIteration = typeof migrationIterations.$inferSelect;
+export type InsertCicdTestResult = z.infer<typeof insertCicdTestResultSchema>;
+export type CicdTestResult = typeof cicdTestResults.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 

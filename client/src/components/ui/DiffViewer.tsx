@@ -289,7 +289,9 @@ const DiffViewer = ({ diffs, className }: DiffViewerProps) => {
                             )}
                             
                             <div data-testid={`hunk-lines-${index}-${hunkIndex}`}>
-                              {(hunk.lines ?? []).map((line, lineIndex) => (
+                              {(hunk.lines ?? [])
+                                .filter(line => line.type !== 'context') // Filter out gray context lines
+                                .map((line, lineIndex) => (
                                 <div
                                   key={lineIndex}
                                   className={cn(

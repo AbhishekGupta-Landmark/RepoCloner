@@ -3,13 +3,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "@/context/AppContext";
-import { Play, FileCode, Loader2, AlertCircle } from "lucide-react";
+import { Play, FileCode, Loader2, AlertCircle, ArrowRight } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import TestCoverageViewer from "./TestCoverageViewer";
 
 export default function TestCoveragePanel() {
-  const { currentRepository } = useAppContext();
+  const { currentRepository, unlockTab, switchToTab } = useAppContext();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Fetch latest test coverage report
@@ -130,6 +132,24 @@ export default function TestCoveragePanel() {
                 </>
               )}
             </Button>
+            
+            {latestTestCoverageReport && (
+              <Button
+                onClick={() => {
+                  unlockTab('code-analysis');
+                  switchToTab('analysis');
+                  toast({
+                    title: "Code Analysis Unlocked",
+                    description: "Navigating to Code Analysis tab",
+                  });
+                }}
+                className="flex items-center gap-2 ml-auto"
+                data-testid="button-goto-code-analysis"
+              >
+                Go to Code Analysis
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            )}
           </div>
 
           {runAnalysisMutation.isError && (

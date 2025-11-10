@@ -32,12 +32,23 @@ interface AppContextType {
   repositoryStatus: RepositoryStatus | null;
   refreshRepositoryStatus: (repositoryId: string) => Promise<void>;
   isCodeAnalysisEnabled: boolean;
+  isTestCoverageComplete: boolean;
+  canAccessMigration: (reportId: string) => boolean;
+  enableMigrationAccess: (reportId: string) => void;
+  hasMigrationAccess: boolean;
+  switchToTab: (tab: string) => void;
   logService: LogService;
   showRepoPanel: boolean;
   toggleRepoPanel: () => void;
   lastExpandedWidth: number;
   setLastExpandedWidth: (width: number) => void;
   handleToggleRepoPanel: (getCurrentSize?: () => number) => void;
+  hasPushedSuccessfully: boolean;
+  setHasPushedSuccessfully: (pushed: boolean) => void;
+  // Workflow progression state
+  unlockedTabs: Set<string>;
+  unlockTab: (tab: string) => void;
+  isTabUnlocked: (tab: string) => boolean;
 }
 
 interface RepositoriesResponse {
@@ -54,6 +65,7 @@ export function AppProvider({ children }: AppProviderProps) {
   const [currentRepository, setCurrentRepository] = useState<Repository | null>(null);
   const [repositoryStatus, setRepositoryStatus] = useState<RepositoryStatus | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [accessedReports, setAccessedReports] = useState<Set<string>>(new Set());
   
   // Sidebar visibility state with localStorage persistence
   const [showRepoPanel, setShowRepoPanel] = useState<boolean>(() => {
@@ -78,6 +90,30 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   });
 
+  // Push success state with localStorage persistence (per repository)
+  const [hasPushedSuccessfully, setHasPushedSuccessfullyState] = useState<boolean>(() => {
+    try {
+      if (!currentRepository?.id) return false;
+      const savedState = localStorage.getItem(`git-analyzer-push-success-${currentRepository.id}`);
+      return savedState ? JSON.parse(savedState) : false;
+    } catch (error) {
+      console.warn('Failed to parse localStorage data for hasPushedSuccessfully:', error);
+      return false;
+    }
+  });
+
+  // Workflow progression: track which tabs have been unlocked via "Go to..." buttons
+  const [unlockedTabs, setUnlockedTabs] = useState<Set<string>>(() => {
+    try {
+      if (!currentRepository?.id) return new Set(['tech-stack']); // Tech stack always unlocked
+      const savedState = localStorage.getItem(`git-analyzer-unlocked-tabs-${currentRepository.id}`);
+      return savedState ? new Set(JSON.parse(savedState)) : new Set(['tech-stack']);
+    } catch (error) {
+      console.warn('Failed to parse unlocked tabs from localStorage:', error);
+      return new Set(['tech-stack']); // Default: only tech stack unlocked
+    }
+  });
+
   // Toggle repository panel visibility
   const toggleRepoPanel = () => {
     setShowRepoPanel(prev => {
@@ -96,6 +132,19 @@ export function AppProvider({ children }: AppProviderProps) {
       localStorage.setItem('git-analyzer-last-expanded-width', validWidth.toString());
     } catch (error) {
       console.warn('Failed to save lastExpandedWidth to localStorage:', error);
+    }
+  };
+
+  // Set push success state with localStorage persistence (per repository)
+  const setHasPushedSuccessfully = (pushed: boolean) => {
+    setHasPushedSuccessfullyState(pushed);
+    if (currentRepository?.id) {
+      try {
+        localStorage.setItem(`git-analyzer-push-success-${currentRepository.id}`, JSON.stringify(pushed));
+        logService.addLog('INFO', `Git push success state set to: ${pushed}`, 'AppContext');
+      } catch (error) {
+        console.warn('Failed to save hasPushedSuccessfully to localStorage:', error);
+      }
     }
   };
 
@@ -158,14 +207,112 @@ export function AppProvider({ children }: AppProviderProps) {
     }
   }, [repositoriesData, currentRepository]);
 
+  // Query reports to watch for new migration analyses
+  const { data: migrationReportsData } = useQuery<{ reports: any[] }>({
+    queryKey: ['/api/analysis/reports', currentRepository?.id],
+    enabled: !!currentRepository?.id,
+    staleTime: 0,
+  });
+
   // Refresh repository status when current repository changes
   useEffect(() => {
     if (currentRepository?.id) {
       refreshRepositoryStatus(currentRepository.id);
+      // Load push success state from localStorage for this repository
+      try {
+        const savedState = localStorage.getItem(`git-analyzer-push-success-${currentRepository.id}`);
+        setHasPushedSuccessfullyState(savedState ? JSON.parse(savedState) : false);
+      } catch (error) {
+        console.warn('Failed to load push success state:', error);
+        setHasPushedSuccessfullyState(false);
+      }
+      
+      // Load unlocked tabs from localStorage for this repository
+      try {
+        const savedTabs = localStorage.getItem(`git-analyzer-unlocked-tabs-${currentRepository.id}`);
+        setUnlockedTabs(savedTabs ? new Set(JSON.parse(savedTabs)) : new Set(['tech-stack']));
+      } catch (error) {
+        console.warn('Failed to load unlocked tabs:', error);
+        setUnlockedTabs(new Set(['tech-stack']));
+      }
     } else {
       setRepositoryStatus(null);
+      setHasPushedSuccessfullyState(false);
+      setUnlockedTabs(new Set(['tech-stack']));
     }
+    // Reset migration access when repository changes (clear all accessed reports)
+    setAccessedReports(new Set());
   }, [currentRepository]);
+
+  // Clear accessed reports when new migration reports are generated
+  useEffect(() => {
+    if (migrationReportsData?.reports) {
+      const migrationReports = migrationReportsData.reports.filter((r: any) => 
+        r.analysisType?.includes('migration') || r.analysisType === 'default'
+      );
+      
+      if (migrationReports.length > 0) {
+        // Get the most recent migration report
+        const mostRecentReport = migrationReports.sort((a: any, b: any) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )[0];
+        
+        // Clear accessed reports so the "Proceed" button shows for new analyses
+        setAccessedReports(new Set());
+      }
+    }
+  }, [migrationReportsData?.reports?.length, migrationReportsData?.reports?.[0]?.createdAt]);
+
+  // Check if a specific report has migration access enabled
+  const canAccessMigration = (reportId: string): boolean => {
+    return accessedReports.has(reportId);
+  };
+
+  // Enable migration access for a specific report (called from Code Analysis proceed button)
+  const enableMigrationAccess = (reportId: string) => {
+    setAccessedReports(prev => {
+      const next = new Set(prev);
+      next.add(reportId);
+      return next;
+    });
+    logService.addLog('INFO', `Code Migration access enabled for report: ${reportId}`, 'AppContext');
+  };
+
+  // Switch to a specific tab (called from Proceed button)
+  const switchToTab = (tab: string) => {
+    // Access setActiveTab from window (set by MainPage)
+    const setActiveTab = (window as any).__setActiveTab;
+    if (setActiveTab) {
+      setActiveTab(tab);
+      logService.addLog('INFO', `Switched to ${tab} tab`, 'AppContext');
+    }
+  };
+
+  // Unlock a tab (called from "Go to..." buttons)
+  const unlockTab = (tab: string) => {
+    setUnlockedTabs(prev => {
+      const next = new Set(prev);
+      next.add(tab);
+      // Persist to localStorage
+      if (currentRepository?.id) {
+        try {
+          localStorage.setItem(
+            `git-analyzer-unlocked-tabs-${currentRepository.id}`,
+            JSON.stringify(Array.from(next))
+          );
+        } catch (error) {
+          console.warn('Failed to save unlocked tabs to localStorage:', error);
+        }
+      }
+      return next;
+    });
+    logService.addLog('INFO', `Unlocked ${tab} tab`, 'AppContext');
+  };
+
+  // Check if a tab is unlocked
+  const isTabUnlocked = (tab: string): boolean => {
+    return unlockedTabs.has(tab);
+  };
 
   // LogService implementation
   const logService: LogService = {
@@ -201,10 +348,30 @@ export function AppProvider({ children }: AppProviderProps) {
     logService.addLog('INFO', 'Activity logging system initialized', 'AppContext');
   }, []);
 
-  // Compute if Code Analysis is enabled based on repository clone status
+  // Fetch test coverage reports to check if test coverage is complete
+  const { data: reportsData } = useQuery<{ reports: any[] }>({
+    queryKey: ['/api/analysis/reports', currentRepository?.id],
+    enabled: !!currentRepository?.id,
+    staleTime: 5000,
+  });
+
+  // Check if test coverage analysis is complete
+  // Test coverage reports have structuredData (parsed JSON) instead of generatedFiles
+  const isTestCoverageComplete = !!reportsData?.reports?.some(
+    (r: any) => r.analysisType === 'test-coverage' && r.structuredData
+  );
+
+  // Compute if Code Analysis is enabled based on repository clone status AND test coverage completion
   const isCodeAnalysisEnabled = currentRepository !== null && 
     repositoryStatus !== null && 
-    repositoryStatus.cloneStatus === 'cloned';
+    repositoryStatus.cloneStatus === 'cloned' &&
+    isTestCoverageComplete;
+
+  // Compute if any migration report exists (for Code Migration tab)
+  // The tab should be enabled if there's ANY migration report, regardless of "Proceed to Migration" button
+  const hasMigrationAccess = !!(reportsData?.reports?.some(r => 
+    r.analysisType?.includes('migration') || r.analysisType === 'default'
+  ));
 
   const value = {
     currentRepository,
@@ -213,12 +380,22 @@ export function AppProvider({ children }: AppProviderProps) {
     repositoryStatus,
     refreshRepositoryStatus,
     isCodeAnalysisEnabled,
+    isTestCoverageComplete,
+    canAccessMigration,
+    enableMigrationAccess,
+    hasMigrationAccess,
+    switchToTab,
     logService,
     showRepoPanel,
     toggleRepoPanel,
     lastExpandedWidth,
     setLastExpandedWidth,
-    handleToggleRepoPanel
+    handleToggleRepoPanel,
+    hasPushedSuccessfully,
+    setHasPushedSuccessfully,
+    unlockedTabs,
+    unlockTab,
+    isTabUnlocked
   };
 
   return (
@@ -241,6 +418,11 @@ export const useAppContext = () => {
       repositoryStatus: null,
       refreshRepositoryStatus: async () => {},
       isCodeAnalysisEnabled: false,
+      isTestCoverageComplete: false,
+      canAccessMigration: () => false,
+      enableMigrationAccess: () => {},
+      hasMigrationAccess: false,
+      switchToTab: () => {},
       logService: {
         logs: [],
         addLog: () => {},
@@ -251,7 +433,12 @@ export const useAppContext = () => {
       toggleRepoPanel: () => {},
       lastExpandedWidth: 22,
       setLastExpandedWidth: () => {},
-      handleToggleRepoPanel: () => {}
+      handleToggleRepoPanel: () => {},
+      hasPushedSuccessfully: false,
+      setHasPushedSuccessfully: () => {},
+      unlockedTabs: new Set(['tech-stack']),
+      unlockTab: () => {},
+      isTabUnlocked: () => false
     };
     
     if (import.meta.env.DEV) {

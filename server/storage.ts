@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Repository, type InsertRepository, type AnalysisReport, type InsertAnalysisReport, type OAuthConfig, type InsertOAuthConfig, type AISettings, type InsertAISettings } from "@shared/schema";
+import { type User, type InsertUser, type Repository, type InsertRepository, type AnalysisReport, type InsertAnalysisReport, type OAuthConfig, type InsertOAuthConfig, type AISettings, type InsertAISettings, type MigrationIteration, type InsertMigrationIteration, type CicdTestResult, type InsertCicdTestResult } from "@shared/schema";
 import { randomUUID } from "crypto";
 
 // modify the interface with any CRUD methods
@@ -35,6 +35,19 @@ export interface IStorage {
   getFileContent(repositoryId: string, filePath: string): Promise<Buffer | undefined>;
   getFilePath(repositoryId: string, filePath: string): Promise<string | undefined>;
   getFolderPath(repositoryId: string, folderPath: string): Promise<string | undefined>;
+  
+  // Migration iteration tracking methods
+  createMigrationIteration(iteration: InsertMigrationIteration): Promise<MigrationIteration>;
+  getMigrationIteration(id: string): Promise<MigrationIteration | undefined>;
+  getMigrationIterationsByRepository(repositoryId: string): Promise<MigrationIteration[]>;
+  getLatestIterationNumber(repositoryId: string, migrationType: string): Promise<number>;
+  updateMigrationIterationStatus(id: string, status: string, pushedAt?: Date): Promise<MigrationIteration | undefined>;
+  
+  // CI/CD test results methods (GitHub Actions, GitLab CI/CD, etc.)
+  createCicdTestResult(result: InsertCicdTestResult): Promise<CicdTestResult>;
+  getCicdTestResultsByRepository(repositoryId: string, provider?: string): Promise<CicdTestResult[]>;
+  getCicdTestResultByPipelineId(pipelineId: string, provider: string): Promise<CicdTestResult | undefined>;
+  updateCicdTestResult(id: string, updates: Partial<InsertCicdTestResult>): Promise<CicdTestResult | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -43,6 +56,8 @@ export class MemStorage implements IStorage {
   private analysisReports: Map<string, AnalysisReport>;
   private oauthConfigs: Map<string, OAuthConfig>;
   private aiSettings: AISettings | undefined;
+  private migrationIterations: Map<string, MigrationIteration>;
+  private cicdTestResults: Map<string, CicdTestResult>;
 
   constructor() {
     this.users = new Map();
@@ -50,6 +65,8 @@ export class MemStorage implements IStorage {
     this.analysisReports = new Map();
     this.oauthConfigs = new Map();
     this.aiSettings = undefined;
+    this.migrationIterations = new Map();
+    this.cicdTestResults = new Map();
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -373,6 +390,118 @@ export class MemStorage implements IStorage {
     }
     
     return undefined;
+  }
+
+  // Migration iteration tracking methods
+  async createMigrationIteration(insertIteration: InsertMigrationIteration): Promise<MigrationIteration> {
+    const id = randomUUID();
+    const iteration: MigrationIteration = {
+      ...insertIteration,
+      id,
+      createdAt: new Date(),
+      pushedAt: null,
+      oldCoverage: insertIteration.oldCoverage ?? null,
+      newCoverage: insertIteration.newCoverage ?? null,
+      status: insertIteration.status ?? 'pending',
+    };
+    this.migrationIterations.set(id, iteration);
+    return iteration;
+  }
+
+  async getMigrationIteration(id: string): Promise<MigrationIteration | undefined> {
+    return this.migrationIterations.get(id);
+  }
+
+  async getMigrationIterationsByRepository(repositoryId: string): Promise<MigrationIteration[]> {
+    return Array.from(this.migrationIterations.values()).filter(
+      (iteration) => iteration.repositoryId === repositoryId
+    );
+  }
+
+  async getLatestIterationNumber(repositoryId: string, migrationType: string): Promise<number> {
+    const iterations = await this.getMigrationIterationsByRepository(repositoryId);
+    const typeIterations = iterations.filter((it) => it.migrationType === migrationType);
+    
+    if (typeIterations.length === 0) {
+      return 0;
+    }
+    
+    const numbers = typeIterations.map((it) => parseInt(it.iterationNumber, 10));
+    return Math.max(...numbers);
+  }
+
+  async updateMigrationIterationStatus(
+    id: string,
+    status: string,
+    pushedAt?: Date
+  ): Promise<MigrationIteration | undefined> {
+    const existing = this.migrationIterations.get(id);
+    if (!existing) {
+      return undefined;
+    }
+
+    const updated: MigrationIteration = {
+      ...existing,
+      status,
+      pushedAt: pushedAt ?? existing.pushedAt,
+    };
+
+    this.migrationIterations.set(id, updated);
+    return updated;
+  }
+
+  async createCicdTestResult(insertResult: InsertCicdTestResult): Promise<CicdTestResult> {
+    const id = randomUUID();
+    const result: CicdTestResult = {
+      id,
+      repositoryId: insertResult.repositoryId ?? null,
+      provider: insertResult.provider,
+      pipelineId: insertResult.pipelineId,
+      branchName: insertResult.branchName,
+      commitSha: insertResult.commitSha,
+      status: insertResult.status,
+      conclusion: insertResult.conclusion ?? null,
+      testsPassed: insertResult.testsPassed ?? null,
+      testsFailed: insertResult.testsFailed ?? null,
+      testsTotal: insertResult.testsTotal ?? null,
+      coveragePercent: insertResult.coveragePercent ?? null,
+      pipelineUrl: insertResult.pipelineUrl ?? null,
+      artifactUrls: insertResult.artifactUrls ?? null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.cicdTestResults.set(id, result);
+    return result;
+  }
+
+  async getCicdTestResultsByRepository(repositoryId: string, provider?: string): Promise<CicdTestResult[]> {
+    return Array.from(this.cicdTestResults.values())
+      .filter(result => 
+        result.repositoryId === repositoryId && 
+        (!provider || result.provider === provider)
+      )
+      .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+  }
+
+  async getCicdTestResultByPipelineId(pipelineId: string, provider: string): Promise<CicdTestResult | undefined> {
+    return Array.from(this.cicdTestResults.values())
+      .find(result => result.pipelineId === pipelineId && result.provider === provider);
+  }
+
+  async updateCicdTestResult(id: string, updates: Partial<InsertCicdTestResult>): Promise<CicdTestResult | undefined> {
+    const existing = this.cicdTestResults.get(id);
+    if (!existing) {
+      return undefined;
+    }
+    
+    const updated: CicdTestResult = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date()
+    };
+    
+    this.cicdTestResults.set(id, updated);
+    return updated;
   }
 }
 

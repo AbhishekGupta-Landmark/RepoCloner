@@ -35,6 +35,9 @@ export function useAnalysis() {
       // Build cache key with analysisType included
       const cacheKey = ['structured-report', repositoryId, analysisTypeId || 'all'];
       
+      // CRITICAL FIX: First REMOVE any old failed cache to avoid stale data
+      queryClient.removeQueries({ queryKey: cacheKey });
+      
       // Store successful analysis result in cache (only when success is true)
       if (data.success !== false && data.structuredData) {
         queryClient.setQueryData(cacheKey, {
@@ -46,9 +49,15 @@ export function useAnalysis() {
         });
       }
       
+      // Force refetch of the structured report to get fresh data
+      queryClient.invalidateQueries({ queryKey: cacheKey });
+      
       // Invalidate reports list to refresh
       queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
       queryClient.invalidateQueries({ queryKey: ['/api/repositories'] });
+      
+      // Invalidate migration changes to refresh Code Migration tab
+      queryClient.invalidateQueries({ queryKey: ['/api/migration/changes'] });
       
       toast({
         title: "Migration Analysis Complete",
@@ -75,7 +84,12 @@ export function useAnalysis() {
       queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
       queryClient.invalidateQueries({ queryKey: ['/api/repositories'] });
       
-      // Error is displayed on main screen - no toast needed
+      // Show error toast to user
+      toast({
+        title: "Analysis Failed",
+        description: error.message || "Failed to run code analysis",
+        variant: "destructive"
+      });
     }
   });
 
@@ -110,29 +124,12 @@ export function useAnalysis() {
 
   const analyzeCode = async (repositoryId: string, analysisTypeId?: string): Promise<boolean> => {
     try {
-      // CRITICAL FIX: Clear stale cache BEFORE running analysis
-      const queryKey = ['structured-report', repositoryId, analysisTypeId || 'all'];
-      await queryClient.resetQueries({ queryKey });
-      
-      // Also invalidate all related queries before running analysis
-      queryClient.invalidateQueries({ 
-        predicate: (query) => 
-          Array.isArray(query.queryKey) && 
-          query.queryKey[0] === 'structured-report' && 
-          query.queryKey[1] === repositoryId 
-      });
-      
-      // Now run the analysis with clean cache
+      // DON'T reset/invalidate before analysis - let mutation handle cache updates
+      // Resetting triggers refetches that overwrite the failed status
       await analysisMutation.mutateAsync({ repositoryId, analysisTypeId });
-      
-      // Invalidate caches after successful analysis
-      queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/repositories'] });
       return true;
     } catch (error) {
-      // On failure, still invalidate to ensure clean state
-      queryClient.invalidateQueries({ queryKey: ['/api/analysis/reports'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/repositories'] });
+      // Error handling is done in mutation's onError
       return false;
     }
   };

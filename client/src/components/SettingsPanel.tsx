@@ -625,11 +625,11 @@ export default function SettingsPanel({ onApplied, initialTab = "ai" }: Settings
             <div className="space-y-2">
               <h3 className="text-lg font-semibold flex items-center gap-2 text-foreground">
                 <GitBranch className="w-5 h-5" />
-                Git Authentication (Clone FROM Git Providers)
+                Git Authentication
                 <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-md font-normal">Server Settings</span>
               </h3>
               <p className="text-sm text-muted-foreground">
-                Configure OAuth applications for <strong>reading and cloning FROM Git Providers</strong>. This enables user authentication and access to private repositories for analysis. Changes are saved to the server.
+                Configure OAuth applications for <strong>[Clone FROM Git Providers]</strong> - This enables user authentication and access to private repositories for reading and cloning. Changes are saved to the server.
               </p>
             </div>
 
@@ -838,10 +838,10 @@ export default function SettingsPanel({ onApplied, initialTab = "ai" }: Settings
                 <div className="space-y-2">
                   <h3 className="text-lg font-semibold flex items-center gap-2 text-foreground">
                     <Lock className="w-5 h-5" />
-                    Git Connection - Sign In to Git Provider
+                    Git Connection
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    Authenticate with your Git provider using OAuth or Personal Access Token (PAT). This enables access to repositories for analysis and report generation.
+                    Authenticate with your Git provider <strong>[Write to Git Provider]</strong> - Using OAuth or Personal Access Token (PAT), this enables pushing migration changes, creating new branches, and writing analysis results back to your repositories.
                   </p>
                 </div>
 
