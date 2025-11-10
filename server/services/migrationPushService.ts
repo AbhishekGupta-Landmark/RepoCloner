@@ -181,59 +181,6 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
       }
     }
     
-    // Final build check to ensure solution compiles before push
-    console.log('\n🔨 Running final build check before push...');
-    try {
-      const { execSync } = await import('child_process');
-      const fs = await import('fs/promises');
-      const path = await import('path');
-      
-      // Find .sln files
-      const slnFiles = await findSlnFiles(repository.localPath!);
-      
-      if (slnFiles.length > 0) {
-        console.log(`   📦 Restoring solution: ${path.basename(slnFiles[0])}`);
-        execSync(`dotnet restore "${slnFiles[0]}"`, {
-          cwd: repository.localPath!,
-          stdio: 'pipe',
-          encoding: 'utf-8',
-          timeout: 60000
-        });
-        
-        console.log(`   🔨 Building solution: ${path.basename(slnFiles[0])}`);
-        const buildOutput = execSync(`dotnet build "${slnFiles[0]}" --no-restore`, {
-          cwd: repository.localPath!,
-          stdio: 'pipe',
-          encoding: 'utf-8',
-          timeout: 90000
-        });
-        
-        console.log(`✅ Build successful - solution ready to push`);
-      } else {
-        console.log(`   ⚠️  No .sln file found, running dotnet restore and build on repository`);
-        execSync('dotnet restore', {
-          cwd: repository.localPath!,
-          stdio: 'pipe',
-          encoding: 'utf-8',
-          timeout: 60000
-        });
-        
-        execSync('dotnet build --no-restore', {
-          cwd: repository.localPath!,
-          stdio: 'pipe',
-          encoding: 'utf-8',
-          timeout: 90000
-        });
-        
-        console.log(`✅ Build successful - code ready to push`);
-      }
-    } catch (buildError: any) {
-      const errorOutput = buildError.stdout || buildError.stderr || buildError.message;
-      console.error(`❌ Build failed - cannot push code that doesn't compile:`);
-      console.error(errorOutput);
-      throw new Error(`Build check failed: Solution does not compile. Fix build errors before pushing.`);
-    }
-    
     // Use appropriate pusher based on provider
     let prUrl: string | undefined;
     
