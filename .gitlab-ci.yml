@@ -16,25 +16,35 @@ dotnet-tests:
     - dotnet --version
     - echo "Checking for .NET projects..."
     - |
-      if find . -name "*.csproj" -o -name "*.sln" | grep -q .; then
-        echo "✅ Found .NET project files"
+      # Find .sln file first (preferred - includes all projects)
+      SLN_FILE=$(find . -name "*.sln" -type f | head -n 1)
+      
+      if [ -n "$SLN_FILE" ]; then
         export HAS_DOTNET=true
+        export DOTNET_TARGET="$SLN_FILE"
+        echo "✅ Found solution file: $SLN_FILE"
+      elif find . -name "*.csproj" -type f | grep -q .; then
+        # If no .sln, use directory with .csproj files
+        CSPROJ_DIR=$(find . -name "*.csproj" -type f | head -n 1 | xargs dirname)
+        export HAS_DOTNET=true
+        export DOTNET_TARGET="$CSPROJ_DIR"
+        echo "✅ Found .NET project in: $CSPROJ_DIR"
       else
-        echo "⚠️  No .NET project files found - skipping .NET tests"
         export HAS_DOTNET=false
+        echo "⚠️  No .NET project files found - skipping .NET tests"
       fi
   
   script:
     - |
       if [ "$HAS_DOTNET" = "true" ]; then
         echo "Restoring dependencies..."
-        dotnet restore
+        dotnet restore "$DOTNET_TARGET"
         
         echo "Building solution..."
-        dotnet build --configuration Release --no-restore
+        dotnet build "$DOTNET_TARGET" --configuration Release --no-restore
         
         echo "Running unit tests..."
-        dotnet test --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"
+        dotnet test "$DOTNET_TARGET" --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=test-results.trx" --collect:"XPlat Code Coverage"
       else
         echo "Skipping .NET tests - no .NET projects found"
       fi
@@ -72,6 +82,5 @@ dotnet-tests:
     - /^feature\/.*/
     - /^KafkaToAzureServiceBusMigration_.*/
     - /^QuickMigrationAnalysis_.*/
-    - merge_requests
   
   coverage: '/Total\s+\|\s+(\d+\.?\d*)%/'

@@ -14,6 +14,27 @@ interface PushMigrationChangesParams {
   storage: IStorage;
 }
 
+async function findSlnFiles(repoPath: string): Promise<string[]> {
+  const slnFiles: string[] = [];
+  
+  async function scanDir(dir: string) {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!entry.name.startsWith('.') && entry.name !== 'node_modules') {
+          await scanDir(fullPath);
+        }
+      } else if (entry.name.endsWith('.sln')) {
+        slnFiles.push(fullPath);
+      }
+    }
+  }
+  
+  await scanDir(repoPath);
+  return slnFiles;
+}
+
 export async function pushMigrationChanges(params: PushMigrationChangesParams): Promise<{ prUrl?: string }> {
   const { repository, branchName, changes, storage, accessToken, commitMessage } = params;
   
@@ -160,12 +181,57 @@ export async function pushMigrationChanges(params: PushMigrationChangesParams): 
       }
     }
     
-    // Validate and fix NuGet package versions before pushing
+    // Final build check to ensure solution compiles before push
+    console.log('\n🔨 Running final build check before push...');
     try {
-      const { validateAndFixNuGetPackages } = await import('../utils/nugetValidator.js');
-      await validateAndFixNuGetPackages(repository.localPath!);
-    } catch (validationError) {
-      console.warn(`⚠️ NuGet validation skipped: ${validationError}`);
+      const { execSync } = await import('child_process');
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      
+      // Find .sln files
+      const slnFiles = await findSlnFiles(repository.localPath!);
+      
+      if (slnFiles.length > 0) {
+        console.log(`   📦 Restoring solution: ${path.basename(slnFiles[0])}`);
+        execSync(`dotnet restore "${slnFiles[0]}"`, {
+          cwd: repository.localPath!,
+          stdio: 'pipe',
+          encoding: 'utf-8',
+          timeout: 60000
+        });
+        
+        console.log(`   🔨 Building solution: ${path.basename(slnFiles[0])}`);
+        const buildOutput = execSync(`dotnet build "${slnFiles[0]}" --no-restore`, {
+          cwd: repository.localPath!,
+          stdio: 'pipe',
+          encoding: 'utf-8',
+          timeout: 90000
+        });
+        
+        console.log(`✅ Build successful - solution ready to push`);
+      } else {
+        console.log(`   ⚠️  No .sln file found, running dotnet restore and build on repository`);
+        execSync('dotnet restore', {
+          cwd: repository.localPath!,
+          stdio: 'pipe',
+          encoding: 'utf-8',
+          timeout: 60000
+        });
+        
+        execSync('dotnet build --no-restore', {
+          cwd: repository.localPath!,
+          stdio: 'pipe',
+          encoding: 'utf-8',
+          timeout: 90000
+        });
+        
+        console.log(`✅ Build successful - code ready to push`);
+      }
+    } catch (buildError: any) {
+      const errorOutput = buildError.stdout || buildError.stderr || buildError.message;
+      console.error(`❌ Build failed - cannot push code that doesn't compile:`);
+      console.error(errorOutput);
+      throw new Error(`Build check failed: Solution does not compile. Fix build errors before pushing.`);
     }
     
     // Use appropriate pusher based on provider
@@ -200,6 +266,21 @@ ${commitMessage}
         console.log(`✅ Draft PR created: ${prUrl}`);
       } catch (prError) {
         console.warn(`⚠️ Failed to create draft PR (push succeeded): ${prError}`);
+      }
+      
+      // Mark report as pushed
+      try {
+        const reports = await storage.getAnalysisReportsByRepository(repository.id!);
+        if (reports.length > 0) {
+          const latestReport = reports[reports.length - 1];
+          await storage.updateAnalysisReport(latestReport.id!, {
+            wasPushed: true,
+            lastPushAt: new Date()
+          });
+          console.log(`✅ Marked report ${latestReport.id} as pushed`);
+        }
+      } catch (updateError) {
+        console.warn(`⚠️ Failed to update report push status: ${updateError}`);
       }
     } else {
       const { GitLabPusher } = await import('../scripts/pushSpecificFilesGitLab.js');
