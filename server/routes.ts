@@ -1340,6 +1340,14 @@ export async function registerRoutes(app: Application): Promise<Server> {
       const analysisTypeLabel = analysisTypeInfo?.label || 'Migration Analysis';
       
       broadcastLog('INFO', `🚀 Executing API analysis for migration: ${repository.name} (type: ${selectedAnalysisTypeId}, label: ${analysisTypeLabel})`);
+      broadcastLog('INFO', `🔍 Repository object details:`);
+      broadcastLog('INFO', `🔍   - ID: ${repository.id}`);
+      broadcastLog('INFO', `🔍   - Name: ${repository.name}`);
+      broadcastLog('INFO', `🔍   - URL: "${repository.url}"`);
+      broadcastLog('INFO', `🔍   - URL type: ${typeof repository.url}`);
+      broadcastLog('INFO', `🔍   - URL length: ${repository.url?.length}`);
+      broadcastLog('INFO', `🔍   - Local path: ${repository.localPath}`);
+      broadcastLog('INFO', `🔍   - Clone status: ${repository.cloneStatus}`);
 
       try {
         // REPLACED: Use API service instead of Python script
@@ -2864,6 +2872,70 @@ IMPORTANT: Return ONLY valid JSON - nothing else! The migrated_code field should
     } catch (error: any) {
       console.error("Failed to refresh CI/CD test results:", error);
       res.status(500).json({ error: error.message || "Failed to refresh test results" });
+    }
+  });
+
+  // DEBUG: Test endpoint to isolate API call issue
+  app.post("/api/debug/test-fastapi", async (req, res) => {
+    try {
+      const { repo_url } = req.body;
+      const testUrl = repo_url || 'https://github.com/srigumm/dotnetcore-kafka-integration.git';
+      
+      console.log('🔍 DEBUG: Testing FastAPI call from server...');
+      console.log('📤 Test URL:', testUrl);
+      
+      const apiBaseUrl = 'https://accel2-fastapi2-kar-aga4c5cpgteffheq.eastus-01.azurewebsites.net';
+      const analyzeEndpoint = `${apiBaseUrl}/analyze`;
+      
+      const payload = { repo_url: testUrl };
+      const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'RepoCloner/1.0 Node.js'
+      };
+      
+      console.log('🔄 Making direct fetch call...');
+      console.log('📍 Endpoint:', analyzeEndpoint);
+      console.log('📤 Payload:', JSON.stringify(payload));
+      console.log('📤 Headers:', JSON.stringify(headers));
+      
+      const response = await fetch(analyzeEndpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+      
+      console.log('📥 Response status:', response.status, response.statusText);
+      console.log('📥 Response headers:', JSON.stringify(Object.fromEntries(response.headers)));
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Error response:', errorText);
+        return res.status(500).json({ 
+          success: false, 
+          error: `API call failed: ${response.status} ${response.statusText}`,
+          details: errorText 
+        });
+      }
+      
+      const result = await response.json();
+      console.log('✅ Success! Response size:', JSON.stringify(result).length);
+      
+      return res.json({ 
+        success: true, 
+        status: response.status,
+        message: 'Direct API call successful',
+        resultSize: JSON.stringify(result).length,
+        result: result 
+      });
+      
+    } catch (error: any) {
+      console.error('❌ Debug test failed:', error);
+      return res.status(500).json({ 
+        success: false, 
+        error: error.message,
+        stack: error.stack 
+      });
     }
   });
 

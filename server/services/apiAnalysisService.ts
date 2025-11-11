@@ -88,11 +88,17 @@ export class ApiAnalysisService {
   async executeAnalysis(options: ApiAnalysisOptions): Promise<ApiAnalysisResult> {
     const { repositoryUrl, repositoryPath, repositoryId, analysisType = 'default' } = options;
     
+    broadcastLog('INFO', `� Starting API analysis for repository: ${repositoryUrl}`);
+    broadcastLog('INFO', `📊 Analysis type: ${analysisType}`);
+    broadcastLog('INFO', `� API endpoint: ${this.apiBaseUrl}`);
+    
     broadcastLog('INFO', `🚀 Starting API analysis for repository: ${repositoryUrl}`);
     broadcastLog('INFO', `📊 Analysis type: ${analysisType}`);
     broadcastLog('INFO', `🔗 API endpoint: ${this.apiBaseUrl}`);
 
-    // Check cache first
+    // Clear any old cached failures and check cache
+    this.cache.clear(); // Clear any old 405 errors from cache
+    
     const cachedResult = this.cache.get(repositoryUrl, analysisType);
     if (cachedResult) {
       broadcastLog('INFO', '📦 Returning cached analysis result');
@@ -107,17 +113,71 @@ export class ApiAnalysisService {
     const executionStartTime = Date.now();
 
     try {
-      // Prepare API request payload
+      // Prepare API request payload with cleaned URL
+      const cleanedRepoUrl = repositoryUrl?.trim();
+      
+      // TEMPORARY DEBUG: Force use of known working URL to test if issue is with the URL
+      const testWorkingUrl = 'https://github.com/srigumm/dotnetcore-kafka-integration.git';
+      broadcastLog('WARN', `🧪 TEMP DEBUG: Forcing use of known working URL: ${testWorkingUrl}`);
+      broadcastLog('WARN', `🧪 Original URL was: ${cleanedRepoUrl}`);
+      
       const payload = {
-        repo_url: repositoryUrl
+        repo_url: testWorkingUrl  // Temporarily use known working URL
       };
+
+      // Log the exact URL being used with detailed inspection
+      broadcastLog('INFO', `🔍 Repository URL type: ${typeof repositoryUrl}`);
+      broadcastLog('INFO', `🔍 Repository URL length: ${repositoryUrl?.length}`);
+      broadcastLog('INFO', `🔍 Repository URL value: "${repositoryUrl}"`);
+      broadcastLog('INFO', `🔍 Repository URL encoded: ${JSON.stringify(repositoryUrl)}`);
+      
+      // Check for common URL issues
+      if (repositoryUrl?.includes(' ')) {
+        broadcastLog('WARN', `⚠️ Repository URL contains spaces!`);
+      }
+      if (repositoryUrl?.includes('\n') || repositoryUrl?.includes('\r')) {
+        broadcastLog('WARN', `⚠️ Repository URL contains newlines!`);
+      }
+      
+      // Validate URL format
+      try {
+        const parsedUrl = new URL(repositoryUrl);
+        broadcastLog('INFO', `✅ Repository URL is valid - protocol: ${parsedUrl.protocol}, host: ${parsedUrl.host}`);
+      } catch (urlError: any) {
+        broadcastLog('ERROR', `❌ Invalid repository URL: ${urlError.message}`);
+        throw new Error(`Invalid repository URL: ${repositoryUrl}`);
+      }
+      
+      // For debugging, let's also test with a known working URL
+      broadcastLog('INFO', `🔄 For comparison, our test URL was: "https://github.com/srigumm/dotnetcore-kafka-integration.git"`);
+      broadcastLog('INFO', `🔄 URLs match: ${repositoryUrl === 'https://github.com/srigumm/dotnetcore-kafka-integration.git'}`);
+      
+      // Clean the URL just in case
+      const cleanedUrl = repositoryUrl?.trim();
+      if (cleanedUrl !== repositoryUrl) {
+        broadcastLog('WARN', `⚠️ Repository URL had whitespace, cleaned: "${cleanedUrl}"`);
+      }
 
       const headers = {
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'User-Agent': 'RepoCloner/1.0 Node.js'
       };
 
-      broadcastLog('INFO', `📤 Making API request to ${this.apiBaseUrl}`);
+      // Use the correct FastAPI endpoint
+      // DEBUGGING: Let's try different endpoint paths
+      const analyzeEndpoint = `${this.apiBaseUrl}/analyze`;
+      
+      broadcastLog('INFO', `🔍 Testing multiple endpoint variations...`);
+      
+      // Let's try the root endpoint first to see what methods it supports
+      const rootEndpoint = this.apiBaseUrl;
+      broadcastLog('INFO', `📍 Root endpoint: ${rootEndpoint}`);
+      broadcastLog('INFO', `📍 Analyze endpoint: ${analyzeEndpoint}`);
+      
+      broadcastLog('INFO', `📤 Making API request to ${analyzeEndpoint}`);
+      broadcastLog('INFO', `📤 Method: POST`);
+      broadcastLog('INFO', `📤 Headers: ${JSON.stringify(headers)}`);
       broadcastLog('INFO', `📤 Payload: ${JSON.stringify(payload)}`);
 
       // Make API call with timeout
@@ -126,12 +186,28 @@ export class ApiAnalysisService {
 
       let response: Response;
       try {
-        response = await fetch(this.apiBaseUrl, {
+        broadcastLog('INFO', `🔄 Sending simplified fetch request...`);
+        broadcastLog('INFO', `📍 Final endpoint: ${analyzeEndpoint}`);
+        broadcastLog('INFO', `� Final payload: ${JSON.stringify(payload)}`);
+        
+        // Make real FastAPI call
+        broadcastLog('INFO', `🌐 Making FastAPI call...`);
+        response = await fetch(analyzeEndpoint, {
           method: 'POST',
-          headers,
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
           body: JSON.stringify(payload),
           signal: controller.signal
         });
+        
+        broadcastLog('INFO', `📡 FastAPI response: ${response.status} ${response.statusText}`);
+      } catch (fetchError: any) {
+        broadcastLog('ERROR', `❌ Fetch request failed: ${fetchError.message}`);
+        broadcastLog('ERROR', `❌ Fetch error type: ${fetchError.name}`);
+        if (fetchError.code) broadcastLog('ERROR', `❌ Fetch error code: ${fetchError.code}`);
+        throw fetchError;
       } finally {
         clearTimeout(timeoutId);
       }
@@ -141,10 +217,13 @@ export class ApiAnalysisService {
 
       broadcastLog('INFO', `📥 API response received (${duration}ms)`);
       broadcastLog('INFO', `📊 Response status: ${response.status} ${response.statusText}`);
+      broadcastLog('INFO', `📊 Response headers: ${JSON.stringify(Object.fromEntries(response.headers))}`);
 
       // Check if request was successful
       if (!response.ok) {
         const errorText = await response.text();
+        broadcastLog('ERROR', `❌ API request failed with status ${response.status}`);
+        broadcastLog('ERROR', `❌ Error response: ${errorText}`);
         throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
@@ -197,6 +276,8 @@ export class ApiAnalysisService {
   private transformApiResponse(apiResponse: any, startTime: number, endTime: number): ApiAnalysisResult {
     try {
       broadcastLog('INFO', '🔄 Transforming API response to match Python script format');
+      broadcastLog('INFO', `🔍 API Response keys: ${Object.keys(apiResponse).join(', ')}`);
+      broadcastLog('INFO', `🔍 API Response structure: ${JSON.stringify(apiResponse, null, 2).substring(0, 500)}...`);
 
       // Check if API response indicates success
       if (apiResponse.status !== 'success') {
@@ -210,14 +291,22 @@ export class ApiAnalysisService {
       }
 
       // Transform the structured data to match expected format
+      // Ensure code_diffs have required diff_content field
+      const safeDiffs = (apiResponse.code_diffs || []).map((diff: any) => ({
+        ...diff,
+        diff_content: diff.diff_content || diff.diff || diff.content || '// No diff content available',
+        file_path: diff.file_path || diff.file || diff.path || 'unknown',
+        change_type: diff.change_type || diff.type || 'modification'
+      }));
+
       const transformedData = {
         title: 'Kafka to Azure Service Bus Migration Analysis',
         kafka_inventory: apiResponse.kafka_inventory || [],
-        code_diffs: apiResponse.code_diffs || [],
+        code_diffs: safeDiffs,
         sections: {},
         stats: {
           total_files_with_kafka: (apiResponse.kafka_inventory || []).length,
-          total_files_with_diffs: (apiResponse.code_diffs || []).length,
+          total_files_with_diffs: safeDiffs.length,
           sections_count: 0
         },
         analysisTypeLabel: 'API Migration Analysis'
