@@ -22,6 +22,67 @@ interface AnalysisType {
   scriptPath: string;
 }
 
+// Enhanced loading component for API analysis
+function ApiAnalysisLoadingIndicator({ startTime, repositoryName }: { 
+  startTime: number | null; 
+  repositoryName?: string; 
+}) {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!startTime) return;
+
+    const interval = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      transition={{ duration: 0.3 }}
+      className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4"
+    >
+      <div className="flex items-center space-x-3">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+        <div className="flex-1">
+          <p className="text-sm font-medium text-blue-900">
+            API Analysis in Progress
+            {repositoryName && (
+              <span className="font-normal text-blue-700"> - {repositoryName}</span>
+            )}
+          </p>
+          <p className="text-sm text-blue-700">
+            Analyzing repository for Kafka usage and generating Azure Service Bus migration recommendations
+          </p>
+          {startTime && (
+            <p className="text-xs text-blue-600 mt-1">
+              Running for {formatTime(elapsedSeconds)}
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="mt-3 bg-blue-200 rounded-full h-2">
+        <div className="bg-blue-600 h-2 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+      </div>
+      <div className="mt-2 flex items-center justify-between text-xs text-blue-600">
+        <span>⏱️ Timeout: 10 minutes</span>
+        <span>🔄 Processing via FastAPI endpoint</span>
+      </div>
+    </motion.div>
+  );
+}
+
 // Migration type configuration
 const MIGRATION_TYPES = [
   {
@@ -54,6 +115,7 @@ export default function AnalysisPanel() {
   const [selectedAnalysisTypeId, setSelectedAnalysisTypeId] = useState<string>("");
   const [selectedMigrationTypes, setSelectedMigrationTypes] = useState<string[]>(['kafka-to-service-bus']);
   const [migrationTypesOpen, setMigrationTypesOpen] = useState(true);
+  const [analysisStartTime, setAnalysisStartTime] = useState<number | null>(null);
   const { currentRepository, isCodeAnalysisEnabled, unlockTab, switchToTab } = useAppContext();
   const { toast } = useToast();
   
@@ -120,8 +182,15 @@ export default function AnalysisPanel() {
       return;
     }
     
-    // No need to set hasRunAnalysis - it's derived from cached data now
-    await analyzeCode(currentRepository.id, selectedAnalysisTypeId);
+    // Track analysis start time for progress display
+    setAnalysisStartTime(Date.now());
+    
+    try {
+      await analyzeCode(currentRepository.id, selectedAnalysisTypeId);
+    } finally {
+      // Clear analysis start time when completed (success or failure)
+      setAnalysisStartTime(null);
+    }
   };
 
   const getSeverityColor = (severity: string) => {
@@ -211,6 +280,14 @@ export default function AnalysisPanel() {
             )}
           </Button>
         </div>
+
+        {/* Enhanced Loading State for API Analysis */}
+        {isAnalyzing && (
+          <ApiAnalysisLoadingIndicator 
+            startTime={analysisStartTime}
+            repositoryName={currentRepository?.name}
+          />
+        )}
         
         <div className="flex gap-4">
           <div className="flex-1">

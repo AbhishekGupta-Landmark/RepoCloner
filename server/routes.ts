@@ -244,6 +244,7 @@ import { gitProviders, detectProvider } from "./services/gitProviders";
 import { openaiService } from "./services/openaiService";
 import { ReportBuilder, type ExportFormat } from "./services/reportBuilder";
 import { pythonScriptService } from "./services/pythonScriptService";
+import { apiAnalysisService } from "./services/apiAnalysisService";
 import { enhancedTechnologyDetectionService } from "./services/enhancedTechnologyDetection";
 import { analysisRegistry } from "./services/analysisRegistry";
 import { insertRepositorySchema, insertAnalysisReportSchema, insertAISettingsSchema, AuthCredentials, AnalysisRequest } from "@shared/schema";
@@ -1302,7 +1303,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
     }
   });
 
-  // NEW: Analysis run endpoint (PYTHON SCRIPT ONLY)
+  // NEW: Analysis run endpoint (API INTEGRATION)
   app.post("/api/analysis/run", async (req, res) => {
     try {
       // Frontend sends analysisTypeId, backend uses analysisType
@@ -1338,56 +1339,22 @@ export async function registerRoutes(app: Application): Promise<Server> {
       const analysisTypeInfo = await analysisRegistry.getTypeById(selectedAnalysisTypeId);
       const analysisTypeLabel = analysisTypeInfo?.label || 'Migration Analysis';
       
-      broadcastLog('INFO', `Executing Python script for migration analysis: ${repository.name} (type: ${selectedAnalysisTypeId}, label: ${analysisTypeLabel})`);
+      broadcastLog('INFO', `🚀 Executing API analysis for migration: ${repository.name} (type: ${selectedAnalysisTypeId}, label: ${analysisTypeLabel})`);
 
       try {
-        // Fetch AI settings from storage to pass to Python script
-        const aiSettings = await storage.getAISettingsForScript();
-        
-        // AI settings are REQUIRED - no fallbacks allowed
-        if (!aiSettings || !aiSettings.apiKey) {
-          broadcastLog('ERROR', 'AI settings not configured - analysis cannot proceed');
-          
-          // Create a failed report so error is displayed properly
-          try {
-            const failedReport = await storage.createAnalysisReport({
-              repositoryId: repository.id,
-              analysisType: 'migration' as any,
-              results: {
-                pythonScriptOutput: {
-                  exitCode: -1,
-                  error: 'AI settings are required to perform migration analysis. Please configure AI settings first.',
-                  stderr: 'AI settings not configured',
-                  generatedFiles: [],
-                  parsedMigrationData: null
-                }
-              }
-            });
-            await storage.updateRepositoryAnalysis(repository.id, new Date(), failedReport.id);
-          } catch (reportError) {
-            broadcastLog('ERROR', `Failed to create AI settings error report: ${reportError}`);
-          }
-          
-          return res.status(400).json({
-            success: false,
-            error: 'AI settings are required to perform migration analysis. Please configure AI settings first.'
-          });
-        }
-        
-        // Execute Python script with selected analysis type
-        const pythonResult = await pythonScriptService.executePostCloneScript(
+        // REPLACED: Use API service instead of Python script
+        const apiResult = await apiAnalysisService.executePostCloneScript(
           repository.localPath,
           repository.url,
           repository.id,
-          aiSettings,
+          null, // AI settings not needed for API call
           selectedAnalysisTypeId
         );
 
-        // CRITICAL FIX: Check if Python script actually succeeded
-        if (!pythonResult.success) {
-          broadcastLog('ERROR', `Python script failed: ${pythonResult.error}`);
+        if (!apiResult.success) {
+          broadcastLog('ERROR', `API analysis failed: ${apiResult.error}`);
           
-          // CRITICAL FIX: Store the failed analysis attempt for error display
+          // Store the failed analysis attempt
           let failedReportId = undefined;
           try {
             const failedReport = await storage.createAnalysisReport({
@@ -1395,71 +1362,63 @@ export async function registerRoutes(app: Application): Promise<Server> {
               analysisType: 'migration' as any,
               results: {
                 pythonScriptOutput: {
-                  exitCode: pythonResult.exitCode || -1,
-                  error: pythonResult.error || 'Python script execution failed',
-                  stderr: pythonResult.error || 'Migration analysis failed',
+                  exitCode: apiResult.exitCode || -1,
+                  error: apiResult.error || 'API analysis failed',
+                  stderr: apiResult.error || 'Migration analysis failed',
                   generatedFiles: [],
                   parsedMigrationData: null
                 }
               }
             });
             failedReportId = failedReport.id;
-            broadcastLog('INFO', `Failed analysis report stored with ID: ${failedReport.id}`);
+            broadcastLog('INFO', `Failed API analysis report stored with ID: ${failedReport.id}`);
           } catch (reportError) {
             broadcastLog('ERROR', `Failed to create failure report: ${reportError}`);
           }
           
-          // CRITICAL FIX: Update repository with the failed report ID
           await storage.updateRepositoryAnalysis(repository.id, new Date(), failedReportId);
-          broadcastLog('INFO', `Repository updated with failed report ID: ${failedReportId}`);
 
           return res.status(500).json({
             success: false,
-            error: pythonResult.error || 'Python script execution failed',
+            error: apiResult.error || 'API analysis failed',
             repositoryId: repository.id,
-            pythonResult
+            pythonResult: apiResult
           });
         }
 
-        // Create Python script report - always attempt if Python succeeded
+        // Create API analysis report
         let reportId: string | undefined = undefined;
         try {
-          const scriptPath = analysisTypeInfo?.scriptPath || path.join(__dirname, '../scripts/default.py');
-          
-          reportId = await pythonScriptService.createPythonScriptReport(
+          reportId = await apiAnalysisService.createPythonScriptReport(
             repository.id,
             repository.url,
             repository.localPath,
-            pythonResult,
-            scriptPath,
+            apiResult,
+            'api-analysis', // scriptPath placeholder
             storage,
             analysisTypeLabel,
             selectedAnalysisTypeId
           );
-          broadcastLog('INFO', `Migration analysis report created with ID: ${reportId}`);
+          broadcastLog('INFO', `API migration analysis report created with ID: ${reportId}`);
         } catch (reportError) {
-          broadcastLog('ERROR', `Failed to create migration analysis report: ${reportError}`);
-          // If report creation fails, still update repository without reportId
+          broadcastLog('ERROR', `Failed to create API migration analysis report: ${reportError}`);
         }
 
-        // Update repository with analysis timestamp and report ID
         await storage.updateRepositoryAnalysis(repository.id, new Date(), reportId);
 
-        // Return structured migration data AND success info
         res.json({
           success: true,
           repositoryId: repository.id,
-          pythonResult,
+          pythonResult: apiResult, // Keep same field name for frontend compatibility
           reportId,
-          message: "Migration analysis completed successfully",
-          structuredData: (pythonResult as any).parsedMigrationData // Include parsed structured data
+          message: "Migration analysis completed successfully via API",
+          structuredData: apiResult.parsedMigrationData
         });
 
-      } catch (pythonError) {
-        broadcastLog('ERROR', `Python script execution failed: ${pythonError}`);
-        const errorMessage = pythonError instanceof Error ? pythonError.message : 'Migration analysis failed';
+      } catch (apiError) {
+        broadcastLog('ERROR', `API analysis execution failed: ${apiError}`);
+        const errorMessage = apiError instanceof Error ? apiError.message : 'API migration analysis failed';
         
-        // CRITICAL FIX: Always persist failed analysis attempts
         try {
           const failedReport = await storage.createAnalysisReport({
             repositoryId: repository.id,
@@ -1468,17 +1427,15 @@ export async function registerRoutes(app: Application): Promise<Server> {
               pythonScriptOutput: {
                 exitCode: -1,
                 error: errorMessage,
-                stderr: `Python script execution failed: ${errorMessage}`,
+                stderr: `API analysis execution failed: ${errorMessage}`,
                 generatedFiles: [],
                 parsedMigrationData: null
               }
             }
           });
           
-          // Update repository to point to this failed report
           await storage.updateRepositoryAnalysis(repository.id, new Date(), failedReport.id);
-          
-          broadcastLog('INFO', `Failed analysis report stored with ID: ${failedReport.id}`);
+          broadcastLog('INFO', `Failed API analysis report stored with ID: ${failedReport.id}`);
         } catch (storageError) {
           broadcastLog('ERROR', `Failed to store error report: ${storageError instanceof Error ? storageError.message : 'Unknown error'}`);
         }
@@ -1490,7 +1447,6 @@ export async function registerRoutes(app: Application): Promise<Server> {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Analysis operation failed";
       
-      // CRITICAL FIX: Store failed analysis for general route errors too
       if (req.body.repositoryId) {
         try {
           const failedReport = await storage.createAnalysisReport({
@@ -1507,9 +1463,7 @@ export async function registerRoutes(app: Application): Promise<Server> {
             }
           });
           
-          // Update repository to point to this failed report
           await storage.updateRepositoryAnalysis(req.body.repositoryId, new Date(), failedReport.id);
-          
           broadcastLog('INFO', `Failed analysis report stored for route error with ID: ${failedReport.id}`);
         } catch (storageError) {
           broadcastLog('ERROR', `Failed to store route error report: ${storageError instanceof Error ? storageError.message : 'Unknown error'}`);

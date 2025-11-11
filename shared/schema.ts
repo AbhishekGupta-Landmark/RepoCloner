@@ -410,3 +410,27 @@ export const AnalysisTypeSchema = z.object({
 });
 
 export type AnalysisType = z.infer<typeof AnalysisTypeSchema>;
+
+// API Analysis Service Types - for FastAPI integration
+export interface ApiAnalysisResponse {
+  status: 'success' | 'error';
+  message?: string;
+  analysis?: string;
+  kafka_inventory: KafkaInventoryItem[];
+  code_diffs: CodeDiff[];
+  error?: string;
+}
+
+export interface KafkaInventoryItem {
+  file: string;
+  kafka_apis: string[];
+  summary: string;
+}
+
+export interface CodeDiff {
+  file: string;
+  diff: string;
+  migrated_code?: string;
+  description?: string;
+  key_changes?: string[];
+}
