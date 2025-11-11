@@ -361,11 +361,10 @@ export function AppProvider({ children }: AppProviderProps) {
     (r: any) => r.analysisType === 'test-coverage' && r.structuredData
   );
 
-  // Compute if Code Analysis is enabled based on repository clone status AND test coverage completion
+  // Compute if Code Analysis is enabled based on repository clone status only
   const isCodeAnalysisEnabled = currentRepository !== null && 
     repositoryStatus !== null && 
-    repositoryStatus.cloneStatus === 'cloned' &&
-    isTestCoverageComplete;
+    repositoryStatus.cloneStatus === 'cloned';
 
   // Compute if any migration report exists (for Code Migration tab)
   // The tab should be enabled if there's ANY migration report, regardless of "Proceed to Migration" button
