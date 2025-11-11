@@ -105,12 +105,13 @@ export function AppProvider({ children }: AppProviderProps) {
   // Workflow progression: track which tabs have been unlocked via "Go to..." buttons
   const [unlockedTabs, setUnlockedTabs] = useState<Set<string>>(() => {
     try {
-      if (!currentRepository?.id) return new Set(['tech-stack']); // Tech stack always unlocked
+      if (!currentRepository?.id) return new Set(['tech-stack', 'code-analysis']); // Auto-unlock for API integration
       const savedState = localStorage.getItem(`git-analyzer-unlocked-tabs-${currentRepository.id}`);
-      return savedState ? new Set(JSON.parse(savedState)) : new Set(['tech-stack']);
+      const defaultTabs = new Set(['tech-stack', 'code-analysis']);
+      return savedState ? new Set([...JSON.parse(savedState), 'tech-stack', 'code-analysis']) : defaultTabs;
     } catch (error) {
       console.warn('Failed to parse unlocked tabs from localStorage:', error);
-      return new Set(['tech-stack']); // Default: only tech stack unlocked
+      return new Set(['tech-stack', 'code-analysis']); // Default: both tabs unlocked
     }
   });
 
@@ -230,15 +231,21 @@ export function AppProvider({ children }: AppProviderProps) {
       // Load unlocked tabs from localStorage for this repository
       try {
         const savedTabs = localStorage.getItem(`git-analyzer-unlocked-tabs-${currentRepository.id}`);
-        setUnlockedTabs(savedTabs ? new Set(JSON.parse(savedTabs)) : new Set(['tech-stack']));
+        // Auto-unlock code-analysis tab when repository is available (for API integration)
+        const defaultTabs = new Set<string>(['tech-stack', 'code-analysis']);
+        const loadedTabs: Set<string> = savedTabs ? new Set<string>(JSON.parse(savedTabs)) : defaultTabs;
+        // Ensure both tech-stack and code-analysis are always unlocked
+        loadedTabs.add('tech-stack');
+        loadedTabs.add('code-analysis');
+        setUnlockedTabs(loadedTabs);
       } catch (error) {
         console.warn('Failed to load unlocked tabs:', error);
-        setUnlockedTabs(new Set(['tech-stack']));
+        setUnlockedTabs(new Set<string>(['tech-stack', 'code-analysis']));
       }
     } else {
       setRepositoryStatus(null);
       setHasPushedSuccessfullyState(false);
-      setUnlockedTabs(new Set(['tech-stack']));
+      setUnlockedTabs(new Set(['tech-stack', 'code-analysis']));
     }
     // Reset migration access when repository changes (clear all accessed reports)
     setAccessedReports(new Set());
