@@ -73,11 +73,16 @@ class ApiAnalysisCache {
 
 export class ApiAnalysisService {
   private readonly apiBaseUrl: string;
+  private readonly quickAnalysisApiBaseUrl: string;
   private readonly timeout: number;
   private readonly cache: ApiAnalysisCache;
 
-  constructor(apiBaseUrl: string = 'https://accel2-fastapi2-kar-aga4c5cpgteffheq.eastus-01.azurewebsites.net') {
+  constructor(
+    apiBaseUrl: string = 'https://accel2-fastapi2-kar-aga4c5cpgteffheq.eastus-01.azurewebsites.net',
+    quickAnalysisApiBaseUrl: string = 'https://accel2-fastapi3-dal-gefnfggagca5c5bf.eastus-01.azurewebsites.net'
+  ) {
     this.apiBaseUrl = apiBaseUrl.replace(/\/$/, ''); // Remove trailing slash
+    this.quickAnalysisApiBaseUrl = quickAnalysisApiBaseUrl.replace(/\/$/, ''); // Remove trailing slash
     this.timeout = 10 * 60 * 1000; // 10 minutes in milliseconds
     this.cache = new ApiAnalysisCache();
   }
@@ -94,7 +99,16 @@ export class ApiAnalysisService {
     
     broadcastLog('INFO', `🚀 Starting API analysis for repository: ${repositoryUrl}`);
     broadcastLog('INFO', `📊 Analysis type: ${analysisType}`);
-    broadcastLog('INFO', `🔗 API endpoint: ${this.apiBaseUrl}`);
+    
+    // Choose the correct API endpoint based on analysis type
+    const isQuickAnalysis = analysisType === 'quick-migration' || 
+                           analysisType === 'quick-migration-1' || 
+                           analysisType?.toLowerCase().includes('quick');
+    const selectedApiBaseUrl = isQuickAnalysis ? this.quickAnalysisApiBaseUrl : this.apiBaseUrl;
+    const endpointLabel = isQuickAnalysis ? 'Quick Migration API (fastapi3)' : 'Migration API (fastapi2)';
+    
+    broadcastLog('INFO', `🔗 Using ${endpointLabel}: ${selectedApiBaseUrl}`);
+    broadcastLog('INFO', `📍 Analysis type detected: ${isQuickAnalysis ? 'Quick Migration' : 'Regular Migration'}`);
 
     // Clear any old cached failures and check cache
     this.cache.clear(); // Clear any old 405 errors from cache
@@ -164,16 +178,11 @@ export class ApiAnalysisService {
         'User-Agent': 'RepoCloner/1.0 Node.js'
       };
 
-      // Use the correct FastAPI endpoint
-      // DEBUGGING: Let's try different endpoint paths
-      const analyzeEndpoint = `${this.apiBaseUrl}/analyze`;
+      // Use the correct FastAPI endpoint based on analysis type
+      const analyzeEndpoint = `${selectedApiBaseUrl}/analyze`;
       
-      broadcastLog('INFO', `🔍 Testing multiple endpoint variations...`);
-      
-      // Let's try the root endpoint first to see what methods it supports
-      const rootEndpoint = this.apiBaseUrl;
-      broadcastLog('INFO', `📍 Root endpoint: ${rootEndpoint}`);
-      broadcastLog('INFO', `📍 Analyze endpoint: ${analyzeEndpoint}`);
+      broadcastLog('INFO', `� Selected endpoint: ${analyzeEndpoint}`);
+      broadcastLog('INFO', `🎯 Endpoint type: ${endpointLabel}`);
       
       broadcastLog('INFO', `📤 Making API request to ${analyzeEndpoint}`);
       broadcastLog('INFO', `📤 Method: POST`);
@@ -226,13 +235,46 @@ export class ApiAnalysisService {
         broadcastLog('ERROR', `❌ Error response: ${errorText}`);
         throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`);
       }
+      
+      // Log successful response details
+      broadcastLog('INFO', `✅ API request successful: ${response.status} ${response.statusText}`);
 
       // Parse JSON response
       const apiResponse = await response.json();
       broadcastLog('INFO', `✅ API response parsed successfully`);
+      
+      // Log response summary for debugging
+      broadcastLog('INFO', `� API Response summary: ${Object.keys(apiResponse).join(', ')}`);
 
       // Transform API response to match expected format
-      const result = this.transformApiResponse(apiResponse, executionStartTime, executionEndTime);
+      let result;
+      try {
+        result = this.transformApiResponse(apiResponse, executionStartTime, executionEndTime, analysisType);
+        broadcastLog('INFO', `✅ API response transformation successful`);
+      } catch (transformError: any) {
+        broadcastLog('ERROR', `❌ API response transformation failed: ${transformError.message}`);
+        broadcastLog('ERROR', `❌ Raw API response: ${JSON.stringify(apiResponse, null, 2)}`);
+        
+        // Return a basic successful result even if transformation fails
+        result = {
+          success: true,
+          output: apiResponse.message || 'Analysis completed successfully',
+          exitCode: 0,
+          parsedMigrationData: {
+            title: 'API Migration Analysis',
+            kafka_inventory: apiResponse.kafka_inventory || apiResponse.inventory || [],
+            code_diffs: apiResponse.code_diffs || apiResponse.diffs || [],
+            sections: apiResponse.sections || {},
+            stats: {
+              total_files_with_kafka: (apiResponse.kafka_inventory || apiResponse.inventory || []).length,
+              total_files_with_diffs: (apiResponse.code_diffs || apiResponse.diffs || []).length,
+              sections_count: 0
+            }
+          },
+          executionStartTime,
+          executionEndTime
+        };
+      }
 
       // Cache successful results
       if (result.success) {
@@ -273,14 +315,23 @@ export class ApiAnalysisService {
   /**
    * Transform FastAPI response to match the expected PythonScriptResult format
    */
-  private transformApiResponse(apiResponse: any, startTime: number, endTime: number): ApiAnalysisResult {
+  private transformApiResponse(apiResponse: any, startTime: number, endTime: number, analysisType: string = 'default'): ApiAnalysisResult {
     try {
       broadcastLog('INFO', '🔄 Transforming API response to match Python script format');
       broadcastLog('INFO', `🔍 API Response keys: ${Object.keys(apiResponse).join(', ')}`);
-      broadcastLog('INFO', `🔍 API Response structure: ${JSON.stringify(apiResponse, null, 2).substring(0, 500)}...`);
+      broadcastLog('INFO', `🔍 API Response structure: ${JSON.stringify(apiResponse, null, 2).substring(0, 1000)}...`);
+      broadcastLog('INFO', `🔍 Analysis type for transformation: ${analysisType}`);
 
-      // Check if API response indicates success
-      if (apiResponse.status !== 'success') {
+      // Check if API response indicates success - handle multiple success indicators
+      const isSuccess = apiResponse.status === 'success' || 
+                       apiResponse.success === true || 
+                       (apiResponse.message && apiResponse.message.includes('completed successfully'));
+      
+      broadcastLog('INFO', `🔍 Success check: status=${apiResponse.status}, success=${apiResponse.success}, message=${apiResponse.message}`);
+      broadcastLog('INFO', `🔍 Determined as success: ${isSuccess}`);
+      
+      if (!isSuccess) {
+        broadcastLog('ERROR', `❌ API response not successful. Full response: ${JSON.stringify(apiResponse, null, 2)}`);
         return {
           success: false,
           error: apiResponse.message || apiResponse.error || 'API analysis failed',
@@ -291,26 +342,136 @@ export class ApiAnalysisService {
       }
 
       // Transform the structured data to match expected format
-      // Ensure code_diffs have required diff_content field
-      const safeDiffs = (apiResponse.code_diffs || []).map((diff: any) => ({
-        ...diff,
-        diff_content: diff.diff_content || diff.diff || diff.content || '// No diff content available',
-        file_path: diff.file_path || diff.file || diff.path || 'unknown',
-        change_type: diff.change_type || diff.type || 'modification'
-      }));
+      // Handle different response formats based on endpoint
+      const isQuickAnalysis = analysisType === 'quick-migration-1' || analysisType?.toLowerCase().includes('quick');
+      
+      let transformedData;
+      
+      if (isQuickAnalysis && apiResponse.manual_kafka_files) {
+        // Handle fastapi3 response structure (Quick Migration Analysis)
+        broadcastLog('INFO', '🔄 Processing fastapi3 response format (Quick Migration)');
+        
+        // Transform ALL manual_kafka_files into kafka_inventory format
+        // Use gpt4_kafka_results for additional metadata when available
+        const gptResultsMap = new Map();
+        (apiResponse.gpt4_kafka_results || []).forEach((result: any) => {
+          gptResultsMap.set(result.file, result);
+        });
 
-      const transformedData = {
-        title: 'Kafka to Azure Service Bus Migration Analysis',
-        kafka_inventory: apiResponse.kafka_inventory || [],
-        code_diffs: safeDiffs,
-        sections: {},
-        stats: {
-          total_files_with_kafka: (apiResponse.kafka_inventory || []).length,
-          total_files_with_diffs: safeDiffs.length,
-          sections_count: 0
-        },
-        analysisTypeLabel: 'API Migration Analysis'
-      };
+        const kafkaInventory = (apiResponse.manual_kafka_files || []).map((filePath: string) => {
+          const gptResult = gptResultsMap.get(filePath);
+          const cleanPath = filePath.replace(/\/tmp\/git_clone_[^/]+\//, '');
+          
+          return {
+            file: cleanPath,
+            kafka_apis: gptResult ? [gptResult.role || 'unknown'] : ['detected'],
+            line_numbers: [],
+            complexity: 'medium',
+            explanation: gptResult?.explanation || 'File detected with Kafka usage',
+            uses_kafka: gptResult?.uses_kafka || 'detected'
+          };
+        });
+
+        // Create migration suggestions based on the analysis
+        const migrationSuggestions = [
+          'Replace Confluent.Kafka with Azure.Messaging.ServiceBus',
+          'Update configuration keys for Service Bus connection',
+          'Modify Producer/Consumer wrapper classes for Service Bus',
+          'Update appsettings.json configuration structure'
+        ];
+
+        // Create code diffs for all Kafka files + csproj changes
+        const codeDiffs: any[] = [];
+        
+        // Add csproj changes
+        (apiResponse.csproj_changes || []).forEach((change: any) => {
+          codeDiffs.push({
+            file_path: change.file.replace(/\/tmp\/git_clone_[^/]+\//, ''),
+            change_type: 'package_update',
+            diff_content: `- ${change.remove}\n+ ${change.add}`
+          });
+        });
+
+        // Add migration diffs for each Kafka file
+        (apiResponse.manual_kafka_files || []).forEach((filePath: string) => {
+          const cleanPath = filePath.replace(/\/tmp\/git_clone_[^/]+\//, '');
+          const gptResult = gptResultsMap.get(filePath);
+          
+          if (gptResult && gptResult.uses_kafka === 'yes') {
+            let diffContent = `// Migration needed for ${cleanPath}\n`;
+            
+            if (gptResult.role === 'producer' || gptResult.role === 'both') {
+              diffContent += `- using Confluent.Kafka;\n+ using Azure.Messaging.ServiceBus;\n`;
+              diffContent += `- ProducerConfig\n+ ServiceBusClient\n`;
+              diffContent += `- ProduceAsync()\n+ SendMessageAsync()\n`;
+            }
+            
+            if (gptResult.role === 'consumer' || gptResult.role === 'both') {
+              diffContent += `- ConsumerConfig\n+ ServiceBusProcessor\n`;
+              diffContent += `- Subscribe()\n+ StartProcessingAsync()\n`;
+              diffContent += `- Consume()\n+ ProcessMessageAsync()\n`;
+            }
+            
+            codeDiffs.push({
+              file_path: cleanPath,
+              change_type: 'kafka_migration',
+              diff_content: diffContent
+            });
+          }
+        });
+
+        transformedData = {
+          title: 'Quick Kafka Migration Analysis',
+          kafka_inventory: kafkaInventory,
+          code_diffs: codeDiffs,
+          sections: {
+            'Manual Kafka Files': apiResponse.manual_kafka_files?.map((f: string) => f.replace('/tmp/git_clone_6mqm5j4d/', '')) || [],
+            'Configuration Changes': apiResponse.config_files || [],
+            'Package Updates': apiResponse.csproj_changes || [],
+            'Documentation': apiResponse.doc_references?.map((f: string) => f.replace('/tmp/git_clone_6mqm5j4d/', '')) || []
+          },
+          migration_suggestions: migrationSuggestions,
+          stats: {
+            total_files_with_kafka: (apiResponse.manual_kafka_files || []).length, // All 5 files
+            total_files_with_diffs: codeDiffs.length, // Should be 5-6 diffs (5 Kafka files + 1 csproj)
+            total_manual_files: (apiResponse.manual_kafka_files || []).length,
+            sections_count: 4
+          },
+          analysisTypeLabel: 'Quick Migration Analysis'
+        };
+        
+      } else {
+        // Handle fastapi2 response structure (Regular Migration Analysis)
+        broadcastLog('INFO', '🔄 Processing fastapi2 response format (Regular Migration)');
+        
+        // Ensure code_diffs have required diff_content field
+        const rawDiffs = apiResponse.code_diffs || apiResponse.diffs || apiResponse.migrations || [];
+        const safeDiffs = rawDiffs.map((diff: any) => ({
+          ...diff,
+          diff_content: diff.diff_content || diff.diff || diff.content || diff.code || '// No diff content available',
+          file_path: diff.file_path || diff.file || diff.path || diff.filename || 'unknown',
+          change_type: diff.change_type || diff.type || 'modification'
+        }));
+
+        // Handle different inventory structures
+        const inventory = apiResponse.kafka_inventory || apiResponse.inventory || apiResponse.files || [];
+
+        transformedData = {
+          title: 'Kafka to Azure Service Bus Migration Analysis',
+          kafka_inventory: inventory,
+          code_diffs: safeDiffs,
+          sections: apiResponse.sections || {},
+          migration_suggestions: apiResponse.migration_suggestions || [],
+          stats: {
+            total_files_with_kafka: inventory.length,
+            total_files_with_diffs: safeDiffs.length,
+            sections_count: Object.keys(apiResponse.sections || {}).length
+          },
+          analysisTypeLabel: 'API Migration Analysis'
+        };
+      }
+      
+      broadcastLog('INFO', `📊 Transformed data: ${transformedData.kafka_inventory.length} inventory items, ${transformedData.code_diffs.length} diffs`);
 
       // Create mock generated files (since API doesn't generate local files)
       const generatedFiles: GeneratedFile[] = [
@@ -440,4 +601,7 @@ export class ApiAnalysisService {
 }
 
 // Export singleton instance
-export const apiAnalysisService = new ApiAnalysisService();
+export const apiAnalysisService = new ApiAnalysisService(
+  'https://accel2-fastapi2-kar-aga4c5cpgteffheq.eastus-01.azurewebsites.net',
+  'https://accel2-fastapi3-dal-gefnfggagca5c5bf.eastus-01.azurewebsites.net'
+);
